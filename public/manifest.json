@@ -1,0 +1,39 @@
+{
+  "name": "MLVNT — Personal Training",
+  "short_name": "MLVNT",
+  "description": "Personalized strength and physique training by Malik Bryant. Time Moves. So Should You.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0A0B0D",
+  "theme_color": "#0A0B0D",
+  "lang": "en",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230A0B0D'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='800' font-size='80' fill='%23ECEEF1' letter-spacing='-3'>ML</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230A0B0D'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-weight='800' font-size='220' fill='%23ECEEF1' letter-spacing='-8'>ML</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Client Portal",
+      "url": "/?screen=login",
+      "description": "Sign in to your MLVNT training account"
+    },
+    {
+      "name": "Book Consultation",
+      "url": "/?screen=consult",
+      "description": "Book a free 30-minute consultation"
+    }
+  ]
+}
