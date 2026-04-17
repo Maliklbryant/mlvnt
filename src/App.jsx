@@ -7539,7 +7539,13 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
             {/* Avatar */}
             <div style={{display:"flex",justifyContent:"center"}}>
               <div style={{position:"relative"}}>
-                <div className="site-about-av">MB</div>
+                <div className="site-about-av"
+                   style={{
+                      backgroundImage: "url('/malik.jpg')",
+                      backgroundSize: "cover",
+                      backgroundPosition: "center"
+                   }}
+                   ></div>
                 {/* Credential tag floating off the avatar */}
                 <div style={{
                   position:"absolute",bottom:-12,left:"50%",transform:"translateX(-50%)",
