@@ -4007,7 +4007,7 @@ function ProfileSettings({ onLogout, session }) {
             {tabs.map(t=>(
               <div key={t.id} className={`settings-tab${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>{t.lbl}</div>
             ))}
-            <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid var(--b0)",marginTop:24}}>
+            <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid var(--b0)"}}>
               <button className="btn btn-danger btn-sm btn-full" onClick={onLogout}>Sign Out</button>
             </div>
           </div>
