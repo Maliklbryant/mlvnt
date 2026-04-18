@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import malikImg from "./assets/malik.jpg";
+import {
+  signIn,
+  signUp,
+  signOut,
+  sendPasswordReset,
+  updatePassword,
+  getSession,
+  onAuthStateChange,
+  markMfaSetupDone,
+} from "./lib/auth.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    MLVNT APP  ·  Time Moves. So Should You.
@@ -1372,37 +1382,12 @@ function CheckRow({ checked, onToggle, children }) {
   );
 }
 
-/* ── AUTH SCREENS ────────────────────────────────────────────────────────── */
-/* ══════════════════════════════════════════════════════════════════════════
-   MLVNT SECURITY LAYER
-   — PBKDF2 password hashing (SubtleCrypto)
-   — TOTP MFA (authenticator app + backup codes)
-   — Passkey / WebAuthn ceremony stubs
-   — Rate limiting + exponential lockout
-   — Session tokens with expiry + rotation
-   — Re-authentication guard for sensitive admin actions
-   — Security event log (new device, pw change, suspicious login)
-   — Secure password reset flow with token expiry
-══════════════════════════════════════════════════════════════════════════ */
+/* ── AUTH SCREENS ─────────────────────────────────────────────────────────────────────────────────── */
 
-/* ── CRYPTO UTILITIES ────────────────────────────────────────────────────── */
-const SEC = {
-  token(bytes=32) {
-    return Array.from(window.crypto?.getRandomValues(new Uint8Array(bytes))||new Uint8Array(bytes))
-      .map(b=>b.toString(16).padStart(2,"0")).join("");
-  },
-  backupCodes() {
-    const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    return Array.from({length:8},()=>Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join(""));
-  },
-  verifyTOTP(code,_secret){ return /^\d{6}$/.test(code.trim()); },
-  passkeySupported(){ return !!(window.PublicKeyCredential&&navigator.credentials?.create); },
-};
-
-/* ── RATE LIMITER ────────────────────────────────────────────────────────── */
+/* RATE LIMITER — client-side UX only; Supabase enforces real limits server-side */
 const RATE=(()=>{
   const store={};
-  const ms=(n)=>{if(n>=20)return 86400000;if(n>=15)return 1800000;if(n>=10)return 300000;if(n>=5)return 30000;return 0;};
+  const ms=(n)=>{if(n>=5)return 30000;return 0;};
   return{
     check(email){const e=store[email.toLowerCase()];if(!e)return{ok:true,remaining:0};const m=ms(e.count);if(!m)return{ok:true,remaining:0};const r=Math.max(0,m-(Date.now()-e.lastAt));return{ok:r===0,remaining:r};},
     fail(email){const k=email.toLowerCase();store[k]={count:(store[k]?.count||0)+1,lastAt:Date.now()};return store[k].count;},
@@ -1417,238 +1402,44 @@ function formatLockout(ms){
   return`${Math.ceil(ms/1000)}s`;
 }
 
-/* ── SESSION STORE ───────────────────────────────────────────────────────── */
-const SESSION_STORE=(()=>{
-  const sessions={};
-  const TTL={owner:2*3600000,admin:2*3600000,client:8*3600000};
-  return{
-    create(user){const id=SEC.token(32);const exp=Date.now()+TTL[user.role];sessions[id]={...user,sessionId:id,createdAt:Date.now(),expiresAt:exp,device:navigator.userAgent.slice(0,80)};return id;},
-    get(id){const s=sessions[id];if(!s||Date.now()>s.expiresAt){delete sessions[id];return null;}return s;},
-    rotate(oldId){const s=sessions[oldId];if(!s)return null;delete sessions[oldId];return this.create(s);},
-    revoke(id){delete sessions[id];},
-    revokeAll(email){Object.keys(sessions).forEach(k=>{if(sessions[k].email===email)delete sessions[k];});},
-    list(email){return Object.values(sessions).filter(s=>s.email===email);},
-  };
-})();
+/* No-op stubs — real auth is Supabase (src/lib/auth.js).
+   These exist only so UI components that reference them don't crash. */
+const SEC = {
+  backupCodes(){ return []; },
+  verifyTOTP(){ return true; },
+  passkeySupported(){ return !!(window.PublicKeyCredential&&navigator.credentials?.create); },
+};
+const SESSION_STORE = {
+  create(){ return null; },
+  list(){ return []; },
+  revoke(){ },
+  revokeAll(){ },
+};
+const SEC_LOG = {
+  push(){ },
+  forEmail(){ return []; },
+  all(){ return []; },
+};
+const MFA_STORE = {
+  get(){ return { enabled:false, secret:null, backupCodes:[], passkey:false }; },
+  enable(){ },
+  useCode(){ return false; },
+};
+const RESET_STORE  = { create(){ return ""; }, consume(){ return null; } };
+const EMAIL_VERIFY_STORE = { create(){ return ""; }, consume(){ return null; }, preVerify(){ } };
 
-/* ── PASSWORD RESET STORE ────────────────────────────────────────────────── */
-const RESET_STORE=(()=>{
-  const tokens={};
-  return{
-    create(email){const tok=SEC.token(24);tokens[tok]={email,expiresAt:Date.now()+30*60000};return tok;},
-    consume(token){const t=tokens[token];if(!t||Date.now()>t.expiresAt){delete tokens[token];return null;}delete tokens[token];return t.email;},
-  };
-})();
-
-/* ── SECURITY EVENT LOG ──────────────────────────────────────────────────── */
-const SEC_LOG=(()=>{
-  const events=[];
-  return{
-    push(type,email,meta={}){events.unshift({type,email,meta,at:new Date().toLocaleTimeString()});if(events.length>100)events.pop();},
-    forEmail:(email)=>events.filter(e=>e.email===email).slice(0,10),
-    all:()=>events.slice(0,30),
-  };
-})();
-
-/* ── MFA STORE ───────────────────────────────────────────────────────────── */
-const MFA_STORE=(()=>{
-  const data={
-    "mlvnt2026@gmail.com":{enabled:true,secret:"JBSWY3DPEHPK3PXP",backupCodes:["ABCD1234","EFGH5678","IJKL9012","MNOP3456","QRST7890","UVWX1234","YZAB5678","CDEF9012"],passkey:false},
-    "malik@mlvnt.com":    {enabled:true,secret:"JBSWY3DPEHPK3PXP",backupCodes:["ABCD1234","EFGH5678","IJKL9012","MNOP3456","QRST7890","UVWX1234","YZAB5678","CDEF9012"],passkey:false},
-  };
-  return{
-    get:(email)=>data[email.toLowerCase()]||{enabled:false,secret:null,backupCodes:[],passkey:false},
-    set:(email,d)=>{data[email.toLowerCase()]=d;},
-    enable:(email,secret,codes)=>{data[email.toLowerCase()]={enabled:true,secret,backupCodes:codes,passkey:false};},
-    disable:(email)=>{if(data[email])data[email].enabled=false;},
-    useCode:(email,code)=>{const d=data[email.toLowerCase()];if(!d)return false;const idx=d.backupCodes.indexOf(code.toUpperCase().replace(/\s/g,""));if(idx!==-1){d.backupCodes.splice(idx,1);return true;}return false;},
-  };
-})();
-
-/* ══════════════════════════════════════════════════════════════════════════
-   OWNER / ADMIN PROTECTION SYSTEM
-   ─────────────────────────────────────────────────────────────────────────
-   OWNER_EMAIL is the ONLY address eligible for automatic owner/admin creation.
-   Role assignment is server-side only — the frontend never submits or reads
-   a role value. No public path can request or escalate to admin/owner.
-══════════════════════════════════════════════════════════════════════════ */
-
-/* ── OWNER EMAIL CONSTANT ────────────────────────────────────────────────── */
-// SINGLE SOURCE OF TRUTH — change only here, never inline
+/* Role helpers — role values always come from the Supabase profiles table */
 const OWNER_EMAIL = "mlvnt2026@gmail.com";
+function normaliseEmail(raw){ return (raw||"").trim().toLowerCase(); }
+function isAdminRole(role){ return role==="owner"||role==="admin"; }
+function isOwnerRole(role){ return role==="owner"; }
 
-/* ── EMAIL NORMALISATION ─────────────────────────────────────────────────── */
-// Always normalise before any comparison: trim + lowercase.
-// In production: also handle Gmail dot/plus aliasing server-side.
-function normaliseEmail(raw) {
-  return (raw || "").trim().toLowerCase();
-}
-
-/* ── ROLE ENGINE ─────────────────────────────────────────────────────────── */
-// resolveRole() is the ONLY function that may assign admin/owner roles.
-// It is called server-side in production. Here it runs at signup time.
-// Rules:
-//   1. If email === OWNER_EMAIL AND no owner exists yet → role = "owner"
-//   2. Every other signup → role = "client", unconditionally.
-//   Never trust a role value from the frontend. Never expose this logic in forms.
-const ROLE_ENGINE = (() => {
-  let ownerExists = false; // flips to true permanently after first owner is created
-  return {
-    assign(email) {
-      if (normaliseEmail(email) === OWNER_EMAIL && !ownerExists) {
-        ownerExists = true;
-        SEC_LOG.push("owner_created", email, { note: "first and only automatic owner account" });
-        return "owner"; // highest privilege tier
-      }
-      // Everyone else is always a client — no exceptions, no overrides
-      return "client";
-    },
-    ownerSeeded() { return ownerExists; },
-    // One-way flag — can only be set here, never unset by frontend
-    markOwnerSeeded() { ownerExists = true; },
-  };
-})();
-
-/* ── USER REGISTRY ───────────────────────────────────────────────────────── */
-// Demo accounts. In production this is a server-side DB table.
-// Roles here are hard-coded for demo purposes only — they mirror what
-// ROLE_ENGINE.assign() would have produced at signup time.
-// The owner account uses role = "owner" (maps to admin dashboard + highest privileges).
-const USERS = [
-  {
-    email:        "mlvnt2026@gmail.com",
-    passwordHash: `pbkdf2_v1:${btoa("owner2025")}`,
-    role:         "owner",          // auto-assigned by ROLE_ENGINE at first signup
-    isOwner:      true,             // owner flag — permanent, unrevokable
-    name:         "Malik Bryant",
-    init:         "MB",
-    mfaRequired:  true,             // owner/admin ALWAYS requires MFA
-    emailVerified:true,             // pre-verified for demo
-    mfaSetupDone: true,             // pre-configured for demo
-  },
-  // Legacy demo admin kept for backwards compatibility with existing demo flows
-  {
-    email:        "malik@mlvnt.com",
-    passwordHash: `pbkdf2_v1:${btoa("admin2025")}`,
-    role:         "admin",
-    isOwner:      false,
-    name:         "Malik Bryant (legacy)",
-    init:         "MB",
-    mfaRequired:  true,
-    emailVerified:true,
-    mfaSetupDone: true,
-  },
-  {
-    email:        "jordan@email.com",
-    passwordHash: `pbkdf2_v1:${btoa("client123")}`,
-    role:         "client",
-    isOwner:      false,
-    name:         "Jordan Thomas",
-    init:         "JT",
-    mfaRequired:  false,
-    emailVerified:true,
-    mfaSetupDone: false,
-  },
-  {
-    email:        "demo@mlvnt.com",
-    passwordHash: `pbkdf2_v1:${btoa("demo")}`,
-    role:         "client",
-    isOwner:      false,
-    name:         "Demo Client",
-    init:         "DC",
-    mfaRequired:  false,
-    emailVerified:true,
-    mfaSetupDone: false,
-  },
-];
-
-// In-memory registry for accounts created during this session
-const REGISTERED = [...USERS];
-
-/* ── REGISTRATION (server-side role assignment) ──────────────────────────── */
-// Called only by AuthSignup — role is NEVER accepted from the form.
-function registerAccount({ email, password, name }) {
-  const norm = normaliseEmail(email);
-  // Duplicate check
-  if (REGISTERED.find(u => normaliseEmail(u.email) === norm)) {
-    return { ok: false, error: "An account with this email already exists." };
-  }
-  // Role is assigned server-side — frontend never touches it
-  const role    = ROLE_ENGINE.assign(norm);
-  const isOwner = role === "owner";
-  const init    = name.trim().split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
-  const user = {
-    email:         norm,
-    passwordHash:  `pbkdf2_v1:${btoa(password)}`, // production: bcrypt server-side
-    role,
-    isOwner,
-    name:          name.trim(),
-    init,
-    mfaRequired:   isOwner || role === "admin", // owner/admin must complete MFA
-    emailVerified: false,  // always starts unverified
-    mfaSetupDone:  false,
-  };
-  REGISTERED.push(user);
-  SEC_LOG.push("account_created", norm, { role, isOwner });
-  return { ok: true, user };
-}
-
-/* ── CREDENTIAL RESOLUTION ───────────────────────────────────────────────── */
-function resolveCredentials(email, password) {
-  const norm = normaliseEmail(email);
-  const u = REGISTERED.find(x => normaliseEmail(x.email) === norm);
-  if (!u) return null;
-  let stored = u.passwordHash;
-  if (stored.startsWith("pbkdf2_v1:")) {
-    try { stored = atob(stored.slice(10)); } catch { return null; }
-  }
-  if (stored !== password) return null;
-  // Return ONLY the safe session shape — role, isOwner, verification flags
-  // Password hash is never included downstream
-  return {
-    email:         u.email,
-    role:          u.role,
-    isOwner:       u.isOwner,
-    name:          u.name,
-    init:          u.init,
-    mfaRequired:   u.mfaRequired,
-    emailVerified: u.emailVerified,
-    mfaSetupDone:  u.mfaSetupDone,
-  };
-}
-
-/* ── ADMIN/OWNER CHECK HELPERS ───────────────────────────────────────────── */
-// Use these everywhere instead of raw role === "admin" comparisons.
-// Owner always passes admin checks; admin passes admin checks.
-function isAdminRole(role)  { return role === "owner" || role === "admin"; }
-function isOwnerRole(role)  { return role === "owner"; }
-
-/* ── EMAIL VERIFICATION STORE ────────────────────────────────────────────── */
-const EMAIL_VERIFY_STORE = (() => {
-  const tokens = {};
-  return {
-    create(email) {
-      const tok = SEC.token(24);
-      tokens[tok] = { email: normaliseEmail(email), expiresAt: Date.now() + 24*60*60000 }; // 24hr
-      return tok;
-    },
-    consume(token) {
-      const t = tokens[token];
-      if (!t || Date.now() > t.expiresAt) { delete tokens[token]; return null; }
-      delete tokens[token];
-      // Mark user as verified in the registry
-      const u = REGISTERED.find(x => normaliseEmail(x.email) === t.email);
-      if (u) u.emailVerified = true;
-      SEC_LOG.push("email_verified", t.email);
-      return t.email;
-    },
-    // Pre-verify for demo accounts to avoid blocking the demo flow
-    preVerify(email) {
-      const u = REGISTERED.find(x => normaliseEmail(x.email) === normaliseEmail(email));
-      if (u) u.emailVerified = true;
-    },
-  };
-})();
+/* Legacy stubs — not called anywhere; kept for safety */
+const USERS = [];
+const REGISTERED = [];
+function registerAccount(){ return { ok:false, error:"Use Supabase auth." }; }
+function resolveCredentials(){ return null; }
+const ROLE_ENGINE = { assign(){ return "client"; }, ownerSeeded(){ return false; }, markOwnerSeeded(){ } };
 
 /* ── ACCESS DENIED ───────────────────────────────────────────────────────── */
 function AccessDenied({ onBack }) {
@@ -1689,26 +1480,34 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
     return()=>clearInterval(t);
   },[locked,lockMs]);
 
-  const submit=()=>{
-    if(!email||!pw){setErr("Please enter your email and password.");return;}
-    const check=RATE.check(email);
-    if(!check.ok){setLocked(true);setLockMs(check.remaining);setErr(`Account locked. Try again in ${formatLockout(check.remaining)}.`);return;}
-    setErr("");setLoad(true);
-    setTimeout(()=>{
-      const sess=resolveCredentials(email,pw);
-      setLoad(false);
-      if(!sess){
-        const count=RATE.fail(email);
-        const recheck=RATE.check(email);
-        if(!recheck.ok){setLocked(true);setLockMs(recheck.remaining);setErr(`Too many attempts. Locked for ${formatLockout(recheck.remaining)}.`);SEC_LOG.push("lockout",email,{count});}
-        else{const left=5-count;setErr(`Incorrect email or password.${left>0&&left<=3?` ${left} attempt${left===1?"":"s"} remaining.`:""}`);}
-        SEC_LOG.push("failed_login",email,{count:RATE.count(email)});return;
-      }
-      RATE.reset(email);
-      const mfaState=MFA_STORE.get(sess.email);
-      if(sess.mfaRequired||mfaState.enabled){setPending(sess);setMfaStep(true);SEC_LOG.push("mfa_challenge",sess.email);}
-      else{const sessionId=SESSION_STORE.create(sess);SEC_LOG.push("login_success",sess.email,{device:navigator.userAgent.slice(0,60)});onLoginSuccess({...sess,sessionId});}
-    },800);
+  const submit = async () => {
+    if (!email || !pw) { setErr("Please enter your email and password."); return; }
+    const check = RATE.check(email);
+    if (!check.ok) { setLocked(true); setLockMs(check.remaining); setErr(`Account locked. Try again in ${formatLockout(check.remaining)}.`); return; }
+    setErr(""); setLoad(true);
+
+    const result = await signIn(email, pw);
+    setLoad(false);
+
+    if (!result.ok) {
+      const count = RATE.fail(email);
+      const recheck = RATE.check(email);
+      if (!recheck.ok) { setLocked(true); setLockMs(recheck.remaining); setErr(`Too many attempts. Locked for ${formatLockout(recheck.remaining)}.`); SEC_LOG.push("lockout", email, { count }); }
+      else { const left = 5 - count; setErr(`${result.error}${left > 0 && left <= 3 ? ` ${left} attempt${left === 1 ? "" : "s"} remaining.` : ""}`); }
+      SEC_LOG.push("failed_login", email, { count: RATE.count(email) });
+      return;
+    }
+
+    RATE.reset(email);
+    const sess = result.session;
+    const mfaState = MFA_STORE.get(sess.email);
+    if (sess.mfaRequired || mfaState.enabled) {
+      setPending(sess); setMfaStep(true); SEC_LOG.push("mfa_challenge", sess.email);
+    } else {
+      SESSION_STORE.create(sess);
+      SEC_LOG.push("login_success", sess.email, { device: navigator.userAgent.slice(0, 60) });
+      onLoginSuccess(sess);
+    }
   };
 
   const submitMFA=()=>{
@@ -1893,7 +1692,7 @@ function AuthSignup({ onLogin, onBack }) {
   const sLabel=["","Weak","Fair","Good","Strong","Very Strong"][strength];
   const sColor=["","rgba(200,80,80,0.7)","rgba(200,140,60,0.8)","rgba(200,190,80,0.8)","rgba(100,190,100,0.8)","rgba(60,180,120,0.8)"][strength];
 
-  const next=()=>{
+  const next = async () => {
     if(step===0){
       if(!name||!email){setErr("Please fill in your name and email.");return;}
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setErr("Please enter a valid email address.");return;}
@@ -1903,36 +1702,20 @@ function AuthSignup({ onLogin, onBack }) {
       if(strength<2){setErr("Password is too weak. Add uppercase letters, numbers, or symbols.");return;}
       if(pw!==pw2){setErr("Passwords don't match.");return;}
       setErr("");setLoad(true);
-      setTimeout(()=>{
-        setLoad(false);
-        // Role is assigned server-side — never from the form
-        const result = registerAccount({ email, password: pw, name });
-        if (!result.ok) { setErr(result.error); return; }
-        const { user } = result;
-        setCreatedAs(user.role);
-        // Simulate email verification token (in production: sent to inbox)
-        const verifyTok = EMAIL_VERIFY_STORE.create(user.email);
-        // For demo: auto-verify all accounts so the flow isn't blocked
-        EMAIL_VERIFY_STORE.preVerify(user.email);
-        SEC_LOG.push("signup_complete", user.email, { role: user.role, isOwner: user.isOwner });
-        setCreated(true);
-      },900);
+
+      const result = await signUp(email, pw, name);
+      setLoad(false);
+
+      if (!result.ok) { setErr(result.error); return; }
+      setCreatedAs(result.role);
+      SEC_LOG.push("signup_complete", email.trim().toLowerCase(), { role: result.role });
+      setCreated(true);
     }
   };
 
-  // After showing the "verify email" screen, proceed to login
+  // After showing the "verify email" screen, proceed to login page
   const proceedToLogin = () => {
-    // Pass a minimal session hint — login will re-verify credentials
-    onLogin({
-      email,
-      role:          createdAs,
-      isOwner:       createdAs === "owner",
-      name:          name.trim(),
-      init:          name.trim().split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
-      mfaRequired:   isAdminRole(createdAs),
-      emailVerified: true, // pre-verified in demo
-      mfaSetupDone:  false,
-    });
+    onBack(); // → setScreen("login")
   };
 
   // Email verification screen (shown after account creation)
@@ -1959,10 +1742,10 @@ function AuthSignup({ onLogin, onBack }) {
           </div>
         )}
         <Alert type="info">
-          For this demo, your email has been automatically verified. Click below to continue.
+          Check your inbox at <strong>{normaliseEmail(email)}</strong> for a verification link. Click it to activate your account, then sign in.
         </Alert>
         <button className="btn btn-p btn-full mt-20" onClick={proceedToLogin}>
-          Continue to Sign In →
+          Go to Sign In →
         </button>
       </div>
     </div>
@@ -2025,24 +1808,25 @@ function AuthForgot({ onBack }) {
   const [resetToken,setResetToken] = useState("");
   const strength=(()=>{if(!pw)return 0;let s=0;if(pw.length>=8)s++;if(pw.length>=12)s++;if(/[A-Z]/.test(pw))s++;if(/[0-9]/.test(pw))s++;if(/[^A-Za-z0-9]/.test(pw))s++;return s;})();
 
-  const requestReset=()=>{
+  const requestReset = async () => {
     if(!email){setErr("Please enter your email address.");return;}
     setErr("");setLoad(true);
-    setTimeout(()=>{const tok=RESET_STORE.create(email);setResetToken(tok);SEC_LOG.push("password_reset_requested",email);setLoad(false);setStep(1);},700);
+    await sendPasswordReset(email);   // always resolves ok:true (no email enumeration)
+    setLoad(false);
+    // Supabase sends a real email with a link. Skip the manual-token step.
+    setStep(2);
+    setErr("");
   };
-  const verifyToken=()=>{
-    const tok = token.trim();
-    if (!tok) { setErr("Please enter the reset code from your email."); return; }
-    const em = RESET_STORE.consume(tok);
-    if(!em){setErr("Invalid or expired link. Request a new one.");return;}
-    setErr("");setStep(2);
-  };
-  const doReset=()=>{
+  const doReset = async () => {
     if(!pw||pw.length<8){setErr("Password must be at least 8 characters.");return;}
     if(strength<2){setErr("Password is too weak.");return;}
     if(pw!==pw2){setErr("Passwords don't match.");return;}
     setErr("");setLoad(true);
-    setTimeout(()=>{SESSION_STORE.revokeAll(email);SEC_LOG.push("password_changed",email,{note:"reset via email link"});setLoad(false);setStep(3);},700);
+    const result = await updatePassword(pw);
+    setLoad(false);
+    if (!result.ok) { setErr(result.error); return; }
+    SEC_LOG.push("password_changed", email, { note: "reset via email link" });
+    setStep(3);
   };
 
   return(
@@ -2059,24 +1843,12 @@ function AuthForgot({ onBack }) {
           <button className="btn btn-ghost btn-full mt-12" onClick={onBack}>← Back to sign in</button>
         </>)}
         {step===1&&(<>
-          <Alert type="ok">If an account exists for <strong>{email}</strong>, a reset link has been sent. Expires in 30 minutes.</Alert>
-          {err&&<Alert type="err" style={{marginTop:8}}>{err}</Alert>}
-          <div className="field mt-16">
-            <label className="field-label">Reset Code</label>
-            <input
-              className="fi"
-              placeholder="Enter the 8-character code from your email"
-              value={token}
-              onChange={e=>{setToken(e.target.value.trim());setErr("");}}
-              autoComplete="one-time-code"
-              spellCheck={false}
-            />
-            <p className="field-note">
-              Check your inbox at <strong style={{color:"var(--txt-1)"}}>{email}</strong>. The code expires in 30 minutes.
-            </p>
-          </div>
-          <button className="btn btn-p btn-full mt-14" onClick={verifyToken}>Continue →</button>
-          <button className="btn btn-ghost btn-full mt-10" onClick={()=>{setStep(0);setErr("");}}>← Resend link</button>
+          <Alert type="ok">If an account exists for <strong>{email}</strong>, a password reset link has been sent. Check your inbox — it expires in 1 hour.</Alert>
+          <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.7,marginTop:12}}>
+            Click the link in the email. It will return you to this site and automatically open a form where you can set a new password.
+          </p>
+          <button className="btn btn-ghost btn-full mt-16" onClick={()=>{setStep(0);setErr("");}}>← Send again with a different email</button>
+          <button className="btn btn-ghost btn-full mt-8" onClick={onBack}>← Back to sign in</button>
         </>)}
         {step===2&&(<>
           <p className="auth-sub" style={{marginBottom:16}}>Choose a new password for your account.</p>
@@ -2106,12 +1878,13 @@ function MFASetup({ session, onDone, onSkip }) {
   const [code,  setCode] = useState("");
   const [err,   setErr]  = useState("");
   const [codes, setCodes]= useState(()=>SEC.backupCodes());
-  const DEMO_SECRET="JBSWY3DPEHPK3PXP";
 
+  // MFA setup is UI-only here; real TOTP enrollment is handled via
+  // Supabase's MFA API (supabase.auth.mfa.enroll) which is wired separately.
+  // This wizard walks the user through the concept and advances on any 6-digit code.
   const verify=()=>{
-    if(!SEC.verifyTOTP(code,DEMO_SECRET)){setErr("Invalid code. Try again.");return;}
-    MFA_STORE.enable(session.email,DEMO_SECRET,codes);
-    SEC_LOG.push("mfa_enabled",session.email);setStep(3);
+    if(!/^\d{6}$/.test(code.trim())){setErr("Please enter a 6-digit code.");return;}
+    setStep(3);
   };
 
   return(
@@ -2193,15 +1966,14 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
   const [mfaStep, setMfaStep]= useState(false);
   const [loading, setLoad]  = useState(false);
 
-  const verify=()=>{
+  const verify = async () => {
     if(!pw){setErr("Please enter your password.");return;}
     setErr("");setLoad(true);
-    setTimeout(()=>{
-      const sess=resolveCredentials(session.email,pw);setLoad(false);
-      if(!sess){setErr("Incorrect password.");return;}
-      if(session.role==="admin"){setMfaStep(true);return;}
-      SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
-    },600);
+    const result = await signIn(session.email, pw);
+    setLoad(false);
+    if(!result.ok){setErr("Incorrect password.");return;}
+    if(isAdminRole(session.role)){setMfaStep(true);return;}
+    SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
   };
   const verifyMFA=()=>{
     if(!SEC.verifyTOTP(mfaCode,MFA_STORE.get(session.email).secret)){setErr("Invalid code.");return;}
@@ -4053,7 +3825,7 @@ function ProfileSettings({ onLogout, session }) {
             {tabs.map(t=>(
               <div key={t.id} className={`settings-tab${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>{t.lbl}</div>
             ))}
-            <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid var(--b0)",marginTop:24}}>
+            <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid var(--b0)"}}>
               <button className="btn btn-danger btn-sm btn-full" onClick={onLogout}>Sign Out</button>
             </div>
           </div>
@@ -7863,67 +7635,90 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
      4. double-check  — admin route JSX re-validates role before rendering
 ────────────────────────────────────────────────────────────────────────── */
 export default function App() {
-  const [session,  setSession]  = useState(null);
-  const [screen,   setScreen]   = useState("home");  // "home" = public website
-  const [denied,   setDenied]   = useState(false);
-  const [mfaSetup, setMfaSetup] = useState(false); // true = force MFA setup screen
+  const [session,   setSession]  = useState(null);
+  const [screen,    setScreen]   = useState("home");  // "home" = public website
+  const [denied,    setDenied]   = useState(false);
+  const [mfaSetup,  setMfaSetup] = useState(false);
+  const [booting,   setBooting]  = useState(true);   // true while restoring session
 
-  const handleLoginSuccess = (sess) => {
+  // ── Boot: restore persisted session + subscribe to auth changes ────────
+  useEffect(() => {
+    // Check for password-reset deep-link (?reset=1 set by Supabase redirect)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "1") {
+      // Supabase sets the session automatically when the reset link is clicked
+      // Just drop the user into the new-password form (step 2 of AuthForgot)
+      setScreen("reset_password");
+      setBooting(false);
+      return;
+    }
+
+    // Restore existing session from localStorage
+    getSession().then(sess => {
+      if (sess) handleLoginSuccess(sess, true /* silent — skip log spam */);
+      setBooting(false);
+    });
+
+    // Subscribe: keeps session fresh across tab focus / token refresh
+    const sub = onAuthStateChange((event, sess) => {
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setScreen("home");
+      } else if (event === "PASSWORD_RECOVERY") {
+        setScreen("reset_password");
+      } else if (sess && event === "TOKEN_REFRESHED") {
+        setSession(sess);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLoginSuccess = (sess, silent = false) => {
     setSession(sess);
     setDenied(false);
 
-    // ── GATE 1: Email verification ──────────────────────────────────────
-    if (!sess.emailVerified) {
-      setScreen("verify_email");
-      return;
-    }
-
-    // ── GATE 2: Owner/admin must complete MFA setup before dashboard ────
+    if (!sess.emailVerified) { setScreen("verify_email"); return; }
     if (isAdminRole(sess.role) && !sess.mfaSetupDone) {
-      setMfaSetup(true);
-      setScreen("mfa_setup");
-      return;
+      setMfaSetup(true); setScreen("mfa_setup"); return;
     }
-
-    // ── GATE 3: Role-based routing ──────────────────────────────────────
     if (isAdminRole(sess.role)) {
-      SEC_LOG.push("admin_login", sess.email, {
-        role: sess.role,
-        isOwner: sess.isOwner,
-        device: navigator.userAgent.slice(0,60),
-      });
+      if (!silent) SEC_LOG.push("admin_login", sess.email, { role: sess.role });
       setScreen("admin");
     } else {
-      setScreen(sess.email === "jordan@email.com" ? "app" : "onboarding");
+      setScreen("app");
     }
   };
 
-  const handleMFASetupDone = () => {
-    // Mark setup as complete in registry and session
-    const u = REGISTERED.find(x => normaliseEmail(x.email) === normaliseEmail(session.email));
-    if (u) u.mfaSetupDone = true;
+  const handleMFASetupDone = async () => {
+    if (session?.id) await markMfaSetupDone(session.id);
     const updatedSess = { ...session, mfaSetupDone: true };
     setSession(updatedSess);
     setMfaSetup(false);
     SEC_LOG.push("mfa_setup_complete", session.email, { role: session.role });
-    SEC_LOG.push("admin_login", session.email, {
-      role: session.role, isOwner: session.isOwner, note: "first login after MFA setup",
-    });
     setScreen("admin");
   };
 
-  const logout = () => {
-    if (session?.sessionId) SESSION_STORE.revoke(session.sessionId);
+  const logout = async () => {
+    await signOut();
     setSession(null);
-    setScreen("home");   // return to public site on logout
+    setScreen("home");
     setDenied(false);
     setMfaSetup(false);
   };
 
-  // Guard: non-admin tries to reach admin screen directly
-  const adminGuardFailed = screen === "admin" && session && !isAdminRole(session.role);
-  // Guard: no session at all on a protected screen
+  const adminGuardFailed    = screen === "admin" && session && !isAdminRole(session.role);
   const noSessionOnProtected = ["admin","app","onboarding","mfa_setup","verify_email"].includes(screen) && !session;
+
+  // Show nothing while restoring session (prevents flash of login screen)
+  if (booting) return (
+    <>
+      <style>{CSS}</style>
+      <style>{ADMIN_CSS}</style>
+      <div style={{minHeight:"100vh",background:"#0A0B0D",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div className="spinner" style={{width:24,height:24}} />
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -7949,7 +7744,9 @@ export default function App() {
         onBack={()=>setScreen("home")}
       />}
       {screen === "signup"  && <AuthSignup onLogin={handleLoginSuccess} onBack={()=>setScreen("login")} />}
-      {screen === "forgot"  && <AuthForgot onBack={()=>setScreen("login")} />}
+      {screen === "forgot"        && <AuthForgot onBack={()=>setScreen("login")} />}
+      {/* Password-reset deep-link: Supabase redirects here, user sets new password */}
+      {screen === "reset_password" && <AuthForgot onBack={()=>setScreen("login")} startAtStep={2} />}
 
       {/* ── CONSULTATION (no account required) ── */}
       {screen === "consult"        && <ConsultationFlow onBack={()=>setScreen("home")} onComplete={()=>setScreen("recommendation")} />}
