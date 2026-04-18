@@ -9,7 +9,27 @@ import {
   getSession,
   onAuthStateChange,
   markMfaSetupDone,
+  mfaEnroll,
+  mfaListFactors,
+  mfaChallenge,
+  mfaVerify,
 } from "./lib/auth.js";
+import {
+  getClientProfile,
+  saveClientProfile,
+  saveProfileName,
+  listClients,
+  getPrograms,
+  getActiveProgram,
+  createProgram,
+  saveProgram,
+  duplicateProgram,
+  archiveProgram,
+  publishProgram,
+  saveOnboarding,
+  saveWorkoutLog,
+  getWorkoutLog,
+} from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    MLVNT APP  ·  Time Moves. So Should You.
@@ -1405,9 +1425,13 @@ function formatLockout(ms){
 /* No-op stubs — real auth is Supabase (src/lib/auth.js).
    These exist only so UI components that reference them don't crash. */
 const SEC = {
-  backupCodes(){ return []; },
-  verifyTOTP(){ return true; },
-  passkeySupported(){ return !!(window.PublicKeyCredential&&navigator.credentials?.create); },
+  backupCodes() {
+    return Array.from({ length: 8 }, () =>
+      Math.random().toString(36).slice(2, 6).toUpperCase() + "-" +
+      Math.random().toString(36).slice(2, 6).toUpperCase()
+    );
+  },
+  passkeySupported() { return !!(window.PublicKeyCredential && navigator.credentials?.create); },
 };
 const SESSION_STORE = {
   create(){ return null; },
@@ -1500,8 +1524,7 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
 
     RATE.reset(email);
     const sess = result.session;
-    const mfaState = MFA_STORE.get(sess.email);
-    if (sess.mfaRequired || mfaState.enabled) {
+    if (sess.mfaRequired) {
       setPending(sess); setMfaStep(true); SEC_LOG.push("mfa_challenge", sess.email);
     } else {
       SESSION_STORE.create(sess);
@@ -1510,22 +1533,25 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
     }
   };
 
-  const submitMFA=()=>{
-    if(!mfaCode.trim()){setMfaErr("Please enter your verification code.");return;}
-    setMfaErr("");
-    const mfaState=MFA_STORE.get(pendingSession.email);
-    let valid=false;
-    if(useBackup){valid=MFA_STORE.useCode(pendingSession.email,mfaCode);if(!valid){setMfaErr("Invalid backup code.");return;}}
-    else{valid=SEC.verifyTOTP(mfaCode,mfaState.secret);if(!valid){setMfaErr("Invalid code. Codes refresh every 30 seconds.");return;}}
-    const sessionId=SESSION_STORE.create(pendingSession);
-    SEC_LOG.push("mfa_success",pendingSession.email);
-    onLoginSuccess({...pendingSession,sessionId});
+  const submitMFA = async () => {
+    if (!mfaCode.trim()) { setMfaErr("Please enter your verification code."); return; }
+    setMfaErr(""); setLoad(true);
+    const factors = await mfaListFactors();
+    const factor = factors[0];
+    if (!factor) { setMfaErr("No authenticator registered. Contact support."); setLoad(false); return; }
+    const c = await mfaChallenge(factor.id);
+    if (!c.ok) { setMfaErr(c.error); setLoad(false); return; }
+    const v = await mfaVerify(factor.id, c.challengeId, mfaCode.trim());
+    setLoad(false);
+    if (!v.ok) { setMfaErr("Invalid code. Codes refresh every 30 seconds."); return; }
+    SEC_LOG.push("mfa_success", pendingSession.email);
+    onLoginSuccess(pendingSession);
   };
 
   const signInWithPasskey=async()=>{
     if(!SEC.passkeySupported()){setErr("Passkeys are not supported on this device.");return;}
     setLoad(true);await new Promise(r=>setTimeout(r,900));setLoad(false);
-    setErr("Passkey verification available in production. Use email + password for demo.");
+    setErr("Passkey sign-in is not configured. Use email and password instead.");
   };
 
   if(mfaStep) return(
@@ -1552,7 +1578,7 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
                 maxLength={6} inputMode="numeric" autoComplete="one-time-code"
                 style={{textAlign:"center",fontSize:"1.3rem",letterSpacing:"0.2em",fontFamily:"var(--fc)"}} autoFocus />
             </div>
-            <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:6,lineHeight:1.5}}>Codes refresh every 30 seconds. Demo: any 6 digits work.</p>
+            <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:6,lineHeight:1.5}}>Codes refresh every 30 seconds.</p>
             <button className="btn btn-p btn-full mt-16" style={{opacity:mfaCode.length===6?1:0.45}} onClick={submitMFA}>Verify</button>
             <button className="btn btn-ghost btn-full mt-12" onClick={()=>{setUseBackup(true);setMfaCode("");setMfaErr("");}}>Use a backup code instead</button>
           </>
@@ -1874,16 +1900,34 @@ function AuthForgot({ onBack }) {
 
 /* ── MFA SETUP WIZARD ────────────────────────────────────────────────────── */
 function MFASetup({ session, onDone, onSkip }) {
-  const [step,  setStep] = useState(0);
-  const [code,  setCode] = useState("");
-  const [err,   setErr]  = useState("");
-  const [codes, setCodes]= useState(()=>SEC.backupCodes());
+  const [step,       setStep]      = useState(0);
+  const [code,       setCode]      = useState("");
+  const [err,        setErr]       = useState("");
+  const [loading,    setLoading]   = useState(false);
+  const [codes,      setCodes]     = useState(() => SEC.backupCodes());
+  const [factorId,   setFactorId]  = useState(null);
+  const [challengeId,setChallengeId] = useState(null);
+  const [totpData,   setTotpData]  = useState(null); // { qr_code, secret, uri }
 
-  // MFA setup is UI-only here; real TOTP enrollment is handled via
-  // Supabase's MFA API (supabase.auth.mfa.enroll) which is wired separately.
-  // This wizard walks the user through the concept and advances on any 6-digit code.
-  const verify=()=>{
-    if(!/^\d{6}$/.test(code.trim())){setErr("Please enter a 6-digit code.");return;}
+  const startEnroll = async () => {
+    setLoading(true); setErr("");
+    const result = await mfaEnroll();
+    setLoading(false);
+    if (!result.ok) { setErr(result.error); return; }
+    setFactorId(result.factorId);
+    setTotpData(result.totp);
+    setStep(1);
+  };
+
+  const verify = async () => {
+    if (!/^\d{6}$/.test(code.trim())) { setErr("Please enter a 6-digit code."); return; }
+    setErr(""); setLoading(true);
+    const c = await mfaChallenge(factorId);
+    if (!c.ok) { setErr(c.error); setLoading(false); return; }
+    const v = await mfaVerify(factorId, c.challengeId, code.trim());
+    setLoading(false);
+    if (!v.ok) { setErr("Invalid code. Check your authenticator app and try again."); return; }
+    setChallengeId(c.challengeId);
     setStep(3);
   };
 
@@ -1903,24 +1947,29 @@ function MFASetup({ session, onDone, onSkip }) {
               </div>
             ))}
           </div>
-          <button className="btn btn-p btn-full" onClick={()=>setStep(1)}>Get Started →</button>
+          {err&&<Alert type="err">{err}</Alert>}
+          <button className={`btn btn-p btn-full${loading?" btn-loading":""}`} onClick={startEnroll} disabled={loading}>
+            {loading?<><Spinner />Setting up…</>:"Get Started →"}
+          </button>
           {onSkip&&<button className="btn btn-ghost btn-full mt-12" onClick={onSkip}>Set up later</button>}
         </>)}
         {step===1&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Scan the QR Code</div>
           <p className="auth-sub" style={{marginBottom:16}}>Open your authenticator app and scan this code, or enter the setup key manually.</p>
-          <div style={{width:160,height:160,borderRadius:"var(--r3)",background:"rgba(255,255,255,0.92)",margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6}}>
-            <p style={{fontFamily:"monospace",fontSize:"0.48rem",color:"#222",textAlign:"center",padding:10}}>[QR Code renders here in production]</p>
+          <div style={{width:160,height:160,borderRadius:"var(--r3)",background:"rgba(255,255,255,0.92)",margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {totpData?.qr_code
+              ? <img src={totpData.qr_code} alt="MFA QR code" style={{width:148,height:148,borderRadius:"var(--r2)"}} />
+              : <p style={{fontFamily:"monospace",fontSize:"0.48rem",color:"#222",textAlign:"center",padding:10}}>Loading…</p>}
           </div>
           <div style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.25)",border:"1px solid var(--b0)",marginBottom:16}}>
             <p style={{fontSize:"0.58rem",color:"var(--txt-2)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Manual Setup Key</p>
-            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{DEMO_SECRET}</p>
+            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{totpData?.secret || "—"}</p>
           </div>
           <button className="btn btn-p btn-full" onClick={()=>setStep(2)}>I've scanned it →</button>
         </>)}
         {step===2&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Enter the Verification Code</div>
-          <p className="auth-sub" style={{marginBottom:16}}>Enter the 6-digit code from your authenticator app.</p>
+          <p className="auth-sub" style={{marginBottom:16}}>Enter the 6-digit code from your authenticator app to confirm setup.</p>
           {err&&<Alert type="err">{err}</Alert>}
           <div className="field mt-12">
             <label className="field-label">Verification Code</label>
@@ -1929,9 +1978,10 @@ function MFASetup({ session, onDone, onSkip }) {
               onKeyDown={e=>e.key==="Enter"&&verify()}
               maxLength={6} inputMode="numeric" autoComplete="one-time-code"
               style={{textAlign:"center",fontSize:"1.3rem",letterSpacing:"0.2em",fontFamily:"var(--fc)"}} autoFocus />
-            <p className="field-note">Demo: enter any 6-digit number.</p>
           </div>
-          <button className="btn btn-p btn-full mt-16" style={{opacity:code.length===6?1:0.45}} onClick={verify}>Confirm Setup</button>
+          <button className={`btn btn-p btn-full mt-16${loading?" btn-loading":""}`} style={{opacity:code.length===6&&!loading?1:0.45}} onClick={verify} disabled={loading||code.length<6}>
+            {loading?<><Spinner />Verifying…</>:"Confirm Setup"}
+          </button>
         </>)}
         {step===3&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Save Your Backup Codes</div>
@@ -1975,9 +2025,19 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
     if(isAdminRole(session.role)){setMfaStep(true);return;}
     SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
   };
-  const verifyMFA=()=>{
-    if(!SEC.verifyTOTP(mfaCode,MFA_STORE.get(session.email).secret)){setErr("Invalid code.");return;}
-    SEC_LOG.push("reauth_mfa_success",session.email,{reason});onSuccess();
+  const verifyMFA = async () => {
+    if (!mfaCode.trim()) { setErr("Please enter your authenticator code."); return; }
+    setErr(""); setLoad(true);
+    const factors = await mfaListFactors();
+    const factor = factors[0];
+    if (!factor) { setErr("No authenticator registered. Contact support."); setLoad(false); return; }
+    const c = await mfaChallenge(factor.id);
+    if (!c.ok) { setErr(c.error); setLoad(false); return; }
+    const v = await mfaVerify(factor.id, c.challengeId, mfaCode.trim());
+    setLoad(false);
+    if (!v.ok) { setErr("Invalid code."); return; }
+    SEC_LOG.push("reauth_mfa_success", session.email, { reason });
+    onSuccess();
   };
 
   return(
@@ -2022,7 +2082,7 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
             </div>
             <div style={{display:"flex",gap:8,marginTop:14}}>
               <button className="btn btn-s btn-sm" onClick={onCancel}>Cancel</button>
-              <button className="btn btn-p btn-sm" style={{flex:1,justifyContent:"center",opacity:mfaCode.length===6?1:0.45}} onClick={verifyMFA}>Verify</button>
+              <button className={`btn btn-p btn-sm${loading?" btn-loading":""}`} style={{flex:1,justifyContent:"center",opacity:mfaCode.length===6&&!loading?1:0.45}} onClick={verifyMFA} disabled={loading||mfaCode.length<6}>{loading?<><Spinner />Verifying…</>:"Verify"}</button>
             </div>
           </>
         )}
@@ -2033,7 +2093,7 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
 
 /* ── SECURITY SETTINGS PANEL ─────────────────────────────────────────────── */
 function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
-  const mfaState=MFA_STORE.get(session?.email||"");
+  const mfaEnabled = session?.mfaSetupDone ?? false;
   const sessions=SESSION_STORE.list(session?.email||"");
   const events=SEC_LOG.forEmail(session?.email||"");
   const [saved,setSaved]=useState(false);
@@ -2043,19 +2103,18 @@ function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
     <div className="form-col">
       <h3 className="h3 mb-16">Security</h3>
       <div className="card card-p">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:mfaState.enabled?14:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:mfaEnabled?14:0}}>
           <div>
             <p className="label mb-4">Two-Factor Authentication</p>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{mfaState.enabled?"Enabled ✓":"Not Enabled"}</p>
-            <p className="body-sm mt-4">{mfaState.enabled?"Your account is protected with an authenticator app.":"Add an extra layer of protection to your account."}</p>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{mfaEnabled?"Enabled ✓":"Not Enabled"}</p>
+            <p className="body-sm mt-4">{mfaEnabled?"Your account is protected with an authenticator app.":"Add an extra layer of protection to your account."}</p>
           </div>
-          {mfaState.enabled
+          {mfaEnabled
             ?<span style={{padding:"3px 10px",borderRadius:100,background:"rgba(42,122,75,0.15)",color:"rgba(140,210,155,0.85)",border:"1px solid rgba(42,122,75,0.25)",fontSize:"0.62rem",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",whiteSpace:"nowrap"}}>Active</span>
             :<button className="btn btn-p btn-sm" onClick={onSetupMFA}>Enable 2FA</button>}
         </div>
-        {mfaState.enabled&&(<>
-          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Backup Codes</p><p className="list-sub">{mfaState.backupCodes.length} remaining</p></div><button className="btn btn-s btn-xs">Regenerate</button></div>
-          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Passkey</p><p className="list-sub">{mfaState.passkey?"Registered":"Not registered"}</p></div><button className="btn btn-s btn-xs">{mfaState.passkey?"Manage":"Add Passkey"}</button></div>
+        {mfaEnabled&&(<>
+          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Passkey</p><p className="list-sub">Not registered</p></div><button className="btn btn-s btn-xs">Add Passkey</button></div>
         </>)}
       </div>
       <div className="card card-p">
@@ -2113,7 +2172,7 @@ function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
 
 
 /* ── ONBOARDING ──────────────────────────────────────────────────────────── */
-function Onboarding({ onComplete }) {
+function Onboarding({ onComplete, session }) {
   const [step, setStep]   = useState(0);
   const [saving, setSaving]= useState(false);
 
@@ -2134,16 +2193,40 @@ function Onboarding({ onComplete }) {
   // ── Step 6: Agreements ────────────────────────────────────────────────
   const [checks, setChecks] = useState([false,false,false,false,false]);
 
+  // ── Step 0: Personal Info ─────────────────────────────────────────────
+  const [obFirstName, setObFirstName] = useState("");
+  const [obLastName,  setObLastName]  = useState("");
+  const [obPhone,     setObPhone]     = useState("");
+  const [obBirthday,  setObBirthday]  = useState("");
+  const [obAge,       setObAge]       = useState("");
+  const [obHeight,    setObHeight]    = useState("");
+  const [obWeight,    setObWeight]    = useState("");
+  const [obEmergency, setObEmergency] = useState("");
+
   const total = OB_STEPS.length;
   const pct   = ((step+1)/total)*100;
 
   const toggleArr  = (arr, setArr, v) => setArr(p=>p.includes(v)?p.filter(x=>x!==v):[...p,v]);
   const toggleCheck = i => setChecks(p=>p.map((c,idx)=>idx===i?!c:c));
 
-  // Simulate auto-save
-  const handleNext = () => {
+  const handleNext = async () => {
     setSaving(true);
-    setTimeout(()=>{ setSaving(false); if(step<total-1) setStep(s=>s+1); else onComplete(); }, 600);
+    if (step < total - 1) {
+      setSaving(false);
+      setStep(s => s + 1);
+    } else {
+      if (session?.id) {
+        await saveOnboarding(session.id, session.email, {
+          firstName: obFirstName, lastName: obLastName,
+          phone: obPhone, birthday: obBirthday, age: obAge,
+          height: obHeight, weight: obWeight, emergencyContact: obEmergency,
+          goals, level, hadCoach, trainDays, trainTimes,
+          sleep, stress, accountability,
+        });
+      }
+      setSaving(false);
+      onComplete();
+    }
   };
   const canAdvance = step<6 || checks.every(Boolean);
 
@@ -2151,24 +2234,24 @@ function Onboarding({ onComplete }) {
     /* 0 — Personal Info */
     <div className="form-col" key="0">
       <div className="form-grid">
-        <div className="field"><label className="field-label">First Name</label><input className="fi" placeholder="Jordan" autoComplete="given-name" /></div>
-        <div className="field"><label className="field-label">Last Name</label><input className="fi" placeholder="Thomas" autoComplete="family-name" /></div>
+        <div className="field"><label className="field-label">First Name</label><input className="fi" value={obFirstName} onChange={e=>setObFirstName(e.target.value)} placeholder="Jordan" autoComplete="given-name" /></div>
+        <div className="field"><label className="field-label">Last Name</label><input className="fi" value={obLastName} onChange={e=>setObLastName(e.target.value)} placeholder="Thomas" autoComplete="family-name" /></div>
       </div>
-      <div className="field"><label className="field-label">Email Address</label><input className="fi" type="email" placeholder="jordan@email.com" autoComplete="email" /></div>
-      <div className="field"><label className="field-label">Phone Number</label><input className="fi" type="tel" placeholder="+1 (555) 000-0000" autoComplete="tel" /></div>
+      <div className="field"><label className="field-label">Email Address</label><input className="fi" type="email" value={session?.email || ""} readOnly style={{opacity:0.6}} autoComplete="email" /></div>
+      <div className="field"><label className="field-label">Phone Number</label><input className="fi" type="tel" value={obPhone} onChange={e=>setObPhone(e.target.value)} placeholder="+1 (555) 000-0000" autoComplete="tel" /></div>
       <div className="form-grid">
         <div className="field">
           <label className="field-label">Date of Birth</label>
-          <input className="fi" type="date" autoComplete="bday" />
+          <input className="fi" type="date" value={obBirthday} onChange={e=>setObBirthday(e.target.value)} autoComplete="bday" />
           <span className="field-note">🔒 Your birthday is locked after submission. It's used for your annual birthday reward and cannot be changed later.</span>
         </div>
-        <div className="field"><label className="field-label">Age</label><input className="fi" type="number" placeholder="28" /></div>
+        <div className="field"><label className="field-label">Age</label><input className="fi" type="number" value={obAge} onChange={e=>setObAge(e.target.value)} placeholder="28" /></div>
       </div>
       <div className="form-grid">
-        <div className="field"><label className="field-label">Height</label><input className="fi" placeholder="5 ft 11 in" /></div>
-        <div className="field"><label className="field-label">Approx. Weight</label><input className="fi" placeholder="175 lbs" /></div>
+        <div className="field"><label className="field-label">Height</label><input className="fi" value={obHeight} onChange={e=>setObHeight(e.target.value)} placeholder="5 ft 11 in" /></div>
+        <div className="field"><label className="field-label">Approx. Weight</label><input className="fi" value={obWeight} onChange={e=>setObWeight(e.target.value)} placeholder="175 lbs" /></div>
       </div>
-      <div className="field"><label className="field-label">Emergency Contact</label><input className="fi" placeholder="Name — Phone Number" /></div>
+      <div className="field"><label className="field-label">Emergency Contact</label><input className="fi" value={obEmergency} onChange={e=>setObEmergency(e.target.value)} placeholder="Name — Phone Number" /></div>
     </div>,
 
     /* 1 — Goals */
@@ -3031,17 +3114,62 @@ function Booking({ setView }) {
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
-function Program() {
+function Program({ session }) {
   const [tab,       setTab]        = useState("current");
-  const [activeDay, setActiveDay]  = useState(null); // null = overview, dayId = workout view
+  const [activeDay, setActiveDay]  = useState(null);
   const [openEx,    setOpenEx]     = useState(null);
   const [histOpen,  setHistOpen]   = useState(null);
   const [histDay,   setHistDay]    = useState(null);
-  const [tick,      setTick]       = useState(0); // force re-render on set toggle
+  const [tick,      setTick]       = useState(0);
 
-  const active  = PROGRAM_STORE.active();
-  const history = PROGRAM_STORE.history();
-  const progId  = active?.id;
+  // ── Supabase program data ──────────────────────────────────────────────
+  const [active,    setActive]     = useState(null);
+  const [history,   setHistory]    = useState([]);
+  const [progLoading, setProgLoading] = useState(true);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    getActiveProgram(session.id).then(row => {
+      if (row) {
+        setActive({
+          id:         row.id,
+          name:       row.name,
+          block:      row.block,
+          phase:      row.phase      || "",
+          status:     row.status,
+          startDate:  row.start_date || "",
+          endDate:    row.end_date   || "",
+          week:       row.week       ?? 1,
+          totalWeeks: row.total_weeks ?? 8,
+          coachNote:  row.coach_note || "",
+          days:       row.days       || [],
+          updatedAt:  row.updated_at || "",
+        });
+      }
+      setProgLoading(false);
+    });
+    // Load history (completed + archived)
+    getPrograms(session.id).then(rows => {
+      setHistory(rows
+        .filter(r => r.status !== "active" && r.status !== "draft")
+        .map(row => ({
+          id:         row.id,
+          name:       row.name,
+          block:      row.block,
+          phase:      row.phase      || "",
+          status:     row.status,
+          startDate:  row.start_date || "",
+          endDate:    row.end_date   || "",
+          week:       row.week       ?? 1,
+          totalWeeks: row.total_weeks ?? 8,
+          coachNote:  row.coach_note || "",
+          days:       row.days       || [],
+        }))
+      );
+    });
+  }, [session?.id]);
+
+  const progId = active?.id;
 
   // Determine "today" day — default to Friday for demo
   const DOW_MAP = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
@@ -3053,10 +3181,23 @@ function Program() {
     setTick(t=>t+1); // re-render
   };
 
-  const completeDay = (dayId) => {
+  const completeDay = async (dayId) => {
     WORKOUT_LOG.completeDay(progId, dayId);
     setTick(t=>t+1);
     setActiveDay(null);
+    // Persist to Supabase
+    if (session?.id && progId) {
+      const logState = WORKOUT_LOG.get(progId, dayId);
+      const setsObj  = {};
+      Object.entries(logState.sets || {}).forEach(([exId, setData]) => {
+        setsObj[exId] = setData instanceof Set ? [...setData] : setData;
+      });
+      await saveWorkoutLog(progId, dayId, session.id, {
+        sets:        setsObj,
+        completed:   true,
+        completedAt: logState.completedAt,
+      });
+    }
   };
 
   const pct = active ? Math.round((active.week/active.totalWeeks)*100) : 0;
@@ -3308,7 +3449,7 @@ function Program() {
                   <span className="prog-status-pill active">Active</span>
                 </div>
                 <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:10}}>
-                  {[["Started",active.startDate],["Ends",active.endDate],[`Week ${active.week} of ${active.totalWeeks}`,"Progress"]].map(([v,l])=>(
+                  {[[active.startDate,"Started"],[active.endDate,"Ends"],[`Week ${active.week} of ${active.totalWeeks}`,"Progress"]].map(([v,l])=>(
                     <div key={l}><p style={{fontSize:"0.56rem",letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:2}}>{l}</p><p style={{fontSize:"0.78rem",color:"var(--txt-0)",fontFamily:"var(--fc)"}}>{v}</p></div>
                   ))}
                 </div>
@@ -3797,13 +3938,85 @@ function LocationSettings({ save }) {
 
 /* ── PROFILE / SETTINGS ──────────────────────────────────────────────────── */
 function ProfileSettings({ onLogout, session }) {
-  const [tab, setTab]         = useState("profile");
-  const [saving, setSaving]   = useState(false);
-  const [saved, setSaved]     = useState(false);
+  const [tab, setTab]     = useState("profile");
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+  const [err,    setErr]    = useState("");
 
-  const save = () => {
-    setSaving(true);
-    setTimeout(()=>{ setSaving(false); setSaved(true); setTimeout(()=>setSaved(false),2500); }, 700);
+  // ── Profile tab state (loaded from Supabase) ─────────────────────────────
+  const [firstName,        setFirstName]        = useState("");
+  const [lastName,         setLastName]         = useState("");
+  const [phone,            setPhone]            = useState("");
+  const [height,           setHeight]           = useState("");
+  const [weight,           setWeight]           = useState("");
+  const [emergencyContact, setEmergencyContact] = useState("");
+  const [birthday,         setBirthday]         = useState("");
+  const [profileLoaded,    setProfileLoaded]    = useState(false);
+
+  // ── Location tab state ────────────────────────────────────────────────────
+  const [locBuilding, setLocBuilding] = useState("");
+  const [locAddress,  setLocAddress]  = useState("");
+  const [locArea,     setLocArea]     = useState("hudson_yards");
+  const [locNotes,    setLocNotes]    = useState("");
+
+  // ── Load profile from Supabase on mount ──────────────────────────────────
+  useEffect(() => {
+    if (!session?.id || profileLoaded) return;
+    getClientProfile(session.id).then(p => {
+      if (p) {
+        const nameParts = (session.name || "").split(" ");
+        setFirstName(nameParts[0] || "");
+        setLastName(nameParts.slice(1).join(" ") || "");
+        setPhone(p.phone || "");
+        setHeight(p.height || "");
+        setWeight(p.weight || "");
+        setEmergencyContact(p.emergency_contact || "");
+        setBirthday(p.birthday || "");
+        setLocBuilding(p.location_building || "");
+        setLocAddress(p.location_address  || "");
+        setLocArea(p.location_area        || "hudson_yards");
+        setLocNotes(p.location_notes      || "");
+      }
+      setProfileLoaded(true);
+    });
+  }, [session?.id]);
+
+  const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
+
+  // ── Save profile tab ──────────────────────────────────────────────────────
+  const saveProfile = async () => {
+    setSaving(true); setErr("");
+    const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+    const [r1, r2] = await Promise.all([
+      saveProfileName(session.id, fullName),
+      saveClientProfile(session.id, {
+        phone:             phone.trim()             || null,
+        height:            height.trim()            || null,
+        weight:            weight.trim()            || null,
+        emergency_contact: emergencyContact.trim()  || null,
+        location_building: locBuilding.trim()       || null,
+        location_address:  locAddress.trim()        || null,
+        location_area:     locArea                  || null,
+        location_notes:    locNotes.trim()          || null,
+      }),
+    ]);
+    setSaving(false);
+    if (!r1.ok || !r2.ok) { setErr(r1.error || r2.error || "Save failed."); return; }
+    flashSaved();
+  };
+
+  // ── Save location tab ─────────────────────────────────────────────────────
+  const saveLocation = async () => {
+    setSaving(true); setErr("");
+    const result = await saveClientProfile(session.id, {
+      location_building: locBuilding.trim() || null,
+      location_address:  locAddress.trim()  || null,
+      location_area:     locArea            || null,
+      location_notes:    locNotes.trim()    || null,
+    });
+    setSaving(false);
+    if (!result.ok) { setErr(result.error || "Save failed."); return; }
+    flashSaved();
   };
 
   const tabs = [
@@ -3814,10 +4027,22 @@ function ProfileSettings({ onLogout, session }) {
     { id:"security", lbl:"Security" },
   ];
 
+  const AREA_OPTIONS = [
+    { id:"hudson_yards",   lbl:"Hudson Yards" },
+    { id:"chelsea",        lbl:"Chelsea" },
+    { id:"hells_kitchen",  lbl:"Hell's Kitchen" },
+    { id:"midtown",        lbl:"Midtown" },
+    { id:"upper_west",     lbl:"Upper West Side" },
+    { id:"other",          lbl:"Other / Custom" },
+  ];
+
   return (
     <div className="page-fade">
       <Topbar title="Profile & Settings"
-        actions={<div className="flex items-center gap-8"><SaveIndicator saving={saving} />{saved&&<span className="body-sm" style={{color:"rgba(140,220,155,0.8)",fontSize:"0.7rem"}}>✓ Saved</span>}</div>}
+        actions={<div className="flex items-center gap-8">
+          <SaveIndicator saving={saving} />
+          {saved && <span className="body-sm" style={{color:"rgba(140,220,155,0.8)",fontSize:"0.7rem"}}>✓ Saved</span>}
+        </div>}
       />
       <div className="page-body" style={{padding:"24px 0"}}>
         <div className="settings-layout">
@@ -3825,44 +4050,106 @@ function ProfileSettings({ onLogout, session }) {
             {tabs.map(t=>(
               <div key={t.id} className={`settings-tab${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>{t.lbl}</div>
             ))}
-            <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid var(--b0)"}}>
+            <div style={{marginTop:24,paddingTop:16,borderTop:"1px solid var(--b0)"}}>
               <button className="btn btn-danger btn-sm btn-full" onClick={onLogout}>Sign Out</button>
             </div>
           </div>
 
           <div className="settings-content">
+            {err && <Alert type="err" style={{marginBottom:12}}>{err}</Alert>}
+
             {tab==="profile" && (
               <div className="form-col">
                 <div className="flex items-center gap-16 mb-24">
-                  <div className="avatar-lg">JT</div>
+                  <div className="avatar-lg">{session?.init || "?"}</div>
                   <div>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>Jordan Thomas</p>
-                    <p className="body-sm">Hybrid Coaching · Active</p>
-                    <button className="btn btn-ghost" style={{fontSize:"0.66rem",marginTop:4}}>Change photo</button>
+                    <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{session?.name || "—"}</p>
+                    <p className="body-sm">{SESSION_INVENTORY.plan} · Active</p>
                   </div>
                 </div>
 
                 <div className="form-grid">
-                  <div className="field"><label className="field-label">First Name</label><input className="fi" defaultValue="Jordan" /></div>
-                  <div className="field"><label className="field-label">Last Name</label><input className="fi" defaultValue="Thomas" /></div>
+                  <div className="field"><label className="field-label">First Name</label>
+                    <input className="fi" value={firstName} onChange={e=>setFirstName(e.target.value)} /></div>
+                  <div className="field"><label className="field-label">Last Name</label>
+                    <input className="fi" value={lastName} onChange={e=>setLastName(e.target.value)} /></div>
                 </div>
-                <div className="field"><label className="field-label">Email Address</label><input className="fi" type="email" defaultValue="jordan@email.com" /></div>
-                <div className="field"><label className="field-label">Phone Number</label><input className="fi" defaultValue="+1 (555) 000-0000" /></div>
+                <div className="field"><label className="field-label">Email Address</label>
+                  <input className="fi" type="email" value={session?.email || ""} readOnly style={{opacity:0.6}} /></div>
+                <div className="field"><label className="field-label">Phone Number</label>
+                  <input className="fi" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+1 (555) 000-0000" /></div>
                 <div className="form-grid">
-                  <FieldLocked label="Date of Birth" value="April 8, 1995" note="Birthday cannot be changed. Contact Malik if there's an error." />
-                  <div className="field"><label className="field-label">Age</label><input className="fi" defaultValue="29" /></div>
+                  <FieldLocked label="Date of Birth" value={birthday || "Not set"} note="Birthday cannot be changed. Contact Malik if there's an error." />
+                  <div className="field"><label className="field-label">Height</label>
+                    <input className="fi" value={height} onChange={e=>setHeight(e.target.value)} placeholder="5 ft 11 in" /></div>
                 </div>
                 <div className="form-grid">
-                  <div className="field"><label className="field-label">Height</label><input className="fi" defaultValue="5 ft 11 in" /></div>
-                  <div className="field"><label className="field-label">Weight</label><input className="fi" defaultValue="174 lbs" /></div>
+                  <div className="field"><label className="field-label">Weight</label>
+                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="174 lbs" /></div>
+                  <div className="field"><label className="field-label">Emergency Contact</label>
+                    <input className="fi" value={emergencyContact} onChange={e=>setEmergencyContact(e.target.value)} placeholder="Name — Phone Number" /></div>
                 </div>
-                <div className="field"><label className="field-label">Emergency Contact</label><input className="fi" defaultValue="Alex Thomas — 555-0123" /></div>
-                <button className="btn btn-p btn-sm" onClick={save}>Save Changes</button>
+                <button className="btn btn-p btn-sm" onClick={saveProfile} disabled={saving}>
+                  {saving ? "Saving…" : "Save Changes"}
+                </button>
               </div>
             )}
 
             {tab==="location" && (
-              <LocationSettings save={save} />
+              <div className="form-col">
+                <div>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,marginBottom:4}}>Training Location</p>
+                  <p className="body-sm">This location is saved to your profile and used when booking sessions.</p>
+                </div>
+                {locBuilding && (
+                  <div className="loc-card">
+                    <div className="loc-icon">📍</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p className="loc-building">{locBuilding}</p>
+                      {locAddress && <p className="loc-address">{locAddress}</p>}
+                      {locNotes   && <p className="loc-notes">{locNotes}</p>}
+                    </div>
+                    {locAddress && (
+                      <button className="loc-dir-btn"
+                        onClick={()=>window.open(`https://maps.google.com/?q=${encodeURIComponent(locAddress)}`,"_blank","noopener")}>
+                        ↗ Directions
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="card card-p">
+                  <p className="label mb-14">Edit Location</p>
+                  <div className="form-col">
+                    <div className="field">
+                      <label className="field-label">Building / Gym Name</label>
+                      <input className="fi" value={locBuilding} onChange={e=>setLocBuilding(e.target.value)} placeholder="e.g. Equinox Hudson Yards" />
+                    </div>
+                    <div className="field">
+                      <label className="field-label">Full Address</label>
+                      <input className="fi" value={locAddress} onChange={e=>setLocAddress(e.target.value)} placeholder="e.g. 35 Hudson Yards, New York, NY 10001" />
+                    </div>
+                    <div className="field">
+                      <label className="field-label">Neighbourhood / Area</label>
+                      <p className="field-note" style={{marginBottom:8}}>Used to calculate travel buffers between sessions in different areas.</p>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {AREA_OPTIONS.map(a=>(
+                          <button key={a.id}
+                            className={`chip${locArea===a.id?" on":""}`}
+                            onClick={()=>setLocArea(a.id)}>{a.lbl}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label className="field-label">Access Notes</label>
+                      <textarea className="note-area" rows={2} value={locNotes} onChange={e=>setLocNotes(e.target.value)}
+                        placeholder="e.g. Enter on 10th Ave. Gym is on Level 4." />
+                    </div>
+                    <button className="btn btn-p btn-sm" onClick={saveLocation} disabled={saving}>
+                      {saving ? "Saving…" : "Save Location"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
 
             {tab==="account" && (
@@ -3930,7 +4217,7 @@ function ProfileSettings({ onLogout, session }) {
               <SecuritySettings
                 session={session}
                 onSetupMFA={()=>{}}
-                onLogoutAll={()=>{ if(session?.sessionId) SESSION_STORE.revokeAll(session.email); }}
+                onLogoutAll={()=>{ SESSION_STORE.revokeAll(session?.email || ""); }}
               />
             )}
           </div>
@@ -3947,7 +4234,7 @@ function AppShell({ onLogout, session }) {
   const views = {
     home:           <Dashboard setView={setView} />,
     book:           <Booking setView={setView} />,
-    program:        <Program />,
+    program:        <Program session={session} />,
     progress:       <Progress />,
     feedback:       <Feedback />,
     messages:       <Messages />,
@@ -3986,10 +4273,10 @@ function AppShell({ onLogout, session }) {
           <span className="ic">◎</span><span>Program Reflection</span>
         </div>
         <div className="sb-user">
-          <div className="sb-av">JT</div>
+          <div className="sb-av">{session?.init||"?"}</div>
           <div style={{overflow:"hidden"}}>
-            <p className="sb-name">Jordan Thomas</p>
-            <p className="sb-role">Hybrid Coaching</p>
+            <p className="sb-name">{session?.name||"Client"}</p>
+            <p className="sb-role">{SESSION_INVENTORY.plan||"Client"}</p>
           </div>
         </div>
       </aside>
@@ -4775,66 +5062,168 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
 }
 
 /* ── ADMIN PROGRAMS ──────────────────────────────────────────────────────── */
-/* ── ADMIN PROGRAMS ──────────────────────────────────────────────────────── */
-function AdminPrograms() {
-  const [selClientId, setSelClient] = useState(1);
-  const [view,        setView]      = useState("list"); // list | edit | history
+/* ── ADMIN PROGRAMS ─────────────────────────────────────────────────────── */
+function AdminPrograms({ session }) {
+  const [clients,     setClients]   = useState([]);
+  const [selClientId, setSelClient] = useState(null);
+  const [view,        setView]      = useState("list");
   const [editProgId,  setEditProg]  = useState(null);
   const [activeDay,   setDay]       = useState(null);
-  const [programs,    setPrograms]  = useState(()=>PROGRAM_STORE.all(1));
+  const [programs,    setPrograms]  = useState([]);
+  const [saving,      setSaving]    = useState(false);
   const [saved,       setSaved]     = useState(false);
-  const [openDays,    setOpenDays]  = useState(new Set());
+  const [loading,     setLoading]   = useState(true);
+  const [saveErr,     setSaveErr]   = useState("");
 
-  const client  = CLIENTS.find(c=>c.id===selClientId);
-  const active  = programs.find(p=>p.status==="active");
-  const history = programs.filter(p=>p.status!=="active"&&p.status!=="draft");
-  const drafts  = programs.filter(p=>p.status==="draft");
+  // ── Load clients on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    listClients().then(rows => {
+      // Normalise to the shape the UI expects
+      const mapped = rows.map(r => {
+        const cp = r.client_profiles;
+        return {
+          id:       r.id,
+          init:     (r.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+          name:     r.name  || r.email,
+          email:    r.email,
+          pkg:      cp?.package_plan    || "—",
+          goal:     (cp?.goals||[]).join(", ") || "—",
+          level:    cp?.fitness_level   || "—",
+          sessLeft: cp?.sessions_balance ?? 0,
+          location: cp?.location_building || "—",
+          injuries: "—",
+          status:   "active",
+        };
+      });
+      setClients(mapped);
+      if (mapped.length > 0 && !selClientId) setSelClient(mapped[0].id);
+      setLoading(false);
+    });
+  }, []);
 
-  const editProg   = editProgId ? programs.find(p=>p.id===editProgId) : null;
-  const editDayObj = editProg && activeDay ? editProg.days.find(d=>d.id===activeDay) : null;
+  // ── Load programs whenever selected client changes ────────────────────
+  useEffect(() => {
+    if (!selClientId) return;
+    setLoading(true);
+    getPrograms(selClientId).then(rows => {
+      // Map DB snake_case → UI camelCase
+      setPrograms(rows.map(dbToUI));
+      setLoading(false);
+    });
+  }, [selClientId]);
 
-  const saveAndPush = () => { setSaved(true); setTimeout(()=>setSaved(false),2200); };
-  const archiveProg = (id) => { setPrograms(p=>p.map(x=>x.id===id?{...x,status:"completed"}:x)); };
-  const duplicateProg = (id) => {
-    const src = programs.find(p=>p.id===id);
-    if(!src) return;
-    const copy={...JSON.parse(JSON.stringify(src)),id:`p${Date.now()}`,status:"draft",block:`${src.block} (Copy)`};
-    setPrograms(p=>[...p,copy]);
+  // ── DB ↔ UI shape converters ──────────────────────────────────────────
+  function dbToUI(r) {
+    return {
+      id:          r.id,
+      clientId:    r.client_id,
+      name:        r.name        || "New Program",
+      block:       r.block       || "Block 1",
+      phase:       r.phase       || "",
+      status:      r.status      || "draft",
+      startDate:   r.start_date  || "",
+      endDate:     r.end_date    || "",
+      week:        r.week        ?? 1,
+      totalWeeks:  r.total_weeks ?? 8,
+      coachNote:   r.coach_note  || "",
+      days:        r.days        || [],
+      updatedAt:   r.updated_at  || "",
+    };
+  }
+
+  const client   = clients.find(c => c.id === selClientId);
+  const active   = programs.find(p => p.status === "active");
+  const history  = programs.filter(p => p.status !== "active" && p.status !== "draft");
+  const drafts   = programs.filter(p => p.status === "draft");
+  const editProg = editProgId ? programs.find(p => p.id === editProgId) : null;
+  const editDayObj = editProg && activeDay ? editProg.days.find(d => d.id === activeDay) : null;
+
+  // ── Persist + update local state ──────────────────────────────────────
+  const saveAndPush = async () => {
+    if (!editProg) return;
+    setSaving(true); setSaveErr("");
+    const result = await saveProgram(editProg);
+    setSaving(false);
+    if (!result.ok) { setSaveErr(result.error || "Save failed"); return; }
+    // Update local state from DB response
+    setPrograms(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
+    setSaved(true); setTimeout(() => setSaved(false), 2200);
   };
 
+  const archiveProg = async (id) => {
+    const result = await archiveProgram(id);
+    if (result.ok) setPrograms(p => p.map(x => x.id === id ? {...x, status:"completed"} : x));
+  };
+
+  const duplicateProg = async (id) => {
+    const result = await duplicateProgram(id, session?.id);
+    if (result.ok) setPrograms(p => [...p, dbToUI(result.program)]);
+  };
+
+  const publishProg = async (id) => {
+    const result = await publishProgram(id, selClientId);
+    if (result.ok) {
+      setPrograms(p => p.map(x =>
+        x.id === id ? {...x, status:"active"} :
+        x.status === "active" ? {...x, status:"completed"} : x
+      ));
+    }
+  };
+
+  const createNewProgram = async () => {
+    const result = await createProgram(selClientId, session?.id);
+    if (!result.ok) return;
+    const np = dbToUI(result.program);
+    setPrograms(p => [...p, np]);
+    setEditProg(np.id);
+    setDay(null);
+    setView("edit");
+  };
+
+  // ── In-memory exercise edits (saved on "Save & Push") ────────────────
   const updateExField = (exId, field, val) => {
-    setPrograms(prev=>prev.map(p=>p.id!==editProgId?p:{...p,
-      days:p.days.map(d=>d.id!==activeDay?d:{...d,
-        exercises:d.exercises.map(e=>e.id!==exId?e:{...e,[field]:val})})}));
+    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
+      days: p.days.map(d => d.id !== activeDay ? d : {...d,
+        exercises: d.exercises.map(e => e.id !== exId ? e : {...e, [field]:val})})}));
   };
   const addEx = () => {
-    const id=Date.now();
-    setPrograms(prev=>prev.map(p=>p.id!==editProgId?p:{...p,
-      days:p.days.map(d=>d.id!==activeDay?d:{...d,
-        exercises:[...d.exercises,{id,name:"",sets:3,repsScheme:"10,10,10",weight:"",tempo:"",rest:"90s",note:""}]})}));
+    const id = Date.now();
+    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
+      days: p.days.map(d => d.id !== activeDay ? d : {...d,
+        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:""}]})}));
   };
   const removeEx = (exId) => {
-    setPrograms(prev=>prev.map(p=>p.id!==editProgId?p:{...p,
-      days:p.days.map(d=>d.id!==activeDay?d:{...d,
-        exercises:d.exercises.filter(e=>e.id!==exId)})}));
+    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
+      days: p.days.map(d => d.id !== activeDay ? d : {...d,
+        exercises: d.exercises.filter(e => e.id !== exId)})}));
   };
-  const toggleOpenDay = id => setOpenDays(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+
+  if (loading) return (
+    <div className="page-fade">
+      <AdminTopbar title="Program Management" />
+      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:60}}>
+        <div style={{textAlign:"center",color:"var(--txt-2)",fontSize:"0.78rem"}}>
+          <div style={{marginBottom:12,fontSize:"1.4rem",opacity:0.4}}>⊙</div>Loading…
+        </div>
+      </div>
+    </div>
+  );
 
   // ── EDIT VIEW ───────────────────────────────────────────────────────────
-  if (view==="edit" && editProg) {
-    const days=editProg.days;
-    const curDay=editDayObj||days[0];
-    const curDayId=activeDay||(days[0]?.id);
+  if (view === "edit" && editProg) {
+    const days      = editProg.days;
+    const curDayId  = activeDay || days[0]?.id;
+    const curDay    = editDayObj || days[0];
     return (
       <div className="page-fade">
         <AdminTopbar title={`Editing: ${editProg.name}`} actions={<>
           <p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{client?.name} · {editProg.block}</p>
+          {saveErr && <span style={{fontSize:"0.65rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
           <button className="btn btn-s btn-sm" onClick={()=>duplicateProg(editProg.id)}>Duplicate</button>
           {editProg.status==="active" && <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive Block</button>}
-          <button className={`btn btn-p btn-sm${saved?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":"Save & Push"}</button>
+          <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
         </>} />
         <div className="admin-body">
-          {/* Program meta */}
           <div className="a-panel" style={{marginBottom:14}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
               <div className="field"><label className="field-label">Program Name</label>
@@ -4851,11 +5240,10 @@ function AdminPrograms() {
           </div>
 
           <div className="pe-layout">
-            {/* Day tabs */}
             <div className="pe-days">
               <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Training Days</p>
               {days.map(d=>(
-                <div key={d.id} className={`pe-day-tab${(activeDay||days[0]?.id)===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
+                <div key={d.id} className={`pe-day-tab${curDayId===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
                   <p className="pe-day-name">{d.name}</p>
                   <p className="pe-day-type">{d.focus}</p>
                 </div>
@@ -4867,51 +5255,46 @@ function AdminPrograms() {
               }}>+ Add Day</button>
             </div>
 
-            {/* Exercise editor */}
             <div className="pe-content">
-              {curDay && (
-                <>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:10}}>
-                    <div className="form-grid" style={{flex:1}}>
-                      <div className="field"><label className="field-label">Day Name</label>
-                        <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
-                      <div className="field"><label className="field-label">Focus / Type</label>
-                        <input className="fi" value={curDay.focus} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,focus:e.target.value})}))} /></div>
-                    </div>
-                    <button className="btn btn-s btn-sm" onClick={addEx}>+ Exercise</button>
+              {curDay && (<>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:10}}>
+                  <div className="form-grid" style={{flex:1}}>
+                    <div className="field"><label className="field-label">Day Name</label>
+                      <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
+                    <div className="field"><label className="field-label">Focus / Type</label>
+                      <input className="fi" value={curDay.focus} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,focus:e.target.value})}))} /></div>
                   </div>
-
-                  {/* Exercise rows */}
-                  {(editDayObj||curDay).exercises.map((ex,ei)=>(
-                    <div className="ex-editor" key={ex.id}>
-                      <div className="ex-editor-head">
-                        <span className="ex-num">{ei+1}</span>
-                        <input className="ex-name-input" value={ex.name} placeholder="Exercise name"
-                          onChange={e=>updateExField(ex.id,"name",e.target.value)} />
-                        <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
-                          onClick={()=>removeEx(ex.id)}>Remove</button>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px",gap:6,marginTop:10}}>
-                        {["Sets","Reps","Weight","Tempo","Rest","Note"].map(h=><div className="set-hd" key={h}>{h}</div>)}
-                        <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
-                        <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
-                        <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
-                        <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
-                        <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
-                        <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
-                      </div>
+                  <button className="btn btn-s btn-sm" onClick={addEx}>+ Exercise</button>
+                </div>
+                {(editDayObj||curDay).exercises.map((ex,ei)=>(
+                  <div className="ex-editor" key={ex.id}>
+                    <div className="ex-editor-head">
+                      <span className="ex-num">{ei+1}</span>
+                      <input className="ex-name-input" value={ex.name} placeholder="Exercise name"
+                        onChange={e=>updateExField(ex.id,"name",e.target.value)} />
+                      <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
+                        onClick={()=>removeEx(ex.id)}>Remove</button>
                     </div>
-                  ))}
-                  {(editDayObj||curDay).exercises.length===0&&(
-                    <div style={{padding:"24px",textAlign:"center",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.78rem"}}>No exercises yet. Click + Exercise to add one.</div>
-                  )}
-                </>
-              )}
+                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px",gap:6,marginTop:10}}>
+                      {["Sets","Reps","Weight","Tempo","Rest","Note"].map(h=><div className="set-hd" key={h}>{h}</div>)}
+                      <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
+                      <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
+                      <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
+                      <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
+                      <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
+                      <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
+                    </div>
+                  </div>
+                ))}
+                {(editDayObj||curDay).exercises.length===0&&(
+                  <div style={{padding:"24px",textAlign:"center",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.78rem"}}>No exercises yet. Click + Exercise to add one.</div>
+                )}
+              </>)}
             </div>
           </div>
           <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
             <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);}}>← Back</button>
-            <button className={`btn btn-p btn-sm${saved?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":"Save & Push"}</button>
+            <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
           </div>
         </div>
       </div>
@@ -4922,27 +5305,25 @@ function AdminPrograms() {
   return (
     <div className="page-fade">
       <AdminTopbar title="Program Management" actions={<>
-        <select value={selClientId} onChange={e=>setSelClient(+e.target.value)}
+        <select value={selClientId || ""} onChange={e=>{ setSelClient(e.target.value); setView("list"); setEditProg(null); }}
           style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",padding:"6px 10px",borderRadius:"var(--r2)",fontSize:"0.76rem",cursor:"pointer",outline:"none"}}>
-          {CLIENTS.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button className="btn btn-p btn-sm" onClick={()=>{const np=PROGRAM_STORE.create(selClientId);setPrograms(p=>[...p,np]);setEditProg(np.id);setView("edit");}}>
-          + New Program
-        </button>
+        <button className="btn btn-p btn-sm" onClick={createNewProgram}>+ New Program</button>
       </>} />
       <div className="admin-body">
-        {/* Client summary strip */}
-        <div className="a-panel" style={{marginBottom:14,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
-          <div className="c-av" style={{width:40,height:40,fontSize:"0.72rem"}}>{client?.init}</div>
-          <div style={{flex:1}}>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client?.name}</p>
-            <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{client?.pkg} · {client?.goal} · {client?.level}</p>
+        {client && (
+          <div className="a-panel" style={{marginBottom:14,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+            <div className="c-av" style={{width:40,height:40,fontSize:"0.72rem"}}>{client.init}</div>
+            <div style={{flex:1}}>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client.name}</p>
+              <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{client.pkg} · {client.goal} · {client.level}</p>
+            </div>
+            {active  && <span className="prog-status-pill active">Active Program: {active.block}</span>}
+            {!active && <span className="prog-status-pill draft">No Active Program</span>}
           </div>
-          {active && <span className="prog-status-pill active">Active Program: {active.block}</span>}
-          {!active && <span className="prog-status-pill draft">No Active Program</span>}
-        </div>
+        )}
 
-        {/* Active program */}
         {active && (
           <div style={{marginBottom:14}}>
             <p className="label mb-10">Active Program</p>
@@ -4959,7 +5340,6 @@ function AdminPrograms() {
                   <button className="btn btn-s btn-sm" onClick={()=>archiveProg(active.id)}>Archive Block</button>
                 </div>
               </div>
-              {/* Day overview */}
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                 {active.days.map(d=>(
                   <div key={d.id} style={{padding:"8px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
@@ -4973,17 +5353,17 @@ function AdminPrograms() {
           </div>
         )}
 
-        {/* Drafts */}
         {drafts.length > 0 && (
           <div style={{marginBottom:14}}>
             <p className="label mb-10">Drafts</p>
             {drafts.map(p=>(
               <div className="a-panel" key={p.id} style={{marginBottom:8}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><p style={{fontFamily:"var(--fh)",fontSize:"0.85rem",fontWeight:700}}>{p.name}</p><p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · Draft</p></div>
+                  <div><p style={{fontFamily:"var(--fh)",fontSize:"0.85rem",fontWeight:700}}>{p.name}</p>
+                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · Draft</p></div>
                   <div style={{display:"flex",gap:6}}>
                     <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days[0]?.id||null);setView("edit");}}>Edit</button>
-                    <button className="btn btn-p btn-sm" onClick={()=>setPrograms(prev=>prev.map(x=>x.id===p.id?{...x,status:"active"}:x.status==="active"?{...x,status:"completed"}:x))}>Publish</button>
+                    <button className="btn btn-p btn-sm" onClick={()=>publishProg(p.id)}>Publish</button>
                   </div>
                 </div>
               </div>
@@ -4991,7 +5371,6 @@ function AdminPrograms() {
           </div>
         )}
 
-        {/* Program history */}
         {history.length > 0 && (
           <div>
             <p className="label mb-10">Program History · {history.length} block{history.length!==1?"s":""}</p>
@@ -5008,6 +5387,13 @@ function AdminPrograms() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {!loading && programs.length === 0 && (
+          <div style={{textAlign:"center",padding:"48px 0",color:"var(--txt-2)",fontSize:"0.78rem"}}>
+            No programs yet for this client.<br />
+            <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={createNewProgram}>+ Create First Program</button>
           </div>
         )}
       </div>
@@ -7026,14 +7412,14 @@ const ADMIN_NAV = [
   {id:"settings",     ic:"⊙",lbl:"Settings"},
 ];
 
-function AdminShell({ onLogout }) {
+function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
   const views = {
     dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} />,
     consultations:<AdminConsultations setView={setView} />,
     clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} />,
-    programs:     <AdminPrograms />,
+    programs:     <AdminPrograms session={session} />,
     schedule:     <AdminSchedule />,
     feedback:     <AdminFeedback />,
     packages:     <AdminPackages />,
@@ -7057,9 +7443,9 @@ function AdminShell({ onLogout }) {
           </div>
         ))}
         <div className="admin-user">
-          <div className="admin-av">MB</div>
+          <div className="admin-av">{session?.init||"MB"}</div>
           <div style={{overflow:"hidden"}}>
-            <p style={{fontSize:"0.75rem",fontWeight:600,color:"var(--txt-0)"}}>Malik Bryant</p>
+            <p style={{fontSize:"0.75rem",fontWeight:600,color:"var(--txt-0)"}}>{session?.name||"Admin"}</p>
             <p style={{fontSize:"0.6rem",color:"var(--txt-2)"}}>Founder · MLVNT</p>
           </div>
           <button className="btn btn-ghost" style={{marginLeft:"auto",fontSize:"0.6rem"}} onClick={onLogout}>Out</button>
@@ -7798,7 +8184,7 @@ export default function App() {
 
       {/* ── CLIENT ROUTES ── */}
       {screen === "onboarding" && session?.role === "client" && !adminGuardFailed && (
-        <Onboarding onComplete={()=>setScreen("app")} />
+        <Onboarding onComplete={()=>setScreen("app")} session={session} />
       )}
       {screen === "app" && session?.role === "client" && !adminGuardFailed && (
         <AppShell onLogout={logout} session={session} />
