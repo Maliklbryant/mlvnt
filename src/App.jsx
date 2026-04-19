@@ -8,11 +8,7 @@ import {
   updatePassword,
   getSession,
   onAuthStateChange,
-  markMfaSetupDone,
-  mfaEnroll,
-  mfaListFactors,
-  mfaChallenge,
-  mfaVerify,
+  markMfaSetupDone
 } from "./lib/auth.js";
 import {
   getClientProfile,
