@@ -25,7 +25,7 @@ import {
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
-} from "./lib/supabase.js";
+} from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    MLVNT APP  ·  Time Moves. So Should You.
