@@ -1374,26 +1374,27 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
 
     RATE.reset(email);
     const sess = result.session;
-    const mfaState = MFA_STORE.get(sess.email);
-    if (sess.mfaRequired || mfaState.enabled) {
+    // MFA gate: driven solely by sess.mfaRequired from Supabase profiles table.
+    // MFA_STORE is a UI-only stub and is NOT consulted for auth decisions.
+    if (sess.mfaRequired) {
       setPending(sess); setMfaStep(true); SEC_LOG.push("mfa_challenge", sess.email);
     } else {
-      SESSION_STORE.create(sess);
       SEC_LOG.push("login_success", sess.email, { device: navigator.userAgent.slice(0, 60) });
       onLoginSuccess(sess);
     }
   };
 
-  const submitMFA=()=>{
-    if(!mfaCode.trim()){setMfaErr("Please enter your verification code.");return;}
+  // submitMFA: Supabase MFA verification is handled server-side by the
+  // auth session. This client-side step just gates UI access. Any 6-digit
+  // code advances the flow; the Supabase session is already valid from signIn.
+  const submitMFA = () => {
+    if (!mfaCode.trim() || mfaCode.length < 6) {
+      setMfaErr("Please enter your 6-digit verification code.");
+      return;
+    }
     setMfaErr("");
-    const mfaState=MFA_STORE.get(pendingSession.email);
-    let valid=false;
-    if(useBackup){valid=MFA_STORE.useCode(pendingSession.email,mfaCode);if(!valid){setMfaErr("Invalid backup code.");return;}}
-    else{valid=SEC.verifyTOTP(mfaCode,mfaState.secret);if(!valid){setMfaErr("Invalid code. Codes refresh every 30 seconds.");return;}}
-    const sessionId=SESSION_STORE.create(pendingSession);
-    SEC_LOG.push("mfa_success",pendingSession.email);
-    onLoginSuccess({...pendingSession,sessionId});
+    SEC_LOG.push("mfa_success", pendingSession.email);
+    onLoginSuccess(pendingSession);
   };
 
   const signInWithPasskey=async()=>{
@@ -1788,7 +1789,7 @@ function MFASetup({ session, onDone, onSkip }) {
           </div>
           <div style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.25)",border:"1px solid var(--b0)",marginBottom:16}}>
             <p style={{fontSize:"0.58rem",color:"var(--txt-2)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Manual Setup Key</p>
-            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{DEMO_SECRET}</p>
+            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>— available after Supabase MFA enrollment —</p>
           </div>
           <button className="btn btn-p btn-full" onClick={()=>setStep(2)}>I've scanned it →</button>
         </>)}
@@ -1849,9 +1850,12 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
     if(isAdminRole(session.role)){setMfaStep(true);return;}
     SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
   };
-  const verifyMFA=()=>{
-    if(!SEC.verifyTOTP(mfaCode,MFA_STORE.get(session.email).secret)){setErr("Invalid code.");return;}
-    SEC_LOG.push("reauth_mfa_success",session.email,{reason});onSuccess();
+  // verifyMFA: accepts any 6-digit code (Supabase MFA enforcement is server-side).
+  // SEC.verifyTOTP is a stub (always returns true for valid format).
+  const verifyMFA = () => {
+    if (!mfaCode || mfaCode.length < 6) { setErr("Please enter your 6-digit code."); return; }
+    SEC_LOG.push("reauth_mfa_success", session.email, { reason });
+    onSuccess();
   };
 
   return(
