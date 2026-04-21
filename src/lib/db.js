@@ -46,7 +46,7 @@ export async function saveClientProfile(userId, fields) {
     .upsert(payload, { onConflict: "id" });
 
   if (error) {
-    console.error("saveClientProfile:", error.message);
+    console.log("saveClientProfile:", error.message);
     return { ok: false, error: error.message };
   }
   return { ok: true };
@@ -71,7 +71,7 @@ export async function saveProfileName(userId, name) {
     .eq("id", userId);
 
   if (error) {
-    console.error("saveProfileName:", error.message);
+    console.log("saveProfileName:", error.message);
     return { ok: false, error: error.message };
   }
   return { ok: true, name: trimmed, initials };
