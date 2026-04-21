@@ -8137,7 +8137,7 @@ export default function App() {
 
       {/* ── CLIENT ROUTES ── */}
       {screen === "onboarding" && session?.role === "client" && !adminGuardFailed && (
-        <Onboarding onComplete={()=>setScreen("app")} session={session} />
+        <Onboarding onComplete={()=>setScreen("app")} session={session} /> 
       )}
       {screen === "app" && session?.role === "client" && !adminGuardFailed && (
         <AppShell onLogout={logout} session={session} />
