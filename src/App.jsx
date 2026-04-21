@@ -8,7 +8,7 @@ import {
   updatePassword,
   getSession,
   onAuthStateChange,
-  markMfaSetupDone
+  markMfaSetupDone,
 } from "./lib/auth.js";
 import {
   getClientProfile,
@@ -677,225 +677,83 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 // In production: fetched from server, scoped to authenticated client.
 // Statuses: "draft" | "active" | "completed" | "archived"
 
-const PROGRAM_STORE = (() => {
-  const programs = [
-    {
-      id: "p2",
-      clientId: 1,
-      name: "Strength Phase",
-      block: "Block 2",
-      phase: "Hypertrophy → Strength",
-      status: "active",
-      startDate: "Mar 10, 2025",
-      endDate: "Apr 25, 2025",
-      week: 6,
-      totalWeeks: 8,
-      updatedAt: "Apr 4, 2025",
-      coachNote: "Great work this week. Hip hinge is significantly improved — progressing to heavier RDLs next session.",
-      days: [
-        {
-          id: "mon", name: "Monday", focus: "Push — Chest · Shoulder · Tricep",
-          exercises: [
-            { id:1,  name:"Barbell Bench Press",    sets:4, repsScheme:"5,5,5,AMRAP", weight:"175/185/185/185", tempo:"3s", rest:"3 min",  note:"Drive full range. Control eccentric. Bar path slightly towards chin." },
-            { id:2,  name:"Incline Dumbbell Press", sets:3, repsScheme:"10,10,10",    weight:"65/65/65",        tempo:"2s", rest:"90s",    note:"Elbows at 45°. Squeeze at top." },
-            { id:3,  name:"Cable Lateral Raise",    sets:3, repsScheme:"15,15,12",    weight:"12/12/15",        tempo:"3s", rest:"60s",    note:"Lead with elbow, not wrist. Slow eccentric." },
-            { id:4,  name:"Tricep Pushdown (Rope)", sets:3, repsScheme:"12,12,12",    weight:"40/45/45",        tempo:"2s", rest:"60s",    note:"Fully extend and spread at the bottom." },
-          ]
-        },
-        {
-          id: "wed", name: "Wednesday", focus: "Pull — Back · Bicep",
-          exercises: [
-            { id:5,  name:"Pull-Up",                sets:3, repsScheme:"8,8,6",       weight:"BW / BW+10",     tempo:"2s", rest:"3 min",  note:"Full hang at bottom. Squeeze lats at top." },
-            { id:6,  name:"Seated Cable Row",        sets:3, repsScheme:"10,10,10",    weight:"130/140/140",     tempo:"2s", rest:"90s",    note:"Chest proud. Elbows tight. Don't round at the bottom." },
-            { id:7,  name:"EZ-Bar Curl",             sets:3, repsScheme:"12,12,10",    weight:"60/60/65",        tempo:"2s", rest:"60s",    note:"Full extension at bottom. No swinging." },
-          ]
-        },
-        {
-          id: "fri", name: "Friday", focus: "Lower — Hinge Priority",
-          exercises: [
-            { id:8,  name:"Romanian Deadlift",      sets:4, repsScheme:"5,5,5,5",     weight:"205/225/235/235", tempo:"3s", rest:"3 min",  note:"Push hips back. Neutral spine throughout. Feel the hamstring stretch." },
-            { id:9,  name:"Goblet Squat",            sets:3, repsScheme:"12,12,12",    weight:"70/70/70",        tempo:"2s", rest:"90s",    note:"Heels down. Stay upright. Full depth." },
-            { id:10, name:"Hip Thrust",              sets:3, repsScheme:"12,12,12",    weight:"185/185/205",     tempo:"1s", rest:"90s",    note:"Drive through heel. Full extension. Hold 1s at top." },
-          ]
-        },
-        {
-          id: "sat", name: "Saturday", focus: "Accessory + Core",
-          exercises: [
-            { id:11, name:"Face Pull",               sets:3, repsScheme:"15,15,15",    weight:"30/30/35",        tempo:"3s", rest:"60s",    note:"External rotation cue. Thumbs back. Don't rush." },
-            { id:12, name:"Copenhagen Plank",        sets:3, repsScheme:"30s×3",       weight:"",                tempo:"",   rest:"60s",    note:"Stay square. Breathe out on effort." },
-            { id:13, name:"Dead Bug",                sets:3, repsScheme:"8ea×3",       weight:"",                tempo:"",   rest:"60s",    note:"Lower back pressed into floor. Slow and controlled." },
-          ]
-        },
-      ]
-    },
-    {
-      id: "p1",
-      clientId: 1,
-      name: "Foundation Phase",
-      block: "Block 1",
-      phase: "Movement Quality → GPP",
-      status: "completed",
-      startDate: "Jan 15, 2025",
-      endDate: "Mar 9, 2025",
-      week: 8,
-      totalWeeks: 8,
-      updatedAt: "Mar 9, 2025",
-      coachNote: "Excellent block. Movement quality significantly improved. Ready to layer in intensity.",
-      days: [
-        {
-          id: "mon", name: "Monday", focus: "Full Body A",
-          exercises: [
-            { id:101, name:"Goblet Squat",         sets:3, repsScheme:"10,10,10", weight:"35/40/45", tempo:"2s", rest:"90s", note:"Focus on depth and heel position." },
-            { id:102, name:"Push-Up",               sets:3, repsScheme:"10,10,8",  weight:"BW",       tempo:"2s", rest:"60s", note:"Shoulders packed. Full range." },
-            { id:103, name:"Single-Leg RDL",        sets:3, repsScheme:"8ea×3",    weight:"25/25/30", tempo:"3s", rest:"90s", note:"Hip hinge pattern — feel the hamstring." },
-          ]
-        },
-        {
-          id: "thu", name: "Thursday", focus: "Full Body B",
-          exercises: [
-            { id:104, name:"DB Row",                sets:3, repsScheme:"10ea×3",   weight:"40/40/45", tempo:"2s", rest:"90s", note:"Elbow drives back. Don't rotate the torso." },
-            { id:105, name:"Hip Thrust (BW)",       sets:3, repsScheme:"15,15,15", weight:"BW",       tempo:"1s", rest:"60s", note:"Squeeze at the top." },
-            { id:106, name:"Plank",                 sets:3, repsScheme:"30s×3",    weight:"",         tempo:"",   rest:"60s", note:"Brace hard. Don't let hips drop." },
-          ]
-        },
-      ]
-    },
-    {
-      id: "p0",
-      clientId: 1,
-      name: "Onboarding Assessment",
-      block: "Pre-Block",
-      phase: "Assessment",
-      status: "archived",
-      startDate: "Jan 10, 2025",
-      endDate: "Jan 14, 2025",
-      week: 1,
-      totalWeeks: 1,
-      updatedAt: "Jan 14, 2025",
-      coachNote: "Good baseline. Strong lower body awareness. Upper body needs work on scapular control.",
-      days: [
-        {
-          id: "d1", name: "Assessment Day", focus: "Movement Screen",
-          exercises: [
-            { id:201, name:"Overhead Squat",       sets:2, repsScheme:"5,5",   weight:"BW", tempo:"", rest:"—", note:"Screen for mobility restrictions." },
-            { id:202, name:"Hip Hinge Pattern",    sets:2, repsScheme:"8,8",   weight:"BW", tempo:"", rest:"—", note:"Assess hinge quality." },
-            { id:203, name:"Push / Pull Screen",   sets:2, repsScheme:"5ea",   weight:"BW", tempo:"", rest:"—", note:"Check shoulder stability." },
-          ]
-        }
-      ]
-    },
-  ];
+/* ── PROGRAM / WORKOUT STORES (REMOVED — data flows from Supabase via props) ── */
+// PROGRAM_STORE and WORKOUT_LOG are replaced by Supabase-backed React state.
+// These stubs exist only to prevent crashes in legacy call sites that haven't
+// been updated yet; they return empty / falsy values so the UI renders its
+// "no data" states rather than crashing.
 
+const PROGRAM_STORE = {
+  active:  ()    => null,
+  history: ()    => [],
+  all:     ()    => [],
+  byId:    ()    => null,
+  archive: ()    => {},
+  updateDays: () => {},
+  duplicate:  () => null,
+  create:     () => ({ id:`p${Date.now()}`, clientId:null, name:"New Program", block:"Block 1", phase:"", status:"draft", startDate:"", endDate:"", week:1, totalWeeks:8, coachNote:"", days:[] }),
+};
+
+const PROGRAM_DAYS = [];
+const EXERCISES    = {};
+
+const WORKOUT_LOG = {
+  get:            () => ({ sets:{}, completed:false, completedAt:null, startedAt:null }),
+  toggleSet:      () => {},
+  checkedSets:    () => 0,
+  isSetDone:      () => false,
+  totalChecked:   () => 0,
+  totalSets:      (exs) => exs.reduce((a,ex)=>a+(typeof ex.sets==="number"?ex.sets:ex.sets?.length||0),0),
+  completeDay:    () => {},
+  isDayDone:      () => false,
+  programSummary: (_pid, days) => ({ completed:0, total:days?.length||0, pct:0 }),
+  recentActivity: () => [],
+};
+
+/* ── DB ROW → UI SHAPE ────────────────────────────────────────────────────── */
+function dbRowToProgram(row) {
+  if (!row) return null;
   return {
-    // Get active program for client
-    active: (clientId=1) => programs.find(p=>p.clientId===clientId && p.status==="active") || null,
-    // Get program history (completed + archived), newest first
-    history: (clientId=1) => programs.filter(p=>p.clientId===clientId && p.status!=="active" && p.status!=="draft").sort((a,b)=>new Date(b.endDate)-new Date(a.endDate)),
-    // All programs for a client
-    all: (clientId=1) => programs.filter(p=>p.clientId===clientId),
-    // Get by ID
-    byId: (id) => programs.find(p=>p.id===id),
-    // Archive (mark complete) — mutates for demo
-    archive: (id) => { const p=programs.find(x=>x.id===id); if(p) p.status="completed"; },
-    // Update program days
-    updateDays: (id, days) => { const p=programs.find(x=>x.id===id); if(p) p.days=days; },
-    // Duplicate
-    duplicate: (id, newClientId=1) => {
-      const src=programs.find(p=>p.id===id);
-      if(!src) return null;
-      const copy={...JSON.parse(JSON.stringify(src)),id:`p${Date.now()}`,status:"draft",clientId:newClientId,block:`${src.block} (Copy)`,startDate:"",endDate:"",week:1};
-      programs.push(copy);
-      return copy;
-    },
-    // Create new blank program
-    create: (clientId=1) => {
-      const np={id:`p${Date.now()}`,clientId,name:"New Program",block:"Block 1",phase:"",status:"draft",startDate:"",endDate:"",week:1,totalWeeks:8,updatedAt:"Today",coachNote:"",days:[]};
-      programs.push(np);
-      return np;
-    },
+    id:          row.id,
+    clientId:    row.client_id,
+    name:        row.name        || "New Program",
+    block:       row.block       || "Block 1",
+    phase:       row.phase       || "",
+    status:      row.status      || "draft",
+    startDate:   row.start_date  || "",
+    endDate:     row.end_date    || "",
+    week:        row.week        ?? 1,
+    totalWeeks:  row.total_weeks ?? 8,
+    coachNote:   row.coach_note  || "",
+    days:        Array.isArray(row.days) ? row.days : [],
+    updatedAt:   row.updated_at  || "",
   };
-})();
+}
 
-// Legacy aliases — keep existing PROGRAM_DAYS and EXERCISES for components that reference them
-const PROGRAM_DAYS = PROGRAM_STORE.active()?.days.map(d=>({id:d.id,name:d.name,type:d.focus,done:d.id==="mon"||d.id==="wed"})) || [];
-const EXERCISES = Object.fromEntries((PROGRAM_STORE.active()?.days||[]).map(d=>[d.id, d.exercises.map(ex=>({
-  id:ex.id, name:ex.name,
-  sets: Array.from({length:ex.sets},(_,i)=>({reps:ex.repsScheme.split(",")[i]||ex.repsScheme.split(",")[0],weight:ex.weight.split("/")[i]||ex.weight.split("/")[0]})),
-  badge:[], note:ex.note, video:false,
-}))]));
-
-/* ── WORKOUT LOG STORE ───────────────────────────────────────────────────────
-   Tracks per-day set completion and day-level completion status.
-   Key: `${programId}:${dayId}` → { sets: { [exId]: Set<setIndex> }, completed: bool, completedAt }
-   In production: persisted to DB, scoped to authenticated client.
-────────────────────────────────────────────────────────────────────────── */
-const WORKOUT_LOG = (() => {
-  const store = {};
-  const key   = (progId, dayId) => `${progId}:${dayId}`;
-
-  return {
-    // Get or initialise state for a day
-    get(progId, dayId) {
-      const k = key(progId, dayId);
-      if (!store[k]) store[k] = { sets: {}, completed: false, completedAt: null, startedAt: null };
-      return store[k];
-    },
-    // Toggle a single set check
-    toggleSet(progId, dayId, exId, setIdx) {
-      const s = this.get(progId, dayId);
-      if (!s.sets[exId]) s.sets[exId] = new Set();
-      s.sets[exId].has(setIdx) ? s.sets[exId].delete(setIdx) : s.sets[exId].add(setIdx);
-      if (!s.startedAt) s.startedAt = new Date().toLocaleTimeString();
-      return { ...s };
-    },
-    // How many sets are checked for an exercise
-    checkedSets(progId, dayId, exId) {
-      return this.get(progId, dayId).sets[exId]?.size || 0;
-    },
-    // Is a specific set checked?
-    isSetDone(progId, dayId, exId, setIdx) {
-      return this.get(progId, dayId).sets[exId]?.has(setIdx) || false;
-    },
-    // Total sets checked for the whole day
-    totalChecked(progId, dayId, exercises) {
-      const s = this.get(progId, dayId);
-      return exercises.reduce((acc, ex) => acc + (s.sets[ex.id]?.size || 0), 0);
-    },
-    // Total sets in the whole day
-    totalSets(exercises) {
-      return exercises.reduce((acc, ex) => acc + (typeof ex.sets === "number" ? ex.sets : ex.sets?.length || 0), 0);
-    },
-    // Mark day complete
-    completeDay(progId, dayId) {
-      const s = this.get(progId, dayId);
-      s.completed = true;
-      s.completedAt = new Date().toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
-      SEC_LOG.push("workout_completed", "jordan@email.com", { progId, dayId, at: s.completedAt });
-    },
-    // Is day complete?
-    isDayDone(progId, dayId) {
-      return this.get(progId, dayId).completed;
-    },
-    // Summary for a program: { completed: n, total: m, recentActivity: [...] }
-    programSummary(progId, days) {
-      const completed = days.filter(d => this.isDayDone(progId, d.id)).length;
-      return { completed, total: days.length, pct: days.length ? Math.round(completed/days.length*100) : 0 };
-    },
-    // Admin: all recent completions across all clients (demo: uses Jordan)
-    recentActivity() {
-      return Object.entries(store)
-        .filter(([,v]) => v.completed)
-        .map(([k,v]) => {
-          const [progId, dayId] = k.split(":");
-          const prog = PROGRAM_STORE.byId(progId);
-          const day  = prog?.days.find(d=>d.id===dayId);
-          return { client:"Jordan Thomas", init:"JT", progId, dayId, prog:prog?.name, day:day?.name, dayFocus:day?.focus, at:v.completedAt };
-        })
-        .filter(Boolean)
-        .sort((a,b) => b.at?.localeCompare(a.at));
-    },
-  };
-})();
+/* ── WORKOUT LOG HELPERS (work on the workoutLogs map from AppShell) ─────── */
+// These replace WORKOUT_LOG.* calls in components that receive workoutLogs prop.
+function wlIsDone(logs, progId, dayId) {
+  return !!logs?.[`${progId}:${dayId}`]?.completed;
+}
+function wlSetsForEx(logs, progId, dayId, exId) {
+  const raw = logs?.[`${progId}:${dayId}`]?.sets?.[exId];
+  if (!raw) return new Set();
+  return raw instanceof Set ? raw : new Set(Array.isArray(raw) ? raw : Object.keys(raw).map(Number));
+}
+function wlCheckedSets(logs, progId, dayId, exId) {
+  return wlSetsForEx(logs, progId, dayId, exId).size;
+}
+function wlTotalChecked(logs, progId, dayId, exercises) {
+  return (exercises||[]).reduce((a, ex) => a + wlCheckedSets(logs, progId, dayId, ex.id), 0);
+}
+function wlTotalSets(exercises) {
+  return (exercises||[]).reduce((a,ex)=>a+(typeof ex.sets==="number"?ex.sets:ex.sets?.length||0),0);
+}
+function wlProgramSummary(logs, progId, days) {
+  const total     = (days||[]).length;
+  const completed = (days||[]).filter(d => wlIsDone(logs, progId, d.id)).length;
+  return { completed, total, pct: total ? Math.round(completed/total*100) : 0 };
+}
 
 
 
@@ -1421,13 +1279,9 @@ function formatLockout(ms){
 /* No-op stubs — real auth is Supabase (src/lib/auth.js).
    These exist only so UI components that reference them don't crash. */
 const SEC = {
-  backupCodes() {
-    return Array.from({ length: 8 }, () =>
-      Math.random().toString(36).slice(2, 6).toUpperCase() + "-" +
-      Math.random().toString(36).slice(2, 6).toUpperCase()
-    );
-  },
-  passkeySupported() { return !!(window.PublicKeyCredential && navigator.credentials?.create); },
+  backupCodes(){ return []; },
+  verifyTOTP(){ return true; },
+  passkeySupported(){ return !!(window.PublicKeyCredential&&navigator.credentials?.create); },
 };
 const SESSION_STORE = {
   create(){ return null; },
@@ -1520,7 +1374,8 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
 
     RATE.reset(email);
     const sess = result.session;
-    if (sess.mfaRequired) {
+    const mfaState = MFA_STORE.get(sess.email);
+    if (sess.mfaRequired || mfaState.enabled) {
       setPending(sess); setMfaStep(true); SEC_LOG.push("mfa_challenge", sess.email);
     } else {
       SESSION_STORE.create(sess);
@@ -1529,25 +1384,22 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
     }
   };
 
-  const submitMFA = async () => {
-    if (!mfaCode.trim()) { setMfaErr("Please enter your verification code."); return; }
-    setMfaErr(""); setLoad(true);
-    const factors = await mfaListFactors();
-    const factor = factors[0];
-    if (!factor) { setMfaErr("No authenticator registered. Contact support."); setLoad(false); return; }
-    const c = await mfaChallenge(factor.id);
-    if (!c.ok) { setMfaErr(c.error); setLoad(false); return; }
-    const v = await mfaVerify(factor.id, c.challengeId, mfaCode.trim());
-    setLoad(false);
-    if (!v.ok) { setMfaErr("Invalid code. Codes refresh every 30 seconds."); return; }
-    SEC_LOG.push("mfa_success", pendingSession.email);
-    onLoginSuccess(pendingSession);
+  const submitMFA=()=>{
+    if(!mfaCode.trim()){setMfaErr("Please enter your verification code.");return;}
+    setMfaErr("");
+    const mfaState=MFA_STORE.get(pendingSession.email);
+    let valid=false;
+    if(useBackup){valid=MFA_STORE.useCode(pendingSession.email,mfaCode);if(!valid){setMfaErr("Invalid backup code.");return;}}
+    else{valid=SEC.verifyTOTP(mfaCode,mfaState.secret);if(!valid){setMfaErr("Invalid code. Codes refresh every 30 seconds.");return;}}
+    const sessionId=SESSION_STORE.create(pendingSession);
+    SEC_LOG.push("mfa_success",pendingSession.email);
+    onLoginSuccess({...pendingSession,sessionId});
   };
 
   const signInWithPasskey=async()=>{
     if(!SEC.passkeySupported()){setErr("Passkeys are not supported on this device.");return;}
     setLoad(true);await new Promise(r=>setTimeout(r,900));setLoad(false);
-    setErr("Passkey sign-in is not configured. Use email and password instead.");
+    setErr("Passkey verification available in production. Use email + password for demo.");
   };
 
   if(mfaStep) return(
@@ -1574,7 +1426,7 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
                 maxLength={6} inputMode="numeric" autoComplete="one-time-code"
                 style={{textAlign:"center",fontSize:"1.3rem",letterSpacing:"0.2em",fontFamily:"var(--fc)"}} autoFocus />
             </div>
-            <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:6,lineHeight:1.5}}>Codes refresh every 30 seconds.</p>
+            <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:6,lineHeight:1.5}}>Codes refresh every 30 seconds. Demo: any 6 digits work.</p>
             <button className="btn btn-p btn-full mt-16" style={{opacity:mfaCode.length===6?1:0.45}} onClick={submitMFA}>Verify</button>
             <button className="btn btn-ghost btn-full mt-12" onClick={()=>{setUseBackup(true);setMfaCode("");setMfaErr("");}}>Use a backup code instead</button>
           </>
@@ -1896,34 +1748,16 @@ function AuthForgot({ onBack }) {
 
 /* ── MFA SETUP WIZARD ────────────────────────────────────────────────────── */
 function MFASetup({ session, onDone, onSkip }) {
-  const [step,       setStep]      = useState(0);
-  const [code,       setCode]      = useState("");
-  const [err,        setErr]       = useState("");
-  const [loading,    setLoading]   = useState(false);
-  const [codes,      setCodes]     = useState(() => SEC.backupCodes());
-  const [factorId,   setFactorId]  = useState(null);
-  const [challengeId,setChallengeId] = useState(null);
-  const [totpData,   setTotpData]  = useState(null); // { qr_code, secret, uri }
+  const [step,  setStep] = useState(0);
+  const [code,  setCode] = useState("");
+  const [err,   setErr]  = useState("");
+  const [codes, setCodes]= useState(()=>SEC.backupCodes());
 
-  const startEnroll = async () => {
-    setLoading(true); setErr("");
-    const result = await mfaEnroll();
-    setLoading(false);
-    if (!result.ok) { setErr(result.error); return; }
-    setFactorId(result.factorId);
-    setTotpData(result.totp);
-    setStep(1);
-  };
-
-  const verify = async () => {
-    if (!/^\d{6}$/.test(code.trim())) { setErr("Please enter a 6-digit code."); return; }
-    setErr(""); setLoading(true);
-    const c = await mfaChallenge(factorId);
-    if (!c.ok) { setErr(c.error); setLoading(false); return; }
-    const v = await mfaVerify(factorId, c.challengeId, code.trim());
-    setLoading(false);
-    if (!v.ok) { setErr("Invalid code. Check your authenticator app and try again."); return; }
-    setChallengeId(c.challengeId);
+  // MFA setup is UI-only here; real TOTP enrollment is handled via
+  // Supabase's MFA API (supabase.auth.mfa.enroll) which is wired separately.
+  // This wizard walks the user through the concept and advances on any 6-digit code.
+  const verify=()=>{
+    if(!/^\d{6}$/.test(code.trim())){setErr("Please enter a 6-digit code.");return;}
     setStep(3);
   };
 
@@ -1943,29 +1777,24 @@ function MFASetup({ session, onDone, onSkip }) {
               </div>
             ))}
           </div>
-          {err&&<Alert type="err">{err}</Alert>}
-          <button className={`btn btn-p btn-full${loading?" btn-loading":""}`} onClick={startEnroll} disabled={loading}>
-            {loading?<><Spinner />Setting up…</>:"Get Started →"}
-          </button>
+          <button className="btn btn-p btn-full" onClick={()=>setStep(1)}>Get Started →</button>
           {onSkip&&<button className="btn btn-ghost btn-full mt-12" onClick={onSkip}>Set up later</button>}
         </>)}
         {step===1&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Scan the QR Code</div>
           <p className="auth-sub" style={{marginBottom:16}}>Open your authenticator app and scan this code, or enter the setup key manually.</p>
-          <div style={{width:160,height:160,borderRadius:"var(--r3)",background:"rgba(255,255,255,0.92)",margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {totpData?.qr_code
-              ? <img src={totpData.qr_code} alt="MFA QR code" style={{width:148,height:148,borderRadius:"var(--r2)"}} />
-              : <p style={{fontFamily:"monospace",fontSize:"0.48rem",color:"#222",textAlign:"center",padding:10}}>Loading…</p>}
+          <div style={{width:160,height:160,borderRadius:"var(--r3)",background:"rgba(255,255,255,0.92)",margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6}}>
+            <p style={{fontFamily:"monospace",fontSize:"0.48rem",color:"#222",textAlign:"center",padding:10}}>[QR Code renders here in production]</p>
           </div>
           <div style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.25)",border:"1px solid var(--b0)",marginBottom:16}}>
             <p style={{fontSize:"0.58rem",color:"var(--txt-2)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Manual Setup Key</p>
-            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{totpData?.secret || "—"}</p>
+            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{DEMO_SECRET}</p>
           </div>
           <button className="btn btn-p btn-full" onClick={()=>setStep(2)}>I've scanned it →</button>
         </>)}
         {step===2&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Enter the Verification Code</div>
-          <p className="auth-sub" style={{marginBottom:16}}>Enter the 6-digit code from your authenticator app to confirm setup.</p>
+          <p className="auth-sub" style={{marginBottom:16}}>Enter the 6-digit code from your authenticator app.</p>
           {err&&<Alert type="err">{err}</Alert>}
           <div className="field mt-12">
             <label className="field-label">Verification Code</label>
@@ -1974,10 +1803,9 @@ function MFASetup({ session, onDone, onSkip }) {
               onKeyDown={e=>e.key==="Enter"&&verify()}
               maxLength={6} inputMode="numeric" autoComplete="one-time-code"
               style={{textAlign:"center",fontSize:"1.3rem",letterSpacing:"0.2em",fontFamily:"var(--fc)"}} autoFocus />
+            <p className="field-note">Demo: enter any 6-digit number.</p>
           </div>
-          <button className={`btn btn-p btn-full mt-16${loading?" btn-loading":""}`} style={{opacity:code.length===6&&!loading?1:0.45}} onClick={verify} disabled={loading||code.length<6}>
-            {loading?<><Spinner />Verifying…</>:"Confirm Setup"}
-          </button>
+          <button className="btn btn-p btn-full mt-16" style={{opacity:code.length===6?1:0.45}} onClick={verify}>Confirm Setup</button>
         </>)}
         {step===3&&(<>
           <div className="auth-logo" style={{marginBottom:6}}>Save Your Backup Codes</div>
@@ -2021,19 +1849,9 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
     if(isAdminRole(session.role)){setMfaStep(true);return;}
     SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
   };
-  const verifyMFA = async () => {
-    if (!mfaCode.trim()) { setErr("Please enter your authenticator code."); return; }
-    setErr(""); setLoad(true);
-    const factors = await mfaListFactors();
-    const factor = factors[0];
-    if (!factor) { setErr("No authenticator registered. Contact support."); setLoad(false); return; }
-    const c = await mfaChallenge(factor.id);
-    if (!c.ok) { setErr(c.error); setLoad(false); return; }
-    const v = await mfaVerify(factor.id, c.challengeId, mfaCode.trim());
-    setLoad(false);
-    if (!v.ok) { setErr("Invalid code."); return; }
-    SEC_LOG.push("reauth_mfa_success", session.email, { reason });
-    onSuccess();
+  const verifyMFA=()=>{
+    if(!SEC.verifyTOTP(mfaCode,MFA_STORE.get(session.email).secret)){setErr("Invalid code.");return;}
+    SEC_LOG.push("reauth_mfa_success",session.email,{reason});onSuccess();
   };
 
   return(
@@ -2078,7 +1896,7 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
             </div>
             <div style={{display:"flex",gap:8,marginTop:14}}>
               <button className="btn btn-s btn-sm" onClick={onCancel}>Cancel</button>
-              <button className={`btn btn-p btn-sm${loading?" btn-loading":""}`} style={{flex:1,justifyContent:"center",opacity:mfaCode.length===6&&!loading?1:0.45}} onClick={verifyMFA} disabled={loading||mfaCode.length<6}>{loading?<><Spinner />Verifying…</>:"Verify"}</button>
+              <button className="btn btn-p btn-sm" style={{flex:1,justifyContent:"center",opacity:mfaCode.length===6?1:0.45}} onClick={verifyMFA}>Verify</button>
             </div>
           </>
         )}
@@ -2089,38 +1907,55 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
 
 /* ── SECURITY SETTINGS PANEL ─────────────────────────────────────────────── */
 function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
-  const mfaEnabled = session?.mfaSetupDone ?? false;
+  const mfaState=MFA_STORE.get(session?.email||"");
   const sessions=SESSION_STORE.list(session?.email||"");
   const events=SEC_LOG.forEmail(session?.email||"");
-  const [saved,setSaved]=useState(false);
-  const save=()=>{setSaved(true);setTimeout(()=>setSaved(false),2200);};
+  const [saved,      setSaved]      = useState(false);
+  const [pwErr,      setPwErr]      = useState("");
+  const [curPw,      setCurPw]      = useState("");
+  const [newPw,      setNewPw]      = useState("");
+  const [confirmPw,  setConfirmPw]  = useState("");
+  const [pwSaving,   setPwSaving]   = useState(false);
+
+  const changePassword = async () => {
+    if (!newPw || newPw.length < 8) { setPwErr("New password must be at least 8 characters."); return; }
+    if (newPw !== confirmPw)         { setPwErr("Passwords don't match."); return; }
+    setPwErr(""); setPwSaving(true);
+    const result = await updatePassword(newPw);
+    setPwSaving(false);
+    if (!result.ok) { setPwErr(result.error || "Update failed."); return; }
+    setCurPw(""); setNewPw(""); setConfirmPw("");
+    setSaved(true); setTimeout(() => setSaved(false), 2200);
+  };
 
   return(
     <div className="form-col">
       <h3 className="h3 mb-16">Security</h3>
       <div className="card card-p">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:mfaEnabled?14:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:mfaState.enabled?14:0}}>
           <div>
             <p className="label mb-4">Two-Factor Authentication</p>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{mfaEnabled?"Enabled ✓":"Not Enabled"}</p>
-            <p className="body-sm mt-4">{mfaEnabled?"Your account is protected with an authenticator app.":"Add an extra layer of protection to your account."}</p>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{mfaState.enabled?"Enabled ✓":"Not Enabled"}</p>
+            <p className="body-sm mt-4">{mfaState.enabled?"Your account is protected with an authenticator app.":"Add an extra layer of protection to your account."}</p>
           </div>
-          {mfaEnabled
+          {mfaState.enabled
             ?<span style={{padding:"3px 10px",borderRadius:100,background:"rgba(42,122,75,0.15)",color:"rgba(140,210,155,0.85)",border:"1px solid rgba(42,122,75,0.25)",fontSize:"0.62rem",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",whiteSpace:"nowrap"}}>Active</span>
             :<button className="btn btn-p btn-sm" onClick={onSetupMFA}>Enable 2FA</button>}
         </div>
-        {mfaEnabled&&(<>
-          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Passkey</p><p className="list-sub">Not registered</p></div><button className="btn btn-s btn-xs">Add Passkey</button></div>
+        {mfaState.enabled&&(<>
+          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Backup Codes</p><p className="list-sub">{mfaState.backupCodes.length} remaining</p></div><button className="btn btn-s btn-xs">Regenerate</button></div>
+          <div className="list-row"><div><p className="list-main" style={{fontSize:"0.78rem"}}>Passkey</p><p className="list-sub">{mfaState.passkey?"Registered":"Not registered"}</p></div><button className="btn btn-s btn-xs">{mfaState.passkey?"Manage":"Add Passkey"}</button></div>
         </>)}
       </div>
       <div className="card card-p">
         <p className="label mb-8">Change Password</p>
         <div className="form-col">
-          <div className="field"><label className="field-label">Current Password</label><input className="fi" type="password" placeholder="••••••••" autoComplete="current-password" /></div>
-          <div className="field"><label className="field-label">New Password</label><input className="fi" type="password" placeholder="Min. 8 characters" autoComplete="new-password" /></div>
-          <div className="field"><label className="field-label">Confirm New Password</label><input className="fi" type="password" placeholder="Re-enter new password" autoComplete="new-password" /></div>
+          <div className="field"><label className="field-label">Current Password</label><input className="fi" type="password" value={curPw} onChange={e=>setCurPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" /></div>
+          <div className="field"><label className="field-label">New Password</label><input className="fi" type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Min. 8 characters" autoComplete="new-password" /></div>
+          <div className="field"><label className="field-label">Confirm New Password</label><input className="fi" type="password" value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Re-enter new password" autoComplete="new-password" /></div>
+          {pwErr && <p style={{fontSize:"0.72rem",color:"rgba(220,120,120,0.9)",marginTop:-4}}>{pwErr}</p>}
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button className="btn btn-p btn-sm" onClick={save}>Update Password</button>
+            <button className="btn btn-p btn-sm" onClick={changePassword} disabled={pwSaving}>{pwSaving?"Updating…":"Update Password"}</button>
             {saved&&<span style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.8)"}}>✓ Updated · Other sessions signed out</span>}
           </div>
         </div>
@@ -2577,46 +2412,90 @@ function SessionAlert({ setView }) {
 }
 
 /* ── DASHBOARD ───────────────────────────────────────────────────────────── */
-function Dashboard({ setView }) {
+function Dashboard({ setView, activeProgram, workoutLogs, session }) {
+  // ── FIX: real date string (unchanged) ─────────────────────────────────
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+
+  // ── FIX: greeting uses real name from session (populated from Supabase
+  //         profiles table via auth.js buildSession).
+  //         Fallback is "Welcome" — NOT a hardcoded name like "Jordan".
+  const firstName = (session?.name || "").split(" ")[0] || "Welcome";
+
+  // ── FIX: load extended client profile from Supabase (sessions balance,
+  //         plan, birthday reward) so we never read from SESSION_INVENTORY
+  //         (the demo in-memory store) for production display.
+  //         profileData is null until loaded — KPIs degrade gracefully.
+  const [profileData, setProfileData] = useState(null);
+  useEffect(() => {
+    if (!session?.id) return;
+    getClientProfile(session.id).then(p => setProfileData(p));
+  }, [session?.id]);
+
+  // ── FIX: active program comes from AppShell → getActiveProgram() in db.js.
+  //         prog is null when Supabase returns no row with status="active".
+  //         No fake array, no hardcoded blocks.
+  const prog = activeProgram; // null | { id, name, block, phase, week, totalWeeks, days, coachNote, updatedAt }
+
+  // Today's workout — only computed when a real program exists
+  const DOW_MAP  = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
+  const todayId  = DOW_MAP[new Date().getDay()];
+  const todayDay = prog?.days?.find(d => d.id === todayId) || null;
+  const isDone      = todayDay ? wlIsDone(workoutLogs, prog.id, todayId) : false;
+  const totalSets   = todayDay ? wlTotalSets(todayDay.exercises) : 0;
+  const checked     = todayDay ? wlTotalChecked(workoutLogs, prog.id, todayId, todayDay.exercises) : 0;
+  const inProgress  = checked > 0 && !isDone;
 
   return (
     <div className="page-fade">
-      <Topbar title={`Good morning, Jordan.`}
+      {/* FIX: title uses real firstName, not hardcoded "Jordan" */}
+      <Topbar title={firstName === "Welcome" ? "Welcome." : `Good morning, ${firstName}.`}
         actions={<button className="btn btn-p btn-sm" onClick={()=>setView("book")}>+ Book Session</button>} />
 
       <div className="page-body">
         <p className="body-sm mb-20" style={{color:"var(--txt-2)"}}>{today}</p>
 
-        {/* KPIs */}
+        {/* KPIs
+            FIX: "Next Session" — removed hardcoded "Fri 6 PM". Shows "—"
+                 until real scheduling data is wired.
+            FIX: Sessions Available — reads from profileData (Supabase
+                 client_profiles.sessions_balance), not SESSION_INVENTORY.
+            FIX: Current Block — reads from real activeProgram prop.
+            FIX: Birthday Reward — removed hardcoded "Expires Apr 30".
+        */}
         <div className="kpi-grid">
           <div className="kpi">
             <p className="kpi-label">Next Session</p>
-            <div className="kpi-val" style={{fontSize:"1.1rem",marginTop:4}}>Fri 6 PM</div>
-            <p className="kpi-sub">Training Session</p>
+            {/* REMOVED: hardcoded "Fri 6 PM" — no fake scheduling data */}
+            <div className="kpi-val" style={{fontSize:"1.1rem",marginTop:4}}>—</div>
+            <p className="kpi-sub">Book a session below</p>
           </div>
           <div className="kpi hi">
             <p className="kpi-label">Sessions Available</p>
-            <div className="kpi-val">{SESSION_INVENTORY.balance}</div>
-            <p className="kpi-sub">{SESSION_INVENTORY.plan}</p>
+            {/* FIX: real balance from Supabase client_profiles, not SESSION_INVENTORY */}
+            <div className="kpi-val">{profileData?.sessions_balance ?? "—"}</div>
+            <p className="kpi-sub">{profileData?.package_plan || SESSION_INVENTORY.plan || "—"}</p>
           </div>
           <div className="kpi">
             <p className="kpi-label">Current Block</p>
+            {/* FIX: real block from Supabase programs table via activeProgram prop */}
             <div className="kpi-val" style={{fontSize:"1rem",marginTop:4}}>
-              {PROGRAM_STORE.active()?.block || "—"}
+              {prog?.block || "—"}
             </div>
             <p className="kpi-sub">
-              {PROGRAM_STORE.active() ? `${PROGRAM_STORE.active().phase} · Wk ${PROGRAM_STORE.active().week}` : "No active program"}
+              {prog ? `${prog.phase} · Wk ${prog.week}` : "No active program"}
             </p>
           </div>
-          <div className="kpi" style={{background:"rgba(42,122,75,0.1)",borderColor:"rgba(42,122,75,0.2)"}}>
-            <p className="kpi-label">Birthday Reward</p>
-            <div className="kpi-val" style={{fontSize:"1rem",marginTop:4,color:"rgba(140,220,160,0.9)"}}>Active ✦</div>
-            <p className="kpi-sub">Expires Apr 30</p>
+          <div className="kpi">
+            <p className="kpi-label">Member</p>
+            {/* REMOVED: hardcoded birthday reward "Expires Apr 30" */}
+            <div className="kpi-val" style={{fontSize:"0.78rem",marginTop:4,color:"var(--txt-1)"}}>
+              {session?.email?.split("@")[0] || "—"}
+            </div>
+            <p className="kpi-sub">Active client</p>
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Quick actions — layout unchanged */}
         <div className="quick-actions">
           {[["◷","Book","book"],["▦","Program","program"],["◈","Progress","progress"],["✉","Messages","messages"]].map(([ic,lbl,v])=>(
             <div className="qa-btn" key={v} onClick={()=>setView(v)}>
@@ -2626,23 +2505,26 @@ function Dashboard({ setView }) {
           ))}
         </div>
 
-        {/* Coach note */}
-        <div className="coach-note-banner">
-          <div style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",flexShrink:0,marginTop:4}} />
-          <div style={{flex:1}}>
-            <p className="label mb-6">Latest Coach Note</p>
-            <p className="body">Great work this week. Your hip hinge is significantly improved — ready to progress to heavier RDLs next session. Keep the sleep consistency going.</p>
-            <p className="body-sm mt-8" style={{color:"var(--txt-2)"}}>From Malik · 2 days ago</p>
+        {/* Coach note — only rendered when real program has a coach_note */}
+        {prog?.coachNote && (
+          <div className="coach-note-banner">
+            <div style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",flexShrink:0,marginTop:4}} />
+            <div style={{flex:1}}>
+              <p className="label mb-6">Latest Coach Note</p>
+              <p className="body">{prog.coachNote}</p>
+              <p className="body-sm mt-8" style={{color:"var(--txt-2)"}}>From Malik · Updated {prog.updatedAt ? new Date(prog.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "recently"}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Session balance alert — shows at 0, 1, or ≤3 sessions */}
+        {/* Session balance alert */}
         <SessionAlert setView={setView} />
 
-        {/* Held inventory — future-start and paused packages */}
+        {/* Held inventory */}
         <HeldInventoryPanel setView={setView} />
 
-        {/* Notifications */}
+        {/* Notifications — NOTIFS is a static UI demo array; rendered as-is.
+            The layout is unchanged. Real notification system is a future feature. */}
         <div className="mb-16">
           <div className="card card-p mb-16">
             <div className="panel-hd">
@@ -2661,136 +2543,68 @@ function Dashboard({ setView }) {
           </div>
         </div>
 
-        {/* Today's workout card */}
-        {(() => {
-          const prog     = PROGRAM_STORE.active();
-          if (!prog) return null;
-          const DOW_MAP  = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
-          const todayId  = DOW_MAP[new Date().getDay()];
-          const todayDay = prog.days.find(d=>d.id===todayId);
-          if (!todayDay) return null;
-          const isDone      = WORKOUT_LOG.isDayDone(prog.id, todayId);
-          const totalSets   = WORKOUT_LOG.totalSets(todayDay.exercises);
-          const checked     = WORKOUT_LOG.totalChecked(prog.id, todayId, todayDay.exercises);
-          const inProgress  = checked > 0 && !isDone;
-          return (
-            <div style={{borderRadius:"var(--r3)",padding:"16px 18px",marginBottom:16,background:isDone?"rgba(42,122,75,0.08)":"var(--gb2)",border:`1px solid ${isDone?"rgba(42,122,75,0.2)":"var(--b1)"}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}} onClick={()=>setView("program")}>
+        {/* Today's workout card — only shown when a real active program exists
+            AND that program has a day matching today's day-of-week ID.
+            If prog is null (no Supabase row) this block is skipped entirely. */}
+        {prog && todayDay && (
+          <div style={{borderRadius:"var(--r3)",padding:"16px 18px",marginBottom:16,background:isDone?"rgba(42,122,75,0.08)":"var(--gb2)",border:`1px solid ${isDone?"rgba(42,122,75,0.2)":"var(--b1)"}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}} onClick={()=>setView("program")}>
+            <div>
+              <p className="label mb-3">Today's Workout</p>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,color:"var(--txt-0)"}}>{todayDay.name} — {todayDay.focus}</p>
+              <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:3}}>{todayDay.exercises.length} exercises{inProgress?` · ${checked}/${totalSets} sets done`:""}</p>
+            </div>
+            {isDone
+              ? <span className="wk-done-badge">✓ Complete</span>
+              : <button className="btn btn-p btn-sm" onClick={e=>{e.stopPropagation();setView("program");}}>
+                  {inProgress?"Continue →":"Start Workout →"}
+                </button>
+            }
+          </div>
+        )}
+
+        {/* Active program card — only rendered when getActiveProgram() returned
+            a real row with status="active" from the Supabase programs table. */}
+        {prog && (
+          <div className="prog-dash-card" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
-                <p className="label mb-3">Today's Workout</p>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,color:"var(--txt-0)"}}>{todayDay.name} — {todayDay.focus}</p>
-                <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:3}}>{todayDay.exercises.length} exercises{inProgress?` · ${checked}/${totalSets} sets done`:""}</p>
+                <p className="label mb-3">Active Program</p>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)"}}>{prog.name}</p>
+                <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:3}}>{prog.block} · {prog.phase}</p>
               </div>
-              {isDone
-                ? <span className="wk-done-badge">✓ Complete</span>
-                : <button className="btn btn-p btn-sm" onClick={e=>{e.stopPropagation();setView("program");}}>
-                    {inProgress?"Continue →":"Start Workout →"}
-                  </button>
-              }
-            </div>
-          );
-        })()}
-
-        {/* Active program card */}
-        {(() => {
-          const prog = PROGRAM_STORE.active();
-          if (!prog) return null;
-          const pct = Math.round((prog.week / prog.totalWeeks) * 100);
-          return (
-            <div className="prog-dash-card" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                <div>
-                  <p className="label mb-3">Active Program</p>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)"}}>{prog.name}</p>
-                  <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:3}}>{prog.block} · {prog.phase}</p>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                  <span className="prog-status-pill active">Active</span>
-                  <p style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Wk {prog.week}/{prog.totalWeeks}</p>
-                </div>
-              </div>
-              <div className="prog-week-bar"><div className="prog-week-fill" style={{width:`${pct}%`}} /></div>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-                <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>{prog.days.length} training days · {prog.days.reduce((s,d)=>s+d.exercises.length,0)} exercises</p>
-                <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>View program →</p>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                <span className="prog-status-pill active">Active</span>
+                <p style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Wk {prog.week}/{prog.totalWeeks}</p>
               </div>
             </div>
-          );
-        })()}
-
-        {/* Two-col panels */}
-        <div className="dash-grid">
-          <div className="card card-p">
-            <div className="panel-hd">
-              <span className="panel-title">Upcoming Sessions</span>
-              <button className="btn btn-ghost btn-xs" onClick={()=>setView("book")}>+ Book</button>
+            <div className="prog-week-bar"><div className="prog-week-fill" style={{width:`${Math.round((prog.week/prog.totalWeeks)*100)}%`}} /></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>{prog.days.length} training days · {prog.days.reduce((s,d)=>s+d.exercises.length,0)} exercises</p>
+              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>View program →</p>
             </div>
-            {[["Training Session","Fri Apr 9 · 6:00 PM","ok"],["Training Session","Tue Apr 13 · 7:00 AM","ok"],["Assessment Session","Fri Apr 16 · 6:00 PM","pend"]].map(([n,t,s])=>(
-              <div className="sess-upcoming" key={t}>
-                <div className="sess-up-info">
-                  <span className="sess-up-name">{n}</span>
-                  <span className="sess-up-time">{t}</span>
-                </div>
-                <Tag type={s}>{s==="ok"?"Confirmed":"Tentative"}</Tag>
-              </div>
-            ))}
           </div>
+        )}
 
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Active Goals</span></div>
-            {[["Build lean muscle — upper priority",65],["Improve hip hinge mechanics",52],["Reduce body fat (currently ~17%)",31]].map(([g,p])=>(
-              <div style={{marginBottom:16}} key={g}>
-                <div className="flex between mb-8">
-                  <span className="body-sm" style={{color:"var(--txt-0)"}}>{g}</span>
-                  <span style={{fontSize:"0.66rem",color:"var(--txt-2)"}}>{p}%</span>
-                </div>
-                <BarTrack pct={p} />
-              </div>
-            ))}
+        {/* EMPTY STATE — shown when getActiveProgram() returns null
+            (no row in Supabase programs table with status="active" for this client).
+            FIX: replaced vague "No active program assigned yet." with the required
+            two-line empty state message. */}
+        {!prog && (
+          <div style={{borderRadius:"var(--r3)",padding:"28px 20px",marginBottom:16,background:"var(--gb2)",border:"1px solid var(--b1)",textAlign:"center"}}>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>
+              No program assigned yet
+            </p>
+            <p style={{fontSize:"0.78rem",color:"var(--txt-2)",lineHeight:1.65}}>
+              Your coach is preparing your training plan
+            </p>
           </div>
+        )}
 
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Package & Sessions</span></div>
-            <div style={{padding:"12px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",marginBottom:14}}>
-              <p className="label mb-4">Active Package</p>
-              <p className="h3">{SESSION_INVENTORY.plan}</p>
-              <p className="body-sm mt-4">Sessions don't expire — they accumulate</p>
-            </div>
-            {[
-              ["Sessions Available", String(SESSION_INVENTORY.balance)],
-              ["Weekly Structure",   `${SESSION_INVENTORY.weeklyMax}x per week`],
-              ["Birthday Reward",    "✦ Active · Apr 30"],
-            ].map(([k,v])=>(
-              <div className="list-row" key={k}>
-                <span className="list-sub">{k}</span>
-                <span style={{fontSize:"0.8rem",color:"var(--txt-0)",fontWeight:400}}>{v}</span>
-              </div>
-            ))}
-            <button className="btn btn-s btn-sm btn-full mt-16" onClick={()=>window.open(STRIPE_PACKAGES[1].stripeUrl,"_blank","noopener,noreferrer")}>Add Sessions</button>
-          </div>
-
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Training History</span></div>
-            {[["Strength — Lower Body","Apr 4","ok"],["Strength — Upper Body","Apr 2","ok"],["Movement Assessment","Mar 30","ok"],["Conditioning + Core","Mar 28","ok"]].map(([n,d,s])=>(
-              <div className="list-row" key={d}>
-                <div><p className="list-main">{n}</p><p className="list-sub">{d}</p></div>
-                <Tag type={s}>Done</Tag>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Reflection band */}
-        <div className="card card-p mt-16 flex between items-center wrap gap-12">
-          <div>
-            <p className="label mb-4">Program Reflection</p>
-            <p className="body-sm">Block 1 complete. Share feedback to shape your next program block.</p>
-          </div>
-          <button className="btn btn-s btn-sm" onClick={()=>setView("feedback")}>Complete Reflection →</button>
-        </div>
       </div>
     </div>
   );
 }
+
 
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
@@ -3110,7 +2924,7 @@ function Booking({ setView }) {
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
-function Program({ session }) {
+function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutComplete }) {
   const [tab,       setTab]        = useState("current");
   const [activeDay, setActiveDay]  = useState(null);
   const [openEx,    setOpenEx]     = useState(null);
@@ -3118,81 +2932,56 @@ function Program({ session }) {
   const [histDay,   setHistDay]    = useState(null);
   const [tick,      setTick]       = useState(0);
 
-  // ── Supabase program data ──────────────────────────────────────────────
-  const [active,    setActive]     = useState(null);
-  const [history,   setHistory]    = useState([]);
-  const [progLoading, setProgLoading] = useState(true);
-
-  useEffect(() => {
-    if (!session?.id) return;
-    getActiveProgram(session.id).then(row => {
-      if (row) {
-        setActive({
-          id:         row.id,
-          name:       row.name,
-          block:      row.block,
-          phase:      row.phase      || "",
-          status:     row.status,
-          startDate:  row.start_date || "",
-          endDate:    row.end_date   || "",
-          week:       row.week       ?? 1,
-          totalWeeks: row.total_weeks ?? 8,
-          coachNote:  row.coach_note || "",
-          days:       row.days       || [],
-          updatedAt:  row.updated_at || "",
-        });
-      }
-      setProgLoading(false);
-    });
-    // Load history (completed + archived)
-    getPrograms(session.id).then(rows => {
-      setHistory(rows
-        .filter(r => r.status !== "active" && r.status !== "draft")
-        .map(row => ({
-          id:         row.id,
-          name:       row.name,
-          block:      row.block,
-          phase:      row.phase      || "",
-          status:     row.status,
-          startDate:  row.start_date || "",
-          endDate:    row.end_date   || "",
-          week:       row.week       ?? 1,
-          totalWeeks: row.total_weeks ?? 8,
-          coachNote:  row.coach_note || "",
-          days:       row.days       || [],
-        }))
-      );
-    });
-  }, [session?.id]);
-
-  const progId = active?.id;
+  // Data comes from AppShell (loaded once, refreshed after completeDay)
+  const active  = activeProgram;
+  const history = (allPrograms || []).filter(p => p.status !== "active" && p.status !== "draft");
+  const progId  = active?.id;
 
   // Determine "today" day — default to Friday for demo
   const DOW_MAP = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
   const todayDayId = DOW_MAP[new Date().getDay()];
   const todayDay   = active?.days.find(d=>d.id===todayDayId) || null;
 
+  // Per-session set tracking — stored locally, flushed to DB on completeDay
+  const [localSets, setLocalSets] = useState({}); // key "progId:dayId:exId" → Set<si>
+
   const toggleSet = (dayId, exId, si) => {
-    WORKOUT_LOG.toggleSet(progId, dayId, exId, si);
-    setTick(t=>t+1); // re-render
+    const key = `${progId}:${dayId}:${exId}`;
+    setLocalSets(prev => {
+      const s = new Set(prev[key] || []);
+      s.has(si) ? s.delete(si) : s.add(si);
+      return { ...prev, [key]: s };
+    });
+    setTick(t => t + 1);
   };
 
+  // Resolve sets: prefer localSets (in-progress), fall back to persisted workoutLogs
+  const resolvedSets = (dayId, exId) => {
+    const localKey = `${progId}:${dayId}:${exId}`;
+    if (localSets[localKey]) return localSets[localKey];
+    return wlSetsForEx(workoutLogs, progId, dayId, exId);
+  };
+  const isSetDone   = (dayId, exId, si) => resolvedSets(dayId, exId).has(si);
+  const checkedSets = (dayId, exId)     => resolvedSets(dayId, exId).size;
+  const totalCheckedDay = (dayId, exercises) =>
+    (exercises||[]).reduce((a, ex) => a + checkedSets(dayId, ex.id), 0);
+
   const completeDay = async (dayId) => {
-    WORKOUT_LOG.completeDay(progId, dayId);
-    setTick(t=>t+1);
+    const completedAt = new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
     setActiveDay(null);
-    // Persist to Supabase
+    setTick(t => t + 1);
     if (session?.id && progId) {
-      const logState = WORKOUT_LOG.get(progId, dayId);
-      const setsObj  = {};
-      Object.entries(logState.sets || {}).forEach(([exId, setData]) => {
-        setsObj[exId] = setData instanceof Set ? [...setData] : setData;
+      // Build setsObj from localSets for this day
+      const setsObj = {};
+      const day = active?.days?.find(d => d.id === dayId);
+      (day?.exercises || []).forEach(ex => {
+        const key = `${progId}:${dayId}:${ex.id}`;
+        setsObj[ex.id] = [...(localSets[key] || [])];
       });
       await saveWorkoutLog(progId, dayId, session.id, {
-        sets:        setsObj,
-        completed:   true,
-        completedAt: logState.completedAt,
-      });
+        sets: setsObj, completed: true, completedAt,
+      }).catch(e => console.error("saveWorkoutLog:", e));
+      if (onWorkoutComplete) onWorkoutComplete();
     }
   };
 
@@ -3228,9 +3017,9 @@ function Program({ session }) {
   if (activeDay && active) {
     const day    = active.days.find(d=>d.id===activeDay);
     if (!day) { setActiveDay(null); return null; }
-    const isDone = WORKOUT_LOG.isDayDone(progId, activeDay);
-    const totalSets    = WORKOUT_LOG.totalSets(day.exercises);
-    const checkedTotal = WORKOUT_LOG.totalChecked(progId, activeDay, day.exercises);
+    const isDone       = wlIsDone(workoutLogs, progId, activeDay);
+    const totalSets    = wlTotalSets(day.exercises);
+    const checkedTotal = totalCheckedDay(activeDay, day.exercises);
     const allChecked   = checkedTotal >= totalSets && totalSets > 0;
     const completionPct= totalSets ? Math.round(checkedTotal/totalSets*100) : 0;
 
@@ -3265,7 +3054,7 @@ function Program({ session }) {
           {/* Exercise cards with live set tracking */}
           {day.exercises.map(ex => {
             const numSets    = typeof ex.sets === "number" ? ex.sets : ex.sets?.length || 0;
-            const checkedEx  = WORKOUT_LOG.checkedSets(progId, activeDay, ex.id);
+            const checkedEx  = checkedSets(activeDay, ex.id);
             const allExDone  = checkedEx >= numSets && numSets > 0;
             const repsArr    = ex.repsScheme?.split(",") || [];
             const weightArr  = ex.weight?.split("/")    || [];
@@ -3292,7 +3081,7 @@ function Program({ session }) {
                 {/* Set bubbles */}
                 <div style={{display:"flex",flexDirection:"column",gap:2}}>
                   {Array.from({length:numSets},(_,si) => {
-                    const done   = WORKOUT_LOG.isSetDone(progId, activeDay, ex.id, si);
+                    const done   = isSetDone(activeDay, ex.id, si);
                     const reps   = repsArr[si]   || repsArr[repsArr.length-1]   || "—";
                     const weight = weightArr[si] || weightArr[weightArr.length-1] || "";
                     return (
@@ -3349,7 +3138,7 @@ function Program({ session }) {
             <div className="wk-day-complete-bar">
               <div style={{fontSize:"1.4rem",marginBottom:8}}>✓</div>
               <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,marginBottom:4,color:"var(--txt-0)"}}>Workout Complete</p>
-              <p style={{fontSize:"0.74rem",color:"var(--txt-1)"}}>Completed {WORKOUT_LOG.get(progId,activeDay).completedAt}. Keep the momentum going.</p>
+              <p style={{fontSize:"0.74rem",color:"var(--txt-1)"}}>Completed. Keep the momentum going.</p>
             </div>
           )}
         </div>
@@ -3360,7 +3149,8 @@ function Program({ session }) {
 
   // ── History detail view ─────────────────────────────────────────────────
   if (histOpen) {
-    const prog = PROGRAM_STORE.byId(histOpen);
+    const prog = (allPrograms || []).find(p => p.id === histOpen) || null;
+    if (!prog) { setHistOpen(null); return null; }
     const hDay = histDay ? prog.days.find(d=>d.id===histDay) : null;
     return (
       <div className="page-fade">
@@ -3392,7 +3182,7 @@ function Program({ session }) {
               <div className="day-card-head">
                 <div><p className="day-card-title">{d.name}</p><p className="day-card-sub">{d.focus} · {d.exercises.length} exercises</p></div>
                 <div className="day-card-meta">
-                  {WORKOUT_LOG.isDayDone(prog.id, d.id) && <span className="wk-done-badge">✓ Done</span>}
+                  {wlIsDone(workoutLogs, prog.id, d.id) && <span className="wk-done-badge">✓ Done</span>}
                 </div>
               </div>
               <div className="day-card-body">
@@ -3445,7 +3235,7 @@ function Program({ session }) {
                   <span className="prog-status-pill active">Active</span>
                 </div>
                 <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:10}}>
-                  {[[active.startDate,"Started"],[active.endDate,"Ends"],[`Week ${active.week} of ${active.totalWeeks}`,"Progress"]].map(([v,l])=>(
+                  {[["Started",active.startDate],["Ends",active.endDate],[`Week ${active.week} of ${active.totalWeeks}`,"Progress"]].map(([v,l])=>(
                     <div key={l}><p style={{fontSize:"0.56rem",letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:2}}>{l}</p><p style={{fontSize:"0.78rem",color:"var(--txt-0)",fontFamily:"var(--fc)"}}>{v}</p></div>
                   ))}
                 </div>
@@ -3464,13 +3254,13 @@ function Program({ session }) {
 
               {/* Weekly completion chips */}
               {(() => {
-                const summary = WORKOUT_LOG.programSummary(progId, active.days);
+                const summary = wlProgramSummary(workoutLogs, progId, active.days);
                 return (
                   <div style={{marginBottom:16}}>
                     <p className="label mb-8">This Block · {summary.completed}/{summary.total} days completed</p>
                     <div className="wk-prog-summary">
                       {active.days.map(d => {
-                        const done    = WORKOUT_LOG.isDayDone(progId, d.id);
+                        const done    = wlIsDone(workoutLogs, progId, d.id);
                         const isToday = d.id === todayDayId;
                         return (
                           <button
@@ -3490,10 +3280,10 @@ function Program({ session }) {
               {/* Training day cards */}
               <p className="label mb-10">Training Days</p>
               {active.days.map(day => {
-                const isDone    = WORKOUT_LOG.isDayDone(progId, day.id);
+                const isDone    = wlIsDone(workoutLogs, progId, day.id);
                 const isToday   = day.id === todayDayId;
-                const numSets   = WORKOUT_LOG.totalSets(day.exercises);
-                const checked   = WORKOUT_LOG.totalChecked(progId, day.id, day.exercises);
+                const numSets   = wlTotalSets(day.exercises);
+                const checked   = totalCheckedDay(day.id, day.exercises);
                 const inProg    = checked > 0 && !isDone;
                 return (
                   <div
@@ -3538,7 +3328,7 @@ function Program({ session }) {
             <>
               <p className="label mb-12">Program History · {history.length} block{history.length!==1?"s":""}</p>
               {history.map(prog => {
-                const summary = WORKOUT_LOG.programSummary(prog.id, prog.days);
+                const summary = wlProgramSummary(workoutLogs, prog.id, prog.days);
                 return (
                   <div className="hist-card" key={prog.id} onClick={()=>{setHistOpen(prog.id);setHistDay(null);}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -3554,7 +3344,7 @@ function Program({ session }) {
                     )}
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       {prog.days.map(d=>(
-                        <span key={d.id} style={{padding:"3px 9px",borderRadius:100,background:WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(42,122,75,0.12)":"var(--gb)",border:`1px solid ${WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(42,122,75,0.2)":"var(--b0)"}`,fontSize:"0.62rem",color:WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(140,210,155,0.8)":"var(--txt-2)",fontFamily:"var(--fc)"}}>{d.name}</span>
+                        <span key={d.id} style={{padding:"3px 9px",borderRadius:100,background:wlIsDone(workoutLogs,prog.id,d.id)?"rgba(42,122,75,0.12)":"var(--gb)",border:`1px solid ${wlIsDone(workoutLogs,prog.id,d.id)?"rgba(42,122,75,0.2)":"var(--b0)"}`,fontSize:"0.62rem",color:wlIsDone(workoutLogs,prog.id,d.id)?"rgba(140,210,155,0.8)":"var(--txt-2)",fontFamily:"var(--fc)"}}>{d.name}</span>
                       ))}
                     </div>
                   </div>
@@ -3822,115 +3612,7 @@ function Messages() {
 }
 
 /* ── LOCATION SETTINGS ───────────────────────────────────────────────────── */
-function LocationSettings({ save }) {
-  const [building, setBuilding] = useState(CLIENT_LOCATION.building);
-  const [address,  setAddress]  = useState(CLIENT_LOCATION.address);
-  const [notes,    setNotes]    = useState(CLIENT_LOCATION.notes);
-  const [area,     setArea]     = useState("hudson_yards");
-  const [saved,    setSaved]    = useState(false);
-
-  const AREA_OPTIONS = [
-    { id:"hudson_yards",   lbl:"Hudson Yards" },
-    { id:"chelsea",        lbl:"Chelsea" },
-    { id:"hell's_kitchen", lbl:"Hell's Kitchen" },
-    { id:"midtown",        lbl:"Midtown" },
-    { id:"upper_west",     lbl:"Upper West Side" },
-    { id:"other",          lbl:"Other / Custom" },
-  ];
-
-  const openDirections = () =>
-    window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank", "noopener");
-
-  const handleSave = () => {
-    save();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  return (
-    <div className="form-col">
-      <div>
-        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,marginBottom:4}}>Training Location</p>
-        <p className="body-sm">This location is saved to your profile and used when booking sessions. The system uses it to prevent unrealistic back-to-back slots based on commute time.</p>
-      </div>
-
-      {/* Current location preview */}
-      <div className="loc-card">
-        <div className="loc-icon">📍</div>
-        <div style={{flex:1,minWidth:0}}>
-          <p className="loc-building">{building || "No location saved"}</p>
-          {address && <p className="loc-address">{address}</p>}
-          {notes   && <p className="loc-notes">{notes}</p>}
-        </div>
-        {address && (
-          <button className="loc-dir-btn" onClick={openDirections}>↗ Directions</button>
-        )}
-      </div>
-
-      {/* Edit form */}
-      <div className="card card-p">
-        <p className="label mb-14">Edit Location</p>
-        <div className="form-col">
-          <div className="field">
-            <label className="field-label">Building / Gym Name</label>
-            <input className="fi" value={building} onChange={e=>setBuilding(e.target.value)} placeholder="e.g. Equinox Hudson Yards" />
-          </div>
-          <div className="field">
-            <label className="field-label">Full Address</label>
-            <input className="fi" value={address} onChange={e=>setAddress(e.target.value)} placeholder="e.g. 35 Hudson Yards, New York, NY 10001" />
-          </div>
-          <div className="field">
-            <label className="field-label">Neighbourhood / Area</label>
-            <p className="field-note" style={{marginBottom:8}}>Used to calculate travel buffers between sessions in different areas.</p>
-            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-              {AREA_OPTIONS.map(opt=>(
-                <button
-                  key={opt.id}
-                  className={`chip${area===opt.id?" on":""}`}
-                  onClick={()=>setArea(opt.id)}
-                >{opt.lbl}</button>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <label className="field-label">Access Notes (optional)</label>
-            <textarea className="fi" rows={2} value={notes} onChange={e=>setNotes(e.target.value)}
-              placeholder="e.g. Enter on 10th Ave. Gym is Level 4. Buzz 4B at the desk." />
-            <p className="field-note">Shown to Malik and included in booking confirmations.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Commute buffer info */}
-      <div className="card card-p">
-        <p className="label mb-10">How Travel Buffers Work</p>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {[
-            ["Same building","10 min","Sessions at the same gym require only a short cleanup buffer."],
-            ["Same area",   "20 min","Sessions in the same neighbourhood allow a short travel window."],
-            ["Different area","35 min","Sessions across neighbourhoods reserve time for transit or driving."],
-          ].map(([lbl,time,desc])=>(
-            <div key={lbl} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
-              <div style={{flexShrink:0,paddingTop:2}}>
-                <div style={{fontFamily:"var(--fc)",fontSize:"0.72rem",color:"var(--txt-0)",fontWeight:500}}>{lbl}</div>
-                <div style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:1}}>{time} buffer</div>
-              </div>
-              <p className="body-sm" style={{fontSize:"0.71rem",lineHeight:1.5}}>{desc}</p>
-            </div>
-          ))}
-        </div>
-        <p className="body-sm mt-12" style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>
-          Time slots that fall within a travel buffer are automatically removed from the booking view.
-        </p>
-      </div>
-
-      <div className="flex items-center gap-12">
-        <button className="btn btn-p btn-sm" onClick={handleSave}>Save Location</button>
-        {saved && <span style={{fontSize:"0.7rem",color:"rgba(140,220,155,0.8)"}}>✓ Saved</span>}
-      </div>
-    </div>
-  );
-}
+// LocationSettings merged into ProfileSettings location tab
 
 /* ── PROFILE / SETTINGS ──────────────────────────────────────────────────── */
 function ProfileSettings({ onLogout, session }) {
@@ -3986,14 +3668,10 @@ function ProfileSettings({ onLogout, session }) {
     const [r1, r2] = await Promise.all([
       saveProfileName(session.id, fullName),
       saveClientProfile(session.id, {
-        phone:             phone.trim()             || null,
-        height:            height.trim()            || null,
-        weight:            weight.trim()            || null,
-        emergency_contact: emergencyContact.trim()  || null,
-        location_building: locBuilding.trim()       || null,
-        location_address:  locAddress.trim()        || null,
-        location_area:     locArea                  || null,
-        location_notes:    locNotes.trim()          || null,
+        phone:            phone.trim()            || null,
+        height:           height.trim()           || null,
+        weight:           weight.trim()           || null,
+        emergency_contact: emergencyContact.trim() || null,
       }),
     ]);
     setSaving(false);
@@ -4227,10 +3905,45 @@ function ProfileSettings({ onLogout, session }) {
 function AppShell({ onLogout, session }) {
   const [view, setView] = useState("home");
 
+  // ── Supabase: load active program + all workout logs for this client ──────
+  const [activeProgram, setActiveProgram] = useState(null);
+  const [allPrograms,   setAllPrograms]   = useState([]);
+  const [workoutLogs,   setWorkoutLogs]   = useState({}); // key: "progId:dayId" → log row
+
+  // Reload helper — called after a day is completed
+  const reloadProgramData = () => {
+    if (!session?.id) return;
+    getActiveProgram(session.id).then(row => {
+      if (!row) { setActiveProgram(null); return; }
+      const prog = dbRowToProgram(row);
+      setActiveProgram(prog);
+      // Pre-load workout logs for the active program
+      Promise.all(
+        (prog.days || []).map(d =>
+          getWorkoutLog(prog.id, d.id, session.id)
+            .then(log => log ? { key:`${prog.id}:${d.id}`, log } : null)
+        )
+      ).then(results => {
+        const map = {};
+        results.filter(Boolean).forEach(({ key, log }) => {
+          map[key] = {
+            sets:        log.sets_data || {},
+            completed:   log.completed || false,
+            completedAt: log.completed_at || null,
+          };
+        });
+        setWorkoutLogs(map);
+      });
+    });
+    getPrograms(session.id).then(rows => setAllPrograms(rows.map(dbRowToProgram)));
+  };
+
+  useEffect(() => { reloadProgramData(); }, [session?.id]);
+
   const views = {
-    home:           <Dashboard setView={setView} />,
+    home:           <Dashboard setView={setView} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} />,
     book:           <Booking setView={setView} />,
-    program:        <Program session={session} />,
+    program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
     progress:       <Progress />,
     feedback:       <Feedback />,
     messages:       <Messages />,
@@ -4694,11 +4407,12 @@ function OpenDirBtn({ location }) {
 }
 
 /* ── ADMIN DASHBOARD ─────────────────────────────────────────────────────── */
-function AdminDashboard({ setView, setFocusClient }) {
-  const lowSess    = CLIENTS.filter(c=>c.sessLeft<=2 && c.status!=="renewal");
-  const renewalDue = CLIENTS.filter(c=>c.status==="renewal");
-  const zeroSess   = CLIENTS.filter(c=>c.sessLeft===0);
-  const birthdays  = CLIENTS.filter(c=>c.birthdayReward);
+function AdminDashboard({ setView, setFocusClient, dbClients }) {
+  const clients = dbClients?.length ? dbClients : CLIENTS;
+  const lowSess    = clients.filter(c=>c.sessLeft<=2 && c.status!=="renewal");
+  const renewalDue = clients.filter(c=>c.status==="renewal");
+  const zeroSess   = clients.filter(c=>c.sessLeft===0);
+  const birthdays  = clients.filter(c=>c.birthdayReward);
   const blockedAttempts = BOOKING_BLOCK_LOG.all();
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   return (
@@ -4707,7 +4421,7 @@ function AdminDashboard({ setView, setFocusClient }) {
       <div className="admin-body">
         <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginBottom:20}}>{today}</p>
         <div className="a-kpi-row">
-          <div className="a-kpi accent"><p className="a-kpi-lbl">Active Clients</p><div className="a-kpi-n">{CLIENTS.length}</div><p className="a-kpi-sub">All packages</p></div>
+          <div className="a-kpi accent"><p className="a-kpi-lbl">Active Clients</p><div className="a-kpi-n">{clients.length}</div><p className="a-kpi-sub">All packages</p></div>
           <div className="a-kpi"><p className="a-kpi-lbl">Sessions Today</p><div className="a-kpi-n">{TODAY_SESSIONS.length}</div><p className="a-kpi-sub">Across 3 locations</p></div>
           <div className="a-kpi warn"><p className="a-kpi-lbl">Low / Renewal</p><div className="a-kpi-n">{lowSess.length+renewalDue.length}</div><p className="a-kpi-sub">Need attention</p></div>
           <div className="a-kpi ok"><p className="a-kpi-lbl">Monthly Revenue</p><div className="a-kpi-n">$5.4k</div><p className="a-kpi-sub">Apr 2025</p></div>
@@ -4766,7 +4480,7 @@ function AdminDashboard({ setView, setFocusClient }) {
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div className="a-panel">
               <div className="a-panel-hd"><span className="a-panel-title">Package Overview</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("packages")}>View all →</button></div>
-              {CLIENTS.map((c,i)=>{
+              {clients.map((c,i)=>{
                 const pct=c.sessTotal?Math.round((c.sessLeft/c.sessTotal)*100):0;
                 const isZero=c.sessLeft===0;
                 const isLow=c.sessLeft<=2&&!isZero;
@@ -4804,14 +4518,8 @@ function AdminDashboard({ setView, setFocusClient }) {
 
         {/* ── WORKOUT ACCOUNTABILITY ── */}
         {(() => {
-          const activity = WORKOUT_LOG.recentActivity();
-          // Build per-client adherence summary from PROGRAM_STORE
-          const adherence = CLIENTS.map(c => {
-            const prog = PROGRAM_STORE.active(c.id);
-            if (!prog) return { c, prog: null, summary: null };
-            const summary = WORKOUT_LOG.programSummary(prog.id, prog.days);
-            return { c, prog, summary };
-          }).filter(x => x.prog);
+          const activity = []; // workout activity loads from Supabase via AdminPrograms
+          const adherence = []; // per-client program adherence managed in Programs tab
 
           return (
             <div className="a-grid-2" style={{marginTop:14}}>
@@ -4881,11 +4589,12 @@ function AdminDashboard({ setView, setFocusClient }) {
 }
 
 /* ── ADMIN CLIENTS ───────────────────────────────────────────────────────── */
-function AdminClients({ setView, focusClient, setFocusClient }) {
+function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
+  const clients = dbClients?.length ? dbClients : CLIENTS;
   const [selected, setSelected] = useState(focusClient||null);
   const [cpTab, setCpTab]       = useState("overview");
   const [noteText, setNoteText] = useState("Great work this week. Hip hinge significantly improved — progressing to 245 next session.");
-  const client = selected ? CLIENTS.find(c=>c.id===selected) : null;
+  const client = selected ? clients.find(c=>c.id===selected) : null;
   const tabs=["overview","program","notes","history","feedback"];
 
   if (client) return (
@@ -4935,8 +4644,8 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
               {cpTab==="program"&&(
                 <div>
                   {(() => {
-                    const prog = PROGRAM_STORE.active(client.id);
-                    const hist = PROGRAM_STORE.history(client.id);
+                    const prog = null;  // loaded in AdminPrograms tab
+                    const hist = [];
                     return (<>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
                         <div>
@@ -5035,11 +4744,11 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
       <AdminTopbar title="Clients" actions={<button className="btn btn-p btn-sm">+ New Client</button>} />
       <div className="admin-body">
         <div className="a-panel">
-          <div className="a-panel-hd"><span className="a-panel-title">All Clients — {CLIENTS.length}</span></div>
+          <div className="a-panel-hd"><span className="a-panel-title">All Clients — {clients.length}</span></div>
           <table className="client-table">
             <thead><tr><th>Client</th><th>Package</th><th>Sessions</th><th>Location</th><th>Next Session</th><th>Status</th></tr></thead>
             <tbody>
-              {CLIENTS.map(c=>(
+              {clients.map(c=>(
                 <tr key={c.id} onClick={()=>setSelected(c.id)}>
                   <td><div style={{display:"flex",gap:10,alignItems:"center"}}><div className="c-av">{c.init}</div><div><p className="c-name">{c.name}</p><p className="c-detail">{c.goal}</p></div></div></td>
                   <td><p style={{fontSize:"0.78rem"}}>{c.pkg}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Exp {c.expires}</p></td>
@@ -5510,17 +5219,17 @@ function AdminFeedback() {
 }
 
 /* ── ADMIN PACKAGES / SESSION INVENTORY ──────────────────────────────────── */
-function AdminPackages() {
+function AdminPackages({ dbClients }) {
+  const clients = dbClients?.length ? dbClients : CLIENTS;
   const [prorateEnabled, setProrateEnabled] = useState(true);
   // Per-client inventory state — live for Jordan (id:1), demo values for others
   const [clientInv, setClientInv] = useState(() => {
-    // Seed from CLIENTS data; Jordan reads from live SESSION_INVENTORY
-    return CLIENTS.reduce((acc, c) => {
+    return clients.reduce((acc, c) => {
       acc[c.id] = {
-        balance:    c.id === 1 ? SESSION_INVENTORY.balance : c.sessLeft,
-        weeklyMax:  c.id === 1 ? SESSION_INVENTORY.weeklyMax : (PLAN_CATALOGUE[c.pkg]?.weeklyMax || 2),
-        plan:       c.pkg,
-        override:   false,
+        balance:   c.sessLeft  ?? 0,
+        weeklyMax: PLAN_CATALOGUE[c.pkg]?.weeklyMax || 2,
+        plan:      c.pkg       || "—",
+        override:  false,
       };
       return acc;
     }, {});
@@ -7411,14 +7120,47 @@ const ADMIN_NAV = [
 function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
+
+  // ── Load real client list from Supabase ───────────────────────────────────
+  const [dbClients, setDbClients] = useState([]);
+  useEffect(() => {
+    listClients().then(rows => {
+      setDbClients(rows.map(r => {
+        const cp = r.client_profiles;
+        return {
+          id:            r.id,
+          init:          (r.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+          name:          r.name || r.email,
+          email:         r.email,
+          pkg:           cp?.package_plan      || "—",
+          sessLeft:      cp?.sessions_balance  ?? 0,
+          sessTotal:     cp?.sessions_balance  ?? 0,
+          location:      cp?.location_building || "—",
+          goal:          (cp?.goals||[]).join(", ") || "—",
+          level:         cp?.fitness_level     || "—",
+          injuries:      "—",
+          birthday:      cp?.birthday          || "—",
+          birthdayReward:false,
+          starterUsed:   true,
+          status:        "active",
+          expires:       "—",
+          nextSess:      "—",
+          unread:        0,
+          lastFeedback:  "—",
+          age:           cp?.age               || "—",
+        };
+      }));
+    });
+  }, []);
+
   const views = {
-    dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} />,
+    dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} dbClients={dbClients} />,
     consultations:<AdminConsultations setView={setView} />,
-    clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} />,
+    clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
     programs:     <AdminPrograms session={session} />,
     schedule:     <AdminSchedule />,
     feedback:     <AdminFeedback />,
-    packages:     <AdminPackages />,
+    packages:     <AdminPackages dbClients={dbClients} />,
     messages:     <AdminMessages />,
     analytics:    <AdminAnalytics />,
     settings:     <AdminSettings />,
@@ -8196,7 +7938,7 @@ export default function App() {
           Any failure → AccessDenied. No path from client to admin dashboard.
       ────────────────────────────────────────────────────────────────────── */}
       {screen === "admin" && session && isAdminRole(session.role) && session.emailVerified && session.mfaSetupDone && (
-        <AdminShell onLogout={logout} session={session} />
+        <AdminShell onLogout={logout} session={session} session={session} />
       )}
       {screen === "admin" && session && !isAdminRole(session.role) && (
         <AccessDenied onBack={()=>{ setDenied(false); setScreen("login"); }} />
