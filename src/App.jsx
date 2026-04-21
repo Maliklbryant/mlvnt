@@ -9,7 +9,6 @@ import {
   getSession,
   onAuthStateChange,
   markMfaSetupDone,
-  markMfaSetupDone
 } from "./lib/auth.js";
 import {
   getClientProfile,
