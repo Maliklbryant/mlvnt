@@ -984,7 +984,7 @@ export async function saveOnboarding(userId, email, data) {
     updated_at:       new Date().toISOString(),
   };
 
-  const { error } = await supabase
+  const { error } = await supabase 
     .from("client_profiles")
     .upsert(profilePayload, { onConflict: "id" });
 
