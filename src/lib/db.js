@@ -508,7 +508,7 @@ export async function hasCompletedOnboarding(userId) {
   return data.onboarding_done === true;
 }
 
- * No component should import from supabase.js directly.
+ /* No component should import from supabase.js directly.
  */
 
 import { supabase } from "./supabase.js";
