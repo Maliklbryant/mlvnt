@@ -1,15 +1,9 @@
 /**
  * MLVNT Data Layer — src/lib/db.js
- * ─────────────────────────────────
- * All Supabase reads/writes for profiles and programs.
- * Auth operations stay in auth.js./**
- * MLVNT Data Layer — src/lib/db.js
- * ─────────────────────────────────
  * All Supabase reads/writes for profiles and programs.
  * Auth operations stay in auth.js.
  * No component should import from supabase.js directly.
  */
-/**
 
 /**
  * Update the display name stored in auth.profiles
@@ -507,44 +501,5 @@ export async function saveClientProfile(userId, fields) {
   return { ok: true };
 }
 
-
-/**
- * Admin: get one client's full profile
- */
-export async function getClientById(clientId) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(`
-      id, email, name, role, created_at,
-      client_profiles (*)
-    `)
-    .eq("id", clientId)
-    .single();
-
-  if (error) {
-    console.error("getClientById:", error.message);
-    return null;
-  }
-  return data;
-}
-
-
-/**
- * Fetch the single active program for a client.
- */
-export async function getActiveProgram(clientId) {
-  const { data, error } = await supabase
-    .from("programs")
-    .select("*")
-    .eq("client_id", clientId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (error) {
-    console.error("getActiveProgram:", error.message);
-    return null;
-  }
-  return data;
-}
 
 
