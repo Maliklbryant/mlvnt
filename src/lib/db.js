@@ -9,30 +9,6 @@
  * Auth operations stay in auth.js.
  * No component should import from supabase.js directly.
  */
-
-import { supabase } from "./supabase";
-
-// ─────────────────────────────────────────────────────────────
-// PROFILE
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Fetch a client's extended profile (client_profiles table).
- * Returns null if not found (new user who hasn't filled onboarding yet).
- */
-export async function getClientProfile(userId) {
-  const { data, error } = await supabase
-    .from("client_profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    console.error("getClientProfile:", error.message);
-  }
-  return data || null;
-}
-
 /**
  * Upsert a client's extended profile fields.
  * Only the fields passed in `fields` are updated.
