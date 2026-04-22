@@ -10,7 +10,7 @@
  * No component should import from supabase.js directly.
  */
 
-import { supabase } from "./supabase.js";
+import { supabase } from "./supabase";
 
 // ─────────────────────────────────────────────────────────────
 // PROFILE
@@ -508,11 +508,6 @@ export async function hasCompletedOnboarding(userId) {
   return data.onboarding_done === true;
 }
 
- /* No component should import from supabase.js directly.
- */
-
-import { supabase } from "./supabase.js";
-
 // ─────────────────────────────────────────────────────────────
 // PROFILE
 // ─────────────────────────────────────────────────────────────
@@ -984,7 +979,7 @@ export async function saveOnboarding(userId, email, data) {
     updated_at:       new Date().toISOString(),
   };
 
-  const { error } = await supabase 
+  const { error } = await supabase
     .from("client_profiles")
     .upsert(profilePayload, { onConflict: "id" });
 
