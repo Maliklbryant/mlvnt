@@ -10,27 +10,6 @@
  * No component should import from supabase.js directly.
  */
 /**
- * Upsert a client's extended profile fields.
- * Only the fields passed in `fields` are updated.
- * Always sets updated_at.
- */
-export async function saveClientProfile(userId, fields) {
-  const payload = {
-    id: userId,
-    ...fields,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase
-    .from("client_profiles")
-    .upsert(payload, { onConflict: "id" });
-
-  if (error) {
-    console.log("saveClientProfile:", error.message);
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
-}
 
 /**
  * Update the display name stored in auth.profiles
