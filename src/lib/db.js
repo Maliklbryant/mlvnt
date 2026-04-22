@@ -1,3 +1,5 @@
+import { supabase } from "./supabase.js";
+
 /**
  * MLVNT Data Layer — src/lib/db.js
  * All Supabase reads/writes for profiles and programs.
@@ -5,10 +7,6 @@
  * No component should import from supabase.js directly.
  */
 
-/**
- * Update the display name stored in auth.profiles
- * (used for the name shown in the nav, avatar initials, etc.)
- */
 export async function saveProfileName(userId, name) {
   const trimmed = name.trim();
   const initials = trimmed
