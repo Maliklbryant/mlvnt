@@ -1,11 +1,18 @@
+/**
+ * MLVNT Auth Helpers
+ * ------------------
+ * All Supabase auth operations live here.
+ * App.jsx imports from this file so no Supabase calls are scattered.
+ *
+ * Role system:
+ *   - Roles are stored in public.profiles (role TEXT, is_owner BOOLEAN)
+ *   - mlvnt2026@gmail.com is seeded as role="owner" by the SQL below
+ *   - Every other sign-up defaults to role="client"
+ *   - Role is NEVER accepted from the browser — always read from the DB
+ */
+
 import { supabase } from "./supabase.js";
 
-/**
- * MLVNT Data Layer — src/lib/db.js
- * All Supabase reads/writes for profiles and programs.
- * Auth operations stay in auth.js.
- * No component should import from supabase.js directly.
- */
 
 export async function saveProfileName(userId, name) {
   const trimmed = name.trim();
