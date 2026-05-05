@@ -1,27 +1,60 @@
 /**
- * MLVNT Auth Helpers
- * ------------------
- * All Supabase auth operations live here.
- * App.jsx imports from this file so no Supabase calls are scattered.
- *
- * Role system:
- *   - Roles are stored in public.profiles (role TEXT, is_owner BOOLEAN)
- *   - mlvnt2026@gmail.com is seeded as role="owner" by the SQL below
- *   - Every other sign-up defaults to role="client"
- *   - Role is NEVER accepted from the browser — always read from the DB
+ * MLVNT Data Layer (db.js)
+ * ------------------------
+ * All Supabase database operations live here.
+ * App.jsx imports from this file — no supabase calls scattered elsewhere.
  */
 
 import { supabase } from "./supabase.js";
 
+// ─────────────────────────────────────────────────────────────
+// PROFILE
+// ─────────────────────────────────────────────────────────────
 
+/**
+ * Fetch a client's extended profile (client_profiles table).
+ * Returns null if not found.
+ */
+export async function getClientProfile(userId) {
+  const { data, error } = await supabase
+    .from("client_profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    console.error("getClientProfile:", error.message);
+  }
+  return data || null;
+}
+
+/**
+ * Upsert a client's extended profile fields.
+ * Only the fields passed in `fields` are updated.
+ */
+export async function saveClientProfile(userId, fields) {
+  const payload = {
+    id: userId,
+    ...fields,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from("client_profiles")
+    .upsert(payload, { onConflict: "id" });
+
+  if (error) {
+    console.error("saveClientProfile:", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/**
+ * Update the display name in public.profiles.
+ */
 export async function saveProfileName(userId, name) {
   const trimmed = name.trim();
-  const initials = trimmed
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   const { error } = await supabase
     .from("profiles")
@@ -29,14 +62,18 @@ export async function saveProfileName(userId, name) {
     .eq("id", userId);
 
   if (error) {
-    console.log("saveProfileName:", error.message);
+    console.error("saveProfileName:", error.message);
     return { ok: false, error: error.message };
   }
-  return { ok: true, name: trimmed, initials };
+  return { ok: true, name: trimmed };
 }
 
+// ─────────────────────────────────────────────────────────────
+// ADMIN: CLIENTS
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Admin: list all client profiles joined with their auth profile
+ * Admin: list all client profiles joined with their auth profile.
  */
 export async function listClients() {
   const { data, error } = await supabase
@@ -58,7 +95,7 @@ export async function listClients() {
         emergency_contact,
         birthday,
         goals,
-        level,
+        fitness_level,
         injuries,
         package_plan,
         sessions_balance,
@@ -76,15 +113,12 @@ export async function listClients() {
 }
 
 /**
- * Admin: get one client's full profile
+ * Admin: get one client's full profile.
  */
 export async function getClientById(clientId) {
   const { data, error } = await supabase
     .from("profiles")
-    .select(`
-      id, email, name, role, created_at,
-      client_profiles (*)
-    `)
+    .select(`id, email, name, role, created_at, client_profiles (*)`)
     .eq("id", clientId)
     .single();
 
@@ -101,7 +135,6 @@ export async function getClientById(clientId) {
 
 /**
  * Fetch all programs for a client, newest first.
- * Includes nested days → exercises (stored as JSONB).
  */
 export async function getPrograms(clientId) {
   const { data, error } = await supabase
@@ -136,15 +169,12 @@ export async function getActiveProgram(clientId) {
 }
 
 /**
- * Admin: fetch all programs across all clients (for dashboard overview).
+ * Admin: fetch all programs across all clients.
  */
 export async function getAllPrograms() {
   const { data, error } = await supabase
     .from("programs")
-    .select(`
-      *,
-      profiles!programs_client_id_fkey (name, email)
-    `)
+    .select(`*, profiles!programs_client_id_fkey (name, email)`)
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -155,8 +185,7 @@ export async function getAllPrograms() {
 }
 
 /**
- * Create a new program.
- * coachId = auth user id of the coach/admin creating it.
+ * Create a new program (always starts as draft).
  */
 export async function createProgram(clientId, coachId, overrides = {}) {
   const program = {
@@ -189,13 +218,12 @@ export async function createProgram(clientId, coachId, overrides = {}) {
 }
 
 /**
- * Save (upsert) a full program object.
- * Passes the entire program including days+exercises as JSONB.
+ * Save (upsert) a full program object including days+exercises (JSONB).
+ * Accepts the camelCase UI shape and maps to snake_case DB columns.
  */
 export async function saveProgram(program) {
   const { id, ...fields } = program;
 
-  // Map camelCase UI fields → snake_case DB columns
   const payload = {
     name:        fields.name,
     block:       fields.block,
@@ -225,8 +253,7 @@ export async function saveProgram(program) {
 }
 
 /**
- * Duplicate a program (deep copy of days/exercises).
- * New program is always a draft.
+ * Duplicate a program (deep copy). New program is always a draft.
  */
 export async function duplicateProgram(programId, coachId) {
   const { data: src, error: fetchErr } = await supabase
@@ -285,17 +312,15 @@ export async function archiveProgram(programId) {
 
 /**
  * Publish a draft program as active.
- * Marks any existing active program as completed first.
+ * Marks any existing active program for this client as completed first.
  */
 export async function publishProgram(programId, clientId) {
-  // Archive current active if any
   await supabase
     .from("programs")
     .update({ status: "completed", updated_at: new Date().toISOString() })
     .eq("client_id", clientId)
     .eq("status", "active");
 
-  // Publish this one
   const { data, error } = await supabase
     .from("programs")
     .update({ status: "active", updated_at: new Date().toISOString() })
@@ -332,7 +357,6 @@ export async function deleteProgram(programId) {
 
 /**
  * Get workout log for a specific program+day.
- * Returns { sets: {[exId]: number[]}, completed: bool, completedAt: string|null }
  */
 export async function getWorkoutLog(programId, dayId, clientId) {
   const { data, error } = await supabase
@@ -377,7 +401,7 @@ export async function saveWorkoutLog(programId, dayId, clientId, { sets, complet
 }
 
 /**
- * Get all completed workout logs for a program (admin / progress view).
+ * Get all completed workout logs for a program.
  */
 export async function getProgramLogs(programId) {
   const { data, error } = await supabase
@@ -400,7 +424,6 @@ export async function getProgramLogs(programId) {
 
 /**
  * Save the full onboarding submission.
- * Creates a client_profiles row (or updates if somehow exists).
  */
 export async function saveOnboarding(userId, email, data) {
   const {
@@ -412,29 +435,28 @@ export async function saveOnboarding(userId, email, data) {
 
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
 
-  // Update display name in auth profile
   if (fullName) {
     await saveProfileName(userId, fullName);
   }
 
   const profilePayload = {
-    id:               userId,
-    phone:            phone || null,
-    birthday:         birthday || null,
-    age:              age ? parseInt(age) : null,
-    height:           height || null,
-    weight:           weight || null,
-    emergency_contact: emergencyContact || null,
-    goals:            goals || [],
-    fitness_level:    level || null,
-    had_coach:        hadCoach || null,
-    train_days:       trainDays || [],
-    train_times:      trainTimes || [],
-    sleep_hours:      sleep || null,
-    stress_level:     stress || null,
-    accountability:   accountability || null,
-    onboarding_done:  true,
-    updated_at:       new Date().toISOString(),
+    id:                userId,
+    phone:             phone             || null,
+    birthday:          birthday          || null,
+    age:               age ? parseInt(age) : null,
+    height:            height            || null,
+    weight:            weight            || null,
+    emergency_contact: emergencyContact  || null,
+    goals:             goals             || [],
+    fitness_level:     level             || null,
+    had_coach:         hadCoach          || null,
+    train_days:        trainDays         || [],
+    train_times:       trainTimes        || [],
+    sleep_hours:       sleep             || null,
+    stress_level:      stress            || null,
+    accountability:    accountability    || null,
+    onboarding_done:   true,
+    updated_at:        new Date().toISOString(),
   };
 
   const { error } = await supabase
@@ -461,50 +483,3 @@ export async function hasCompletedOnboarding(userId) {
   if (error || !data) return false;
   return data.onboarding_done === true;
 }
-
-// ─────────────────────────────────────────────────────────────
-// PROFILE
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Fetch a client's extended profile (client_profiles table).
- * Returns null if not found (new user who hasn't filled onboarding yet).
- */
-export async function getClientProfile(userId) {
-  const { data, error } = await supabase
-    .from("client_profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    console.error("getClientProfile:", error.message);
-  }
-  return data || null;
-}
-
-/**
- * Upsert a client's extended profile fields.
- * Only the fields passed in `fields` are updated.
- * Always sets updated_at.
- */
-export async function saveClientProfile(userId, fields) {
-  const payload = {
-    id: userId,
-    ...fields,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase
-    .from("client_profiles")
-    .upsert(payload, { onConflict: "id" });
-
-  if (error) {
-    console.log("saveClientProfile:", error.message);
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
-}
-
-
-
