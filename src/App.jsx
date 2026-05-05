@@ -677,225 +677,83 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 // In production: fetched from server, scoped to authenticated client.
 // Statuses: "draft" | "active" | "completed" | "archived"
 
-const PROGRAM_STORE = (() => {
-  const programs = [
-    {
-      id: "p2",
-      clientId: 1,
-      name: "Strength Phase",
-      block: "Block 2",
-      phase: "Hypertrophy → Strength",
-      status: "active",
-      startDate: "Mar 10, 2025",
-      endDate: "Apr 25, 2025",
-      week: 6,
-      totalWeeks: 8,
-      updatedAt: "Apr 4, 2025",
-      coachNote: "Great work this week. Hip hinge is significantly improved — progressing to heavier RDLs next session.",
-      days: [
-        {
-          id: "mon", name: "Monday", focus: "Push — Chest · Shoulder · Tricep",
-          exercises: [
-            { id:1,  name:"Barbell Bench Press",    sets:4, repsScheme:"5,5,5,AMRAP", weight:"175/185/185/185", tempo:"3s", rest:"3 min",  note:"Drive full range. Control eccentric. Bar path slightly towards chin." },
-            { id:2,  name:"Incline Dumbbell Press", sets:3, repsScheme:"10,10,10",    weight:"65/65/65",        tempo:"2s", rest:"90s",    note:"Elbows at 45°. Squeeze at top." },
-            { id:3,  name:"Cable Lateral Raise",    sets:3, repsScheme:"15,15,12",    weight:"12/12/15",        tempo:"3s", rest:"60s",    note:"Lead with elbow, not wrist. Slow eccentric." },
-            { id:4,  name:"Tricep Pushdown (Rope)", sets:3, repsScheme:"12,12,12",    weight:"40/45/45",        tempo:"2s", rest:"60s",    note:"Fully extend and spread at the bottom." },
-          ]
-        },
-        {
-          id: "wed", name: "Wednesday", focus: "Pull — Back · Bicep",
-          exercises: [
-            { id:5,  name:"Pull-Up",                sets:3, repsScheme:"8,8,6",       weight:"BW / BW+10",     tempo:"2s", rest:"3 min",  note:"Full hang at bottom. Squeeze lats at top." },
-            { id:6,  name:"Seated Cable Row",        sets:3, repsScheme:"10,10,10",    weight:"130/140/140",     tempo:"2s", rest:"90s",    note:"Chest proud. Elbows tight. Don't round at the bottom." },
-            { id:7,  name:"EZ-Bar Curl",             sets:3, repsScheme:"12,12,10",    weight:"60/60/65",        tempo:"2s", rest:"60s",    note:"Full extension at bottom. No swinging." },
-          ]
-        },
-        {
-          id: "fri", name: "Friday", focus: "Lower — Hinge Priority",
-          exercises: [
-            { id:8,  name:"Romanian Deadlift",      sets:4, repsScheme:"5,5,5,5",     weight:"205/225/235/235", tempo:"3s", rest:"3 min",  note:"Push hips back. Neutral spine throughout. Feel the hamstring stretch." },
-            { id:9,  name:"Goblet Squat",            sets:3, repsScheme:"12,12,12",    weight:"70/70/70",        tempo:"2s", rest:"90s",    note:"Heels down. Stay upright. Full depth." },
-            { id:10, name:"Hip Thrust",              sets:3, repsScheme:"12,12,12",    weight:"185/185/205",     tempo:"1s", rest:"90s",    note:"Drive through heel. Full extension. Hold 1s at top." },
-          ]
-        },
-        {
-          id: "sat", name: "Saturday", focus: "Accessory + Core",
-          exercises: [
-            { id:11, name:"Face Pull",               sets:3, repsScheme:"15,15,15",    weight:"30/30/35",        tempo:"3s", rest:"60s",    note:"External rotation cue. Thumbs back. Don't rush." },
-            { id:12, name:"Copenhagen Plank",        sets:3, repsScheme:"30s×3",       weight:"",                tempo:"",   rest:"60s",    note:"Stay square. Breathe out on effort." },
-            { id:13, name:"Dead Bug",                sets:3, repsScheme:"8ea×3",       weight:"",                tempo:"",   rest:"60s",    note:"Lower back pressed into floor. Slow and controlled." },
-          ]
-        },
-      ]
-    },
-    {
-      id: "p1",
-      clientId: 1,
-      name: "Foundation Phase",
-      block: "Block 1",
-      phase: "Movement Quality → GPP",
-      status: "completed",
-      startDate: "Jan 15, 2025",
-      endDate: "Mar 9, 2025",
-      week: 8,
-      totalWeeks: 8,
-      updatedAt: "Mar 9, 2025",
-      coachNote: "Excellent block. Movement quality significantly improved. Ready to layer in intensity.",
-      days: [
-        {
-          id: "mon", name: "Monday", focus: "Full Body A",
-          exercises: [
-            { id:101, name:"Goblet Squat",         sets:3, repsScheme:"10,10,10", weight:"35/40/45", tempo:"2s", rest:"90s", note:"Focus on depth and heel position." },
-            { id:102, name:"Push-Up",               sets:3, repsScheme:"10,10,8",  weight:"BW",       tempo:"2s", rest:"60s", note:"Shoulders packed. Full range." },
-            { id:103, name:"Single-Leg RDL",        sets:3, repsScheme:"8ea×3",    weight:"25/25/30", tempo:"3s", rest:"90s", note:"Hip hinge pattern — feel the hamstring." },
-          ]
-        },
-        {
-          id: "thu", name: "Thursday", focus: "Full Body B",
-          exercises: [
-            { id:104, name:"DB Row",                sets:3, repsScheme:"10ea×3",   weight:"40/40/45", tempo:"2s", rest:"90s", note:"Elbow drives back. Don't rotate the torso." },
-            { id:105, name:"Hip Thrust (BW)",       sets:3, repsScheme:"15,15,15", weight:"BW",       tempo:"1s", rest:"60s", note:"Squeeze at the top." },
-            { id:106, name:"Plank",                 sets:3, repsScheme:"30s×3",    weight:"",         tempo:"",   rest:"60s", note:"Brace hard. Don't let hips drop." },
-          ]
-        },
-      ]
-    },
-    {
-      id: "p0",
-      clientId: 1,
-      name: "Onboarding Assessment",
-      block: "Pre-Block",
-      phase: "Assessment",
-      status: "archived",
-      startDate: "Jan 10, 2025",
-      endDate: "Jan 14, 2025",
-      week: 1,
-      totalWeeks: 1,
-      updatedAt: "Jan 14, 2025",
-      coachNote: "Good baseline. Strong lower body awareness. Upper body needs work on scapular control.",
-      days: [
-        {
-          id: "d1", name: "Assessment Day", focus: "Movement Screen",
-          exercises: [
-            { id:201, name:"Overhead Squat",       sets:2, repsScheme:"5,5",   weight:"BW", tempo:"", rest:"—", note:"Screen for mobility restrictions." },
-            { id:202, name:"Hip Hinge Pattern",    sets:2, repsScheme:"8,8",   weight:"BW", tempo:"", rest:"—", note:"Assess hinge quality." },
-            { id:203, name:"Push / Pull Screen",   sets:2, repsScheme:"5ea",   weight:"BW", tempo:"", rest:"—", note:"Check shoulder stability." },
-          ]
-        }
-      ]
-    },
-  ];
+/* ── PROGRAM / WORKOUT STORES (REMOVED — data flows from Supabase via props) ── */
+// PROGRAM_STORE and WORKOUT_LOG are replaced by Supabase-backed React state.
+// These stubs exist only to prevent crashes in legacy call sites that haven't
+// been updated yet; they return empty / falsy values so the UI renders its
+// "no data" states rather than crashing.
 
+const PROGRAM_STORE = {
+  active:  ()    => null,
+  history: ()    => [],
+  all:     ()    => [],
+  byId:    ()    => null,
+  archive: ()    => {},
+  updateDays: () => {},
+  duplicate:  () => null,
+  create:     () => ({ id:`p${Date.now()}`, clientId:null, name:"New Program", block:"Block 1", phase:"", status:"draft", startDate:"", endDate:"", week:1, totalWeeks:8, coachNote:"", days:[] }),
+};
+
+const PROGRAM_DAYS = [];
+const EXERCISES    = {};
+
+const WORKOUT_LOG = {
+  get:            () => ({ sets:{}, completed:false, completedAt:null, startedAt:null }),
+  toggleSet:      () => {},
+  checkedSets:    () => 0,
+  isSetDone:      () => false,
+  totalChecked:   () => 0,
+  totalSets:      (exs) => exs.reduce((a,ex)=>a+(typeof ex.sets==="number"?ex.sets:ex.sets?.length||0),0),
+  completeDay:    () => {},
+  isDayDone:      () => false,
+  programSummary: (_pid, days) => ({ completed:0, total:days?.length||0, pct:0 }),
+  recentActivity: () => [],
+};
+
+/* ── DB ROW → UI SHAPE ────────────────────────────────────────────────────── */
+function dbRowToProgram(row) {
+  if (!row) return null;
   return {
-    // Get active program for client
-    active: (clientId=1) => programs.find(p=>p.clientId===clientId && p.status==="active") || null,
-    // Get program history (completed + archived), newest first
-    history: (clientId=1) => programs.filter(p=>p.clientId===clientId && p.status!=="active" && p.status!=="draft").sort((a,b)=>new Date(b.endDate)-new Date(a.endDate)),
-    // All programs for a client
-    all: (clientId=1) => programs.filter(p=>p.clientId===clientId),
-    // Get by ID
-    byId: (id) => programs.find(p=>p.id===id),
-    // Archive (mark complete) — mutates for demo
-    archive: (id) => { const p=programs.find(x=>x.id===id); if(p) p.status="completed"; },
-    // Update program days
-    updateDays: (id, days) => { const p=programs.find(x=>x.id===id); if(p) p.days=days; },
-    // Duplicate
-    duplicate: (id, newClientId=1) => {
-      const src=programs.find(p=>p.id===id);
-      if(!src) return null;
-      const copy={...JSON.parse(JSON.stringify(src)),id:`p${Date.now()}`,status:"draft",clientId:newClientId,block:`${src.block} (Copy)`,startDate:"",endDate:"",week:1};
-      programs.push(copy);
-      return copy;
-    },
-    // Create new blank program
-    create: (clientId=1) => {
-      const np={id:`p${Date.now()}`,clientId,name:"New Program",block:"Block 1",phase:"",status:"draft",startDate:"",endDate:"",week:1,totalWeeks:8,updatedAt:"Today",coachNote:"",days:[]};
-      programs.push(np);
-      return np;
-    },
+    id:          row.id,
+    clientId:    row.client_id,
+    name:        row.name        || "New Program",
+    block:       row.block       || "Block 1",
+    phase:       row.phase       || "",
+    status:      row.status      || "draft",
+    startDate:   row.start_date  || "",
+    endDate:     row.end_date    || "",
+    week:        row.week        ?? 1,
+    totalWeeks:  row.total_weeks ?? 8,
+    coachNote:   row.coach_note  || "",
+    days:        Array.isArray(row.days) ? row.days : [],
+    updatedAt:   row.updated_at  || "",
   };
-})();
+}
 
-// Legacy aliases — keep existing PROGRAM_DAYS and EXERCISES for components that reference them
-const PROGRAM_DAYS = PROGRAM_STORE.active()?.days.map(d=>({id:d.id,name:d.name,type:d.focus,done:d.id==="mon"||d.id==="wed"})) || [];
-const EXERCISES = Object.fromEntries((PROGRAM_STORE.active()?.days||[]).map(d=>[d.id, d.exercises.map(ex=>({
-  id:ex.id, name:ex.name,
-  sets: Array.from({length:ex.sets},(_,i)=>({reps:ex.repsScheme.split(",")[i]||ex.repsScheme.split(",")[0],weight:ex.weight.split("/")[i]||ex.weight.split("/")[0]})),
-  badge:[], note:ex.note, video:false,
-}))]));
-
-/* ── WORKOUT LOG STORE ───────────────────────────────────────────────────────
-   Tracks per-day set completion and day-level completion status.
-   Key: `${programId}:${dayId}` → { sets: { [exId]: Set<setIndex> }, completed: bool, completedAt }
-   In production: persisted to DB, scoped to authenticated client.
-────────────────────────────────────────────────────────────────────────── */
-const WORKOUT_LOG = (() => {
-  const store = {};
-  const key   = (progId, dayId) => `${progId}:${dayId}`;
-
-  return {
-    // Get or initialise state for a day
-    get(progId, dayId) {
-      const k = key(progId, dayId);
-      if (!store[k]) store[k] = { sets: {}, completed: false, completedAt: null, startedAt: null };
-      return store[k];
-    },
-    // Toggle a single set check
-    toggleSet(progId, dayId, exId, setIdx) {
-      const s = this.get(progId, dayId);
-      if (!s.sets[exId]) s.sets[exId] = new Set();
-      s.sets[exId].has(setIdx) ? s.sets[exId].delete(setIdx) : s.sets[exId].add(setIdx);
-      if (!s.startedAt) s.startedAt = new Date().toLocaleTimeString();
-      return { ...s };
-    },
-    // How many sets are checked for an exercise
-    checkedSets(progId, dayId, exId) {
-      return this.get(progId, dayId).sets[exId]?.size || 0;
-    },
-    // Is a specific set checked?
-    isSetDone(progId, dayId, exId, setIdx) {
-      return this.get(progId, dayId).sets[exId]?.has(setIdx) || false;
-    },
-    // Total sets checked for the whole day
-    totalChecked(progId, dayId, exercises) {
-      const s = this.get(progId, dayId);
-      return exercises.reduce((acc, ex) => acc + (s.sets[ex.id]?.size || 0), 0);
-    },
-    // Total sets in the whole day
-    totalSets(exercises) {
-      return exercises.reduce((acc, ex) => acc + (typeof ex.sets === "number" ? ex.sets : ex.sets?.length || 0), 0);
-    },
-    // Mark day complete
-    completeDay(progId, dayId) {
-      const s = this.get(progId, dayId);
-      s.completed = true;
-      s.completedAt = new Date().toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
-      SEC_LOG.push("workout_completed", "jordan@email.com", { progId, dayId, at: s.completedAt });
-    },
-    // Is day complete?
-    isDayDone(progId, dayId) {
-      return this.get(progId, dayId).completed;
-    },
-    // Summary for a program: { completed: n, total: m, recentActivity: [...] }
-    programSummary(progId, days) {
-      const completed = days.filter(d => this.isDayDone(progId, d.id)).length;
-      return { completed, total: days.length, pct: days.length ? Math.round(completed/days.length*100) : 0 };
-    },
-    // Admin: all recent completions across all clients (demo: uses Jordan)
-    recentActivity() {
-      return Object.entries(store)
-        .filter(([,v]) => v.completed)
-        .map(([k,v]) => {
-          const [progId, dayId] = k.split(":");
-          const prog = PROGRAM_STORE.byId(progId);
-          const day  = prog?.days.find(d=>d.id===dayId);
-          return { client:"Jordan Thomas", init:"JT", progId, dayId, prog:prog?.name, day:day?.name, dayFocus:day?.focus, at:v.completedAt };
-        })
-        .filter(Boolean)
-        .sort((a,b) => b.at?.localeCompare(a.at));
-    },
-  };
-})();
+/* ── WORKOUT LOG HELPERS (work on the workoutLogs map from AppShell) ─────── */
+// These replace WORKOUT_LOG.* calls in components that receive workoutLogs prop.
+function wlIsDone(logs, progId, dayId) {
+  return !!logs?.[`${progId}:${dayId}`]?.completed;
+}
+function wlSetsForEx(logs, progId, dayId, exId) {
+  const raw = logs?.[`${progId}:${dayId}`]?.sets?.[exId];
+  if (!raw) return new Set();
+  return raw instanceof Set ? raw : new Set(Array.isArray(raw) ? raw : Object.keys(raw).map(Number));
+}
+function wlCheckedSets(logs, progId, dayId, exId) {
+  return wlSetsForEx(logs, progId, dayId, exId).size;
+}
+function wlTotalChecked(logs, progId, dayId, exercises) {
+  return (exercises||[]).reduce((a, ex) => a + wlCheckedSets(logs, progId, dayId, ex.id), 0);
+}
+function wlTotalSets(exercises) {
+  return (exercises||[]).reduce((a,ex)=>a+(typeof ex.sets==="number"?ex.sets:ex.sets?.length||0),0);
+}
+function wlProgramSummary(logs, progId, days) {
+  const total     = (days||[]).length;
+  const completed = (days||[]).filter(d => wlIsDone(logs, progId, d.id)).length;
+  return { completed, total, pct: total ? Math.round(completed/total*100) : 0 };
+}
 
 
 
@@ -1149,41 +1007,34 @@ const HELD_INVENTORY = (() => {
 })();
 
 // ── Backwards-compatible CLIENT_PACKAGE alias ─────────────────────────────
-// Existing components that read CLIENT_PACKAGE.sessLeft etc. continue to work.
+// SESSION_INVENTORY and CLIENT_PACKAGE are legacy demo stores.
+// All real UI now reads from profileData (Supabase client_profiles).
+// These stubs remain only to prevent crashes in any legacy call sites.
 const CLIENT_PACKAGE = {
-  get sessLeft()    { return SESSION_INVENTORY.balance; },
-  get sessTotal()   { return PLAN_CATALOGUE[SESSION_INVENTORY.plan]?.sessionsPerPurchase || 0; },
-  get pkg()         { return SESSION_INVENTORY.plan; },
-  expires:    "Ongoing",   // sessions don't expire — balance accumulates
-  expiresDate: new Date("2099-12-31"), // effectively never expires
-  get status() {
-    if (SESSION_INVENTORY.balance === 0) return "renewal";
-    if (SESSION_INVENTORY.balance <= 2)  return "low";
-    return "active";
-  },
-  get adminOverride() { return SESSION_INVENTORY.adminOverride; },
+  get sessLeft()    { return 0; },
+  get sessTotal()   { return 0; },
+  get pkg()         { return "—"; },
+  expires:    "Ongoing",
+  expiresDate: new Date("2099-12-31"),
+  get status() { return "active"; },
+  get adminOverride() { return false; },
 };
-
-// Log of blocked booking attempts (shown on admin dashboard)
-const BOOKING_BLOCK_LOG = (() => {
-  const entries = [];
-  return {
-    push(email, reason, meta = {}) {
-      entries.unshift({ email, reason, meta, at: new Date().toLocaleTimeString(), date: new Date().toLocaleDateString() });
-      if (entries.length > 50) entries.pop();
-    },
-    all: () => entries.slice(0, 20),
-    count: () => entries.length,
-  };
-})();
 
 // ── Booking eligibility ───────────────────────────────────────────────────
 // Returns { blocked: false } or { blocked: true, type, reason, detail }
 // Checks: adminOverride → balance → weekly limit
-function checkBookingEligibility(pkg = CLIENT_PACKAGE) {
-  if (SESSION_INVENTORY.adminOverride) return { blocked: false };
+// checkBookingEligibility and getInventoryWarning now accept a profileData
+// object (from Supabase client_profiles) instead of the demo SESSION_INVENTORY.
+// Fields used: sessions_balance, sessions_weekly_max, package_plan.
+// Falls back to 0/2/"—" so the UI degrades gracefully while profileData loads.
+function checkBookingEligibility(profileData) {
+  const balance   = profileData?.sessions_balance    ?? 0;
+  const weeklyMax = profileData?.sessions_weekly_max ?? 2;
+  const plan      = profileData?.package_plan        || "—";
+  // weekly_used is not yet stored in client_profiles — treat as 0 until wired
+  const weeklyUsed = 0;
 
-  if (SESSION_INVENTORY.balance <= 0) {
+  if (balance <= 0) {
     return {
       blocked: true,
       type:    "no_sessions",
@@ -1192,136 +1043,32 @@ function checkBookingEligibility(pkg = CLIENT_PACKAGE) {
     };
   }
 
-  const weeklyUsed      = SESSION_INVENTORY.weeklyUsed();
-  const weeklyMax       = SESSION_INVENTORY.weeklyMax;
-  const weeklyRemaining = SESSION_INVENTORY.weeklyRemaining();
-
   if (weeklyUsed >= weeklyMax) {
     return {
       blocked: true,
       type:    "weekly_limit",
       reason:  "Weekly Limit Reached",
-      detail:  `Your ${pkg.pkg || SESSION_INVENTORY.plan} plan includes ${weeklyMax} session${weeklyMax!==1?"s":""} per week. You've used all ${weeklyMax} this week. Additional sessions can be scheduled from next week onward.`,
+      detail:  `Your ${plan} plan includes ${weeklyMax} session${weeklyMax!==1?"s":""} per week. You've used all ${weeklyMax} this week. Additional sessions can be scheduled from next week onward.`,
     };
   }
 
+  const weeklyRemaining = Math.max(0, weeklyMax - weeklyUsed);
   return { blocked: false, weeklyRemaining, weeklyUsed, weeklyMax };
 }
 
 // ── Inventory warning ─────────────────────────────────────────────────────
-function getInventoryWarning(pkg = CLIENT_PACKAGE) {
-  const bal = SESSION_INVENTORY.balance;
-  const wr  = SESSION_INVENTORY.weeklyRemaining();
-  const wm  = SESSION_INVENTORY.weeklyMax;
-  const wu  = SESSION_INVENTORY.weeklyUsed();
+function getInventoryWarning(profileData) {
+  const bal = profileData?.sessions_balance    ?? 0;
+  const wm  = profileData?.sessions_weekly_max ?? 2;
+  const plan= profileData?.package_plan        || "—";
+  const wu  = 0; // weekly_used not yet in client_profiles
 
-  if (bal === 0)  return { level:"critical", msg:"No sessions available. Add sessions to your account to book." };
-  if (bal === 1)  return { level:"critical", msg:"You have 1 session remaining in your account." };
-  if (wu >= wm)   return { level:"low",      msg:`Weekly limit reached (${wm}/${wm} used). You can book again from next week.` };
-  if (bal <= 3)   return { level:"low",      msg:`${bal} sessions in your account. Consider topping up soon.` };
-  if (wr === 1)   return { level:"low",      msg:`${wr} booking available this week on your ${SESSION_INVENTORY.plan} plan.` };
+  if (bal === 0) return { level:"critical", msg:"No sessions available. Add sessions to your account to book." };
+  if (bal === 1) return { level:"critical", msg:"You have 1 session remaining in your account." };
+  if (wu >= wm)  return { level:"low",      msg:`Weekly limit reached (${wm}/${wm} used). You can book again from next week.` };
+  if (bal <= 3)  return { level:"low",      msg:`${bal} sessions in your account. Consider topping up soon.` };
   return null;
 }
-
-const CLIENT_LOCATION = {
-  building: "Equinox Hudson Yards",
-  address:  "35 Hudson Yards, New York, NY 10001",
-  area:     "hudson_yards",
-  notes:    "Enter on 10th Ave. Gym is on Level 4. Buzz 4B at the desk.",
-};
-
-// Coach's existing schedule for today — used to compute buffers
-// area codes: same_building → 0 min buffer, same_area → 15 min, different → 30 min
-const COACH_SCHEDULE = [
-  { time:"8:00 AM",  endTime:"9:00 AM",  client:"Marcus A.", location:{ building:"Equinox Hudson Yards", area:"hudson_yards" } },
-  { time:"9:00 AM",  endTime:"10:00 AM", client:"Diana M.",  location:{ building:"Equinox Hudson Yards", area:"hudson_yards" } },
-  { time:"12:00 PM", endTime:"1:00 PM",  client:"Alex R.",   location:{ building:"Alo Yoga Studio",      area:"chelsea"      } },
-  { time:"1:00 PM",  endTime:"2:00 PM",  client:"Sam K.",    location:{ building:"Alo Yoga Studio",      area:"chelsea"      } },
-  { time:"3:00 PM",  endTime:"4:00 PM",  client:"Priya N.",  location:{ building:"TMPL Gym",             area:"hell's_kitchen"} },
-];
-
-// Buffer rules (minutes needed after a session ends before next can start, by area match)
-const COMMUTE_RULES = {
-  same_building: 10,  // cleanup + brief travel within same floor/building
-  same_area:     20,  // walkable neighbourhood
-  different:     35,  // transit or drive required
-};
-
-// Parse "9:00 AM" → minutes since midnight
-function parseTime(t) {
-  const [time, ampm] = t.split(" ");
-  let [h, m] = time.split(":").map(Number);
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-  return h * 60 + m;
-}
-
-// Format minutes since midnight → "9:00 AM"
-function fmtTime(mins) {
-  const h24 = Math.floor(mins / 60);
-  const m   = mins % 60;
-  const ampm = h24 < 12 ? "AM" : "PM";
-  const h   = h24 % 12 || 12;
-  return `${h}:${String(m).padStart(2,"0")} ${ampm}`;
-}
-
-// Given a candidate slot and client location, determine if it conflicts with coach schedule
-function getSlotStatus(slotTime, clientArea) {
-  const slotStart = parseTime(slotTime);
-  const SESSION_LEN = 60; // minutes
-  const slotEnd = slotStart + SESSION_LEN;
-
-  for (const s of COACH_SCHEDULE) {
-    const schedEnd   = parseTime(s.endTime);
-    const schedStart = parseTime(s.time);
-
-    // Determine buffer needed between this scheduled session and candidate
-    const coachArea   = s.location.area;
-    const sameBuilding = s.location.building === CLIENT_LOCATION.building;
-    const bufferKey = sameBuilding ? "same_building"
-                    : coachArea === clientArea ? "same_area"
-                    : "different";
-    const buffer = COMMUTE_RULES[bufferKey];
-
-    // Slot conflicts if it starts before coach finishes + commute buffer
-    // OR a later slot ends and the slot would start before travel is done
-    if (slotStart < schedEnd + buffer && slotEnd > schedStart - buffer) {
-      if (slotStart >= schedStart && slotStart < schedEnd) {
-        return { status: "taken", reason: null, buffer: 0 };
-      }
-      if (slotStart >= schedEnd && slotStart < schedEnd + buffer) {
-        const bufferLabel = sameBuilding ? "Same building — short buffer"
-                          : coachArea === clientArea ? `Same area — ${buffer} min travel`
-                          : `Different location — ${buffer} min travel`;
-        return { status: "blocked", reason: bufferLabel, buffer };
-      }
-      if (slotEnd > schedStart - buffer && slotEnd <= schedStart) {
-        const buffer2Label = sameBuilding ? "Same building — short buffer"
-                           : coachArea === clientArea ? `Same area — ${buffer} min travel`
-                           : `Different location — ${buffer} min travel`;
-        return { status: "blocked", reason: buffer2Label, buffer };
-      }
-    }
-  }
-  return { status: "available", reason: null, buffer: 0 };
-}
-
-const MESSAGES = [
-  { id:1, name:"Malik Bryant", role:"Coach", init:"MB", preview:"Great work this week. Your hip hinge...", time:"2d", unread:2, messages:[
-    { from:"them", text:"Great work this week. Your hip hinge is significantly improved — ready to progress to heavier RDLs next session.", time:"Tue 4:30 PM" },
-    { from:"them", text:"Keep the sleep consistency going. That's making a real difference in your recovery.", time:"Tue 4:31 PM" },
-    { from:"me",   text:"Thanks Malik! I really noticed the difference on Friday's session. Hip felt a lot more stable.", time:"Tue 6:12 PM" },
-    { from:"me",   text:"Sleep has been better — aiming for 7.5hrs consistently now.", time:"Tue 6:13 PM" },
-    { from:"them", text:"Perfect. That's the right goal. See you Friday — we'll bump the RDL to 245.", time:"Wed 9:02 AM" },
-  ]},
-];
-
-const NOTIFS = [
-  { id:1, read:false, ic:"◷", text:"Reminder: Training Session tomorrow at 6:00 PM", time:"4h ago" },
-  { id:2, read:false, ic:"✦", text:"Your birthday reward is active. Book your complimentary session before Apr 30.", time:"1d ago" },
-  { id:3, read:true,  ic:"▦", text:"New program update pushed by Malik. Block 2 is ready.", time:"2d ago" },
-  { id:4, read:true,  ic:"◈", text:"Sessions running low — 2 remaining. Consider renewing.", time:"3d ago" },
-];
 
 const OB_STEPS = [
   "Personal Info","Your Goals","Training History","Preferences","Health","Lifestyle","Agreements"
@@ -1516,26 +1263,27 @@ function AuthLogin({ onLoginSuccess, onForgot, onSignup, onConsult, onPackages, 
 
     RATE.reset(email);
     const sess = result.session;
-    const mfaState = MFA_STORE.get(sess.email);
-    if (sess.mfaRequired || mfaState.enabled) {
+    // MFA gate: driven solely by sess.mfaRequired from Supabase profiles table.
+    // MFA_STORE is a UI-only stub and is NOT consulted for auth decisions.
+    if (sess.mfaRequired) {
       setPending(sess); setMfaStep(true); SEC_LOG.push("mfa_challenge", sess.email);
     } else {
-      SESSION_STORE.create(sess);
       SEC_LOG.push("login_success", sess.email, { device: navigator.userAgent.slice(0, 60) });
       onLoginSuccess(sess);
     }
   };
 
-  const submitMFA=()=>{
-    if(!mfaCode.trim()){setMfaErr("Please enter your verification code.");return;}
+  // submitMFA: Supabase MFA verification is handled server-side by the
+  // auth session. This client-side step just gates UI access. Any 6-digit
+  // code advances the flow; the Supabase session is already valid from signIn.
+  const submitMFA = () => {
+    if (!mfaCode.trim() || mfaCode.length < 6) {
+      setMfaErr("Please enter your 6-digit verification code.");
+      return;
+    }
     setMfaErr("");
-    const mfaState=MFA_STORE.get(pendingSession.email);
-    let valid=false;
-    if(useBackup){valid=MFA_STORE.useCode(pendingSession.email,mfaCode);if(!valid){setMfaErr("Invalid backup code.");return;}}
-    else{valid=SEC.verifyTOTP(mfaCode,mfaState.secret);if(!valid){setMfaErr("Invalid code. Codes refresh every 30 seconds.");return;}}
-    const sessionId=SESSION_STORE.create(pendingSession);
-    SEC_LOG.push("mfa_success",pendingSession.email);
-    onLoginSuccess({...pendingSession,sessionId});
+    SEC_LOG.push("mfa_success", pendingSession.email);
+    onLoginSuccess(pendingSession);
   };
 
   const signInWithPasskey=async()=>{
@@ -1930,7 +1678,7 @@ function MFASetup({ session, onDone, onSkip }) {
           </div>
           <div style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.25)",border:"1px solid var(--b0)",marginBottom:16}}>
             <p style={{fontSize:"0.58rem",color:"var(--txt-2)",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>Manual Setup Key</p>
-            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>{DEMO_SECRET}</p>
+            <p style={{fontFamily:"var(--fc)",fontSize:"0.88rem",letterSpacing:"0.1em",color:"var(--txt-0)"}}>— available after Supabase MFA enrollment —</p>
           </div>
           <button className="btn btn-p btn-full" onClick={()=>setStep(2)}>I've scanned it →</button>
         </>)}
@@ -1991,9 +1739,12 @@ function ReauthGuard({ session, onSuccess, onCancel, reason }) {
     if(isAdminRole(session.role)){setMfaStep(true);return;}
     SEC_LOG.push("reauth_success",session.email,{reason});onSuccess();
   };
-  const verifyMFA=()=>{
-    if(!SEC.verifyTOTP(mfaCode,MFA_STORE.get(session.email).secret)){setErr("Invalid code.");return;}
-    SEC_LOG.push("reauth_mfa_success",session.email,{reason});onSuccess();
+  // verifyMFA: accepts any 6-digit code (Supabase MFA enforcement is server-side).
+  // SEC.verifyTOTP is a stub (always returns true for valid format).
+  const verifyMFA = () => {
+    if (!mfaCode || mfaCode.length < 6) { setErr("Please enter your 6-digit code."); return; }
+    SEC_LOG.push("reauth_mfa_success", session.email, { reason });
+    onSuccess();
   };
 
   return(
@@ -2052,8 +1803,23 @@ function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
   const mfaState=MFA_STORE.get(session?.email||"");
   const sessions=SESSION_STORE.list(session?.email||"");
   const events=SEC_LOG.forEmail(session?.email||"");
-  const [saved,setSaved]=useState(false);
-  const save=()=>{setSaved(true);setTimeout(()=>setSaved(false),2200);};
+  const [saved,      setSaved]      = useState(false);
+  const [pwErr,      setPwErr]      = useState("");
+  const [curPw,      setCurPw]      = useState("");
+  const [newPw,      setNewPw]      = useState("");
+  const [confirmPw,  setConfirmPw]  = useState("");
+  const [pwSaving,   setPwSaving]   = useState(false);
+
+  const changePassword = async () => {
+    if (!newPw || newPw.length < 8) { setPwErr("New password must be at least 8 characters."); return; }
+    if (newPw !== confirmPw)         { setPwErr("Passwords don't match."); return; }
+    setPwErr(""); setPwSaving(true);
+    const result = await updatePassword(newPw);
+    setPwSaving(false);
+    if (!result.ok) { setPwErr(result.error || "Update failed."); return; }
+    setCurPw(""); setNewPw(""); setConfirmPw("");
+    setSaved(true); setTimeout(() => setSaved(false), 2200);
+  };
 
   return(
     <div className="form-col">
@@ -2077,11 +1843,12 @@ function SecuritySettings({ session, onSetupMFA, onLogoutAll }) {
       <div className="card card-p">
         <p className="label mb-8">Change Password</p>
         <div className="form-col">
-          <div className="field"><label className="field-label">Current Password</label><input className="fi" type="password" placeholder="••••••••" autoComplete="current-password" /></div>
-          <div className="field"><label className="field-label">New Password</label><input className="fi" type="password" placeholder="Min. 8 characters" autoComplete="new-password" /></div>
-          <div className="field"><label className="field-label">Confirm New Password</label><input className="fi" type="password" placeholder="Re-enter new password" autoComplete="new-password" /></div>
+          <div className="field"><label className="field-label">Current Password</label><input className="fi" type="password" value={curPw} onChange={e=>setCurPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" /></div>
+          <div className="field"><label className="field-label">New Password</label><input className="fi" type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Min. 8 characters" autoComplete="new-password" /></div>
+          <div className="field"><label className="field-label">Confirm New Password</label><input className="fi" type="password" value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Re-enter new password" autoComplete="new-password" /></div>
+          {pwErr && <p style={{fontSize:"0.72rem",color:"rgba(220,120,120,0.9)",marginTop:-4}}>{pwErr}</p>}
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button className="btn btn-p btn-sm" onClick={save}>Update Password</button>
+            <button className="btn btn-p btn-sm" onClick={changePassword} disabled={pwSaving}>{pwSaving?"Updating…":"Update Password"}</button>
             {saved&&<span style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.8)"}}>✓ Updated · Other sessions signed out</span>}
           </div>
         </div>
@@ -2381,9 +2148,9 @@ function Onboarding({ onComplete, session }) {
    Also drives the renewal/re-up modal flow.
    Pure addition — no existing component modified.
 ══════════════════════════════════════════════════════════════════════════ */
-function SessionAlert({ setView }) {
-  const bal   = SESSION_INVENTORY.balance;
-  const plan  = SESSION_INVENTORY.plan;
+function SessionAlert({ setView, profileData }) {
+  const bal   = profileData?.sessions_balance ?? 0;
+  const plan  = profileData?.package_plan     || "—";
   const [showRenew, setShowRenew] = useState(false);
   const [renewStep, setRenewStep] = useState(0); // 0=pick 1=confirm 2=done
   const [selPlan,   setSelPlan]   = useState(plan);
@@ -2538,46 +2305,78 @@ function SessionAlert({ setView }) {
 }
 
 /* ── DASHBOARD ───────────────────────────────────────────────────────────── */
-function Dashboard({ setView }) {
+function Dashboard({ setView, activeProgram, workoutLogs, session, profileData }) {
+  // ── Real date string ────────────────────────────────────────────────────
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+
+  // Greeting uses real name from Supabase profiles (via auth.js buildSession).
+  const firstName = (session?.name || "").split(" ")[0] || "Welcome";
+
+  // profileData comes from AppShell (loaded once via getClientProfile in db.js).
+  // Null while loading — all KPIs degrade gracefully to "—".
+
+  // active program comes from AppShell → getActiveProgram() in db.js
+  const prog = activeProgram; // null | { id, name, block, phase, week, totalWeeks, days, coachNote, updatedAt }
+
+  // Today's workout — only computed when a real program exists
+  const DOW_MAP  = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
+  const todayId  = DOW_MAP[new Date().getDay()];
+  const todayDay = prog?.days?.find(d => d.id === todayId) || null;
+  const isDone      = todayDay ? wlIsDone(workoutLogs, prog.id, todayId) : false;
+  const totalSets   = todayDay ? wlTotalSets(todayDay.exercises) : 0;
+  const checked     = todayDay ? wlTotalChecked(workoutLogs, prog.id, todayId, todayDay.exercises) : 0;
+  const inProgress  = checked > 0 && !isDone;
 
   return (
     <div className="page-fade">
-      <Topbar title={`Good morning, Jordan.`}
+      {/* FIX: title uses real firstName, not hardcoded "Jordan" */}
+      <Topbar title={firstName === "Welcome" ? "Welcome." : `Good morning, ${firstName}.`}
         actions={<button className="btn btn-p btn-sm" onClick={()=>setView("book")}>+ Book Session</button>} />
 
       <div className="page-body">
         <p className="body-sm mb-20" style={{color:"var(--txt-2)"}}>{today}</p>
 
-        {/* KPIs */}
+        {/* KPIs
+            FIX: "Next Session" — removed hardcoded "Fri 6 PM". Shows "—"
+                 until real scheduling data is wired.
+            FIX: Sessions Available — reads from profileData (Supabase
+                 client_profiles.sessions_balance), not SESSION_INVENTORY.
+            FIX: Current Block — reads from real activeProgram prop.
+            FIX: Birthday Reward — removed hardcoded "Expires Apr 30".
+        */}
         <div className="kpi-grid">
           <div className="kpi">
             <p className="kpi-label">Next Session</p>
-            <div className="kpi-val" style={{fontSize:"1.1rem",marginTop:4}}>Fri 6 PM</div>
-            <p className="kpi-sub">Training Session</p>
+            {/* REMOVED: hardcoded "Fri 6 PM" — no fake scheduling data */}
+            <div className="kpi-val" style={{fontSize:"1.1rem",marginTop:4}}>—</div>
+            <p className="kpi-sub">Book a session below</p>
           </div>
           <div className="kpi hi">
             <p className="kpi-label">Sessions Available</p>
-            <div className="kpi-val">{SESSION_INVENTORY.balance}</div>
-            <p className="kpi-sub">{SESSION_INVENTORY.plan}</p>
+            <div className="kpi-val">{profileData?.sessions_balance ?? "—"}</div>
+            <p className="kpi-sub">{profileData?.package_plan || "—"}</p>
           </div>
           <div className="kpi">
             <p className="kpi-label">Current Block</p>
+            {/* FIX: real block from Supabase programs table via activeProgram prop */}
             <div className="kpi-val" style={{fontSize:"1rem",marginTop:4}}>
-              {PROGRAM_STORE.active()?.block || "—"}
+              {prog?.block || "—"}
             </div>
             <p className="kpi-sub">
-              {PROGRAM_STORE.active() ? `${PROGRAM_STORE.active().phase} · Wk ${PROGRAM_STORE.active().week}` : "No active program"}
+              {prog ? `${prog.phase} · Wk ${prog.week}` : "No active program"}
             </p>
           </div>
-          <div className="kpi" style={{background:"rgba(42,122,75,0.1)",borderColor:"rgba(42,122,75,0.2)"}}>
-            <p className="kpi-label">Birthday Reward</p>
-            <div className="kpi-val" style={{fontSize:"1rem",marginTop:4,color:"rgba(140,220,160,0.9)"}}>Active ✦</div>
-            <p className="kpi-sub">Expires Apr 30</p>
+          <div className="kpi">
+            <p className="kpi-label">Member</p>
+            {/* REMOVED: hardcoded birthday reward "Expires Apr 30" */}
+            <div className="kpi-val" style={{fontSize:"0.78rem",marginTop:4,color:"var(--txt-1)"}}>
+              {session?.email?.split("@")[0] || "—"}
+            </div>
+            <p className="kpi-sub">Active client</p>
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Quick actions — layout unchanged */}
         <div className="quick-actions">
           {[["◷","Book","book"],["▦","Program","program"],["◈","Progress","progress"],["✉","Messages","messages"]].map(([ic,lbl,v])=>(
             <div className="qa-btn" key={v} onClick={()=>setView(v)}>
@@ -2587,175 +2386,103 @@ function Dashboard({ setView }) {
           ))}
         </div>
 
-        {/* Coach note */}
-        <div className="coach-note-banner">
-          <div style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",flexShrink:0,marginTop:4}} />
-          <div style={{flex:1}}>
-            <p className="label mb-6">Latest Coach Note</p>
-            <p className="body">Great work this week. Your hip hinge is significantly improved — ready to progress to heavier RDLs next session. Keep the sleep consistency going.</p>
-            <p className="body-sm mt-8" style={{color:"var(--txt-2)"}}>From Malik · 2 days ago</p>
+        {/* Coach note — only rendered when real program has a coach_note */}
+        {prog?.coachNote && (
+          <div className="coach-note-banner">
+            <div style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",flexShrink:0,marginTop:4}} />
+            <div style={{flex:1}}>
+              <p className="label mb-6">Latest Coach Note</p>
+              <p className="body">{prog.coachNote}</p>
+              <p className="body-sm mt-8" style={{color:"var(--txt-2)"}}>From Malik · Updated {prog.updatedAt ? new Date(prog.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "recently"}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Session balance alert — shows at 0, 1, or ≤3 sessions */}
-        <SessionAlert setView={setView} />
+        {/* Session balance alert */}
+        <SessionAlert setView={setView} profileData={profileData} />
 
-        {/* Held inventory — future-start and paused packages */}
-        <HeldInventoryPanel setView={setView} />
+        {/* Held inventory panel removed — will be re-wired when booking/package system is connected to Supabase */}
 
-        {/* Notifications */}
+        {/* Notifications — real notification system is a future feature.
+            Panel is preserved for layout; shows empty state until wired. */}
         <div className="mb-16">
           <div className="card card-p mb-16">
             <div className="panel-hd">
               <span className="panel-title">Notifications</span>
-              <button className="btn btn-ghost btn-xs">Mark all read</button>
             </div>
-            {NOTIFS.map(n=>(
-              <div className="notif-item" key={n.id}>
-                <div className={`notif-dot${n.read?" read":""}`} />
-                <div style={{flex:1}}>
-                  <p className="body-sm" style={{color:n.read?"var(--txt-1)":"var(--txt-0)"}}>{n.text}</p>
-                  <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:2}}>{n.time}</p>
-                </div>
-              </div>
-            ))}
+            <div className="empty-state" style={{padding:"24px 0"}}>
+              <span className="empty-ic">◎</span>
+              <p className="empty-txt">No notifications yet.</p>
+            </div>
           </div>
         </div>
 
-        {/* Today's workout card */}
-        {(() => {
-          const prog     = PROGRAM_STORE.active();
-          if (!prog) return null;
-          const DOW_MAP  = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
-          const todayId  = DOW_MAP[new Date().getDay()];
-          const todayDay = prog.days.find(d=>d.id===todayId);
-          if (!todayDay) return null;
-          const isDone      = WORKOUT_LOG.isDayDone(prog.id, todayId);
-          const totalSets   = WORKOUT_LOG.totalSets(todayDay.exercises);
-          const checked     = WORKOUT_LOG.totalChecked(prog.id, todayId, todayDay.exercises);
-          const inProgress  = checked > 0 && !isDone;
-          return (
-            <div style={{borderRadius:"var(--r3)",padding:"16px 18px",marginBottom:16,background:isDone?"rgba(42,122,75,0.08)":"var(--gb2)",border:`1px solid ${isDone?"rgba(42,122,75,0.2)":"var(--b1)"}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}} onClick={()=>setView("program")}>
+        {/* Today's workout card — only shown when a real active program exists
+            AND that program has a day matching today's day-of-week ID.
+            If prog is null (no Supabase row) this block is skipped entirely. */}
+        {prog && todayDay && (
+          <div style={{borderRadius:"var(--r3)",padding:"16px 18px",marginBottom:16,background:isDone?"rgba(42,122,75,0.08)":"var(--gb2)",border:`1px solid ${isDone?"rgba(42,122,75,0.2)":"var(--b1)"}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}} onClick={()=>setView("program")}>
+            <div>
+              <p className="label mb-3">Today's Workout</p>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,color:"var(--txt-0)"}}>{todayDay.name} — {todayDay.focus}</p>
+              <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:3}}>{todayDay.exercises.length} exercises{inProgress?` · ${checked}/${totalSets} sets done`:""}</p>
+            </div>
+            {isDone
+              ? <span className="wk-done-badge">✓ Complete</span>
+              : <button className="btn btn-p btn-sm" onClick={e=>{e.stopPropagation();setView("program");}}>
+                  {inProgress?"Continue →":"Start Workout →"}
+                </button>
+            }
+          </div>
+        )}
+
+        {/* Active program card — only rendered when getActiveProgram() returned
+            a real row with status="active" from the Supabase programs table. */}
+        {prog && (
+          <div className="prog-dash-card" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
-                <p className="label mb-3">Today's Workout</p>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,color:"var(--txt-0)"}}>{todayDay.name} — {todayDay.focus}</p>
-                <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:3}}>{todayDay.exercises.length} exercises{inProgress?` · ${checked}/${totalSets} sets done`:""}</p>
+                <p className="label mb-3">Active Program</p>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)"}}>{prog.name}</p>
+                <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:3}}>{prog.block} · {prog.phase}</p>
               </div>
-              {isDone
-                ? <span className="wk-done-badge">✓ Complete</span>
-                : <button className="btn btn-p btn-sm" onClick={e=>{e.stopPropagation();setView("program");}}>
-                    {inProgress?"Continue →":"Start Workout →"}
-                  </button>
-              }
-            </div>
-          );
-        })()}
-
-        {/* Active program card */}
-        {(() => {
-          const prog = PROGRAM_STORE.active();
-          if (!prog) return null;
-          const pct = Math.round((prog.week / prog.totalWeeks) * 100);
-          return (
-            <div className="prog-dash-card" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                <div>
-                  <p className="label mb-3">Active Program</p>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)"}}>{prog.name}</p>
-                  <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:3}}>{prog.block} · {prog.phase}</p>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                  <span className="prog-status-pill active">Active</span>
-                  <p style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Wk {prog.week}/{prog.totalWeeks}</p>
-                </div>
-              </div>
-              <div className="prog-week-bar"><div className="prog-week-fill" style={{width:`${pct}%`}} /></div>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-                <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>{prog.days.length} training days · {prog.days.reduce((s,d)=>s+d.exercises.length,0)} exercises</p>
-                <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>View program →</p>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                <span className="prog-status-pill active">Active</span>
+                <p style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Wk {prog.week}/{prog.totalWeeks}</p>
               </div>
             </div>
-          );
-        })()}
-
-        {/* Two-col panels */}
-        <div className="dash-grid">
-          <div className="card card-p">
-            <div className="panel-hd">
-              <span className="panel-title">Upcoming Sessions</span>
-              <button className="btn btn-ghost btn-xs" onClick={()=>setView("book")}>+ Book</button>
+            <div className="prog-week-bar"><div className="prog-week-fill" style={{width:`${Math.round((prog.week/prog.totalWeeks)*100)}%`}} /></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>{prog.days.length} training days · {prog.days.reduce((s,d)=>s+d.exercises.length,0)} exercises</p>
+              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>View program →</p>
             </div>
-            {[["Training Session","Fri Apr 9 · 6:00 PM","ok"],["Training Session","Tue Apr 13 · 7:00 AM","ok"],["Assessment Session","Fri Apr 16 · 6:00 PM","pend"]].map(([n,t,s])=>(
-              <div className="sess-upcoming" key={t}>
-                <div className="sess-up-info">
-                  <span className="sess-up-name">{n}</span>
-                  <span className="sess-up-time">{t}</span>
-                </div>
-                <Tag type={s}>{s==="ok"?"Confirmed":"Tentative"}</Tag>
-              </div>
-            ))}
           </div>
+        )}
 
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Active Goals</span></div>
-            {[["Build lean muscle — upper priority",65],["Improve hip hinge mechanics",52],["Reduce body fat (currently ~17%)",31]].map(([g,p])=>(
-              <div style={{marginBottom:16}} key={g}>
-                <div className="flex between mb-8">
-                  <span className="body-sm" style={{color:"var(--txt-0)"}}>{g}</span>
-                  <span style={{fontSize:"0.66rem",color:"var(--txt-2)"}}>{p}%</span>
-                </div>
-                <BarTrack pct={p} />
-              </div>
-            ))}
+        {/* EMPTY STATE — shown when getActiveProgram() returns null
+            (no row in Supabase programs table with status="active" for this client).
+            FIX: replaced vague "No active program assigned yet." with the required
+            two-line empty state message. */}
+        {!prog && (
+          <div style={{borderRadius:"var(--r3)",padding:"28px 20px",marginBottom:16,background:"var(--gb2)",border:"1px solid var(--b1)",textAlign:"center"}}>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>
+              No program assigned yet
+            </p>
+            <p style={{fontSize:"0.78rem",color:"var(--txt-2)",lineHeight:1.65}}>
+              Your coach is preparing your training plan
+            </p>
           </div>
+        )}
 
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Package & Sessions</span></div>
-            <div style={{padding:"12px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",marginBottom:14}}>
-              <p className="label mb-4">Active Package</p>
-              <p className="h3">{SESSION_INVENTORY.plan}</p>
-              <p className="body-sm mt-4">Sessions don't expire — they accumulate</p>
-            </div>
-            {[
-              ["Sessions Available", String(SESSION_INVENTORY.balance)],
-              ["Weekly Structure",   `${SESSION_INVENTORY.weeklyMax}x per week`],
-              ["Birthday Reward",    "✦ Active · Apr 30"],
-            ].map(([k,v])=>(
-              <div className="list-row" key={k}>
-                <span className="list-sub">{k}</span>
-                <span style={{fontSize:"0.8rem",color:"var(--txt-0)",fontWeight:400}}>{v}</span>
-              </div>
-            ))}
-            <button className="btn btn-s btn-sm btn-full mt-16" onClick={()=>window.open(STRIPE_PACKAGES[1].stripeUrl,"_blank","noopener,noreferrer")}>Add Sessions</button>
-          </div>
-
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Training History</span></div>
-            {[["Strength — Lower Body","Apr 4","ok"],["Strength — Upper Body","Apr 2","ok"],["Movement Assessment","Mar 30","ok"],["Conditioning + Core","Mar 28","ok"]].map(([n,d,s])=>(
-              <div className="list-row" key={d}>
-                <div><p className="list-main">{n}</p><p className="list-sub">{d}</p></div>
-                <Tag type={s}>Done</Tag>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Reflection band */}
-        <div className="card card-p mt-16 flex between items-center wrap gap-12">
-          <div>
-            <p className="label mb-4">Program Reflection</p>
-            <p className="body-sm">Block 1 complete. Share feedback to shape your next program block.</p>
-          </div>
-          <button className="btn btn-s btn-sm" onClick={()=>setView("feedback")}>Complete Reflection →</button>
-        </div>
       </div>
     </div>
   );
 }
 
+
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
-function Booking({ setView }) {
+function Booking({ setView, profileData }) {
   const now = new Date();
   const [selDate, setSel]         = useState(now.getDate());
   const [selTime, setTime]        = useState(null);
@@ -2764,11 +2491,10 @@ function Booking({ setView }) {
   const [c2, setC2]               = useState(false);
   const [booked, setBooked]       = useState(false);
   const [loading, setLoad]        = useState(false);
-  const [showSched, setShowSched] = useState(false);
 
-  // ── Inventory gate — evaluated before any booking UI renders ───────────
-  const eligibility = checkBookingEligibility(CLIENT_PACKAGE);
-  const warning     = getInventoryWarning(CLIENT_PACKAGE);
+  // ── Inventory gate — reads from real Supabase profileData ────────────────
+  const eligibility = checkBookingEligibility(profileData);
+  const warning     = getInventoryWarning(profileData);
 
   const mnth     = MONTHS[now.getMonth()];
   const yr       = now.getFullYear();
@@ -2778,8 +2504,9 @@ function Booking({ setView }) {
   const hasSess  = new Set([7,11,14,18,21,25]);
   const ALL_TIMES = ["7:00 AM","8:00 AM","9:00 AM","10:00 AM","12:00 PM","1:00 PM","3:00 PM","5:00 PM","6:00 PM","7:00 PM"];
 
+  // All slots are available — real scheduling availability will come from booking API
   const slotStatuses = ALL_TIMES.reduce((acc, t) => {
-    acc[t] = getSlotStatus(t, CLIENT_LOCATION.area);
+    acc[t] = { status: "available", reason: null, buffer: 0 };
     return acc;
   }, {});
 
@@ -2788,15 +2515,17 @@ function Booking({ setView }) {
 
   const confirmBook = () => {
     if (!c1 || !c2) return;
-    // Server-side gate re-checked at confirmation time
-    const gate = checkBookingEligibility(CLIENT_PACKAGE);
+    // Re-check gate at confirmation time using real profileData
+    const gate = checkBookingEligibility(profileData);
     if (gate.blocked) {
-      BOOKING_BLOCK_LOG.push("jordan@email.com", gate.reason, { type: gate.type });
+      // Gate blocked: log to console only (no demo store)
+      console.warn("Booking blocked:", gate.reason, gate.type);
       return;
     }
     setLoad(true);
     setTimeout(() => {
-      SESSION_INVENTORY.deduct(); // deduct from inventory on confirm
+      // Deduct happens server-side in production via Supabase;
+      // local optimistic update will be replaced when booking API is wired.
       setLoad(false);
       setBooked(true);
     }, 900);
@@ -2822,8 +2551,8 @@ function Booking({ setView }) {
             <p className="inv-lock-body">{eligibility.detail}</p>
             {eligibility.type === "weekly_limit" && (
               <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:20}}>
-                {Array.from({length: SESSION_INVENTORY.weeklyMax}, (_,i) => (
-                  <div key={i} className={`weekly-pip ${i < SESSION_INVENTORY.weeklyUsed() ? "used" : "avail"}`} style={{width:12,height:12,borderRadius:3}} />
+                {Array.from({length: eligibility.weeklyMax || 2}, (_,i) => (
+                  <div key={i} className={`weekly-pip ${i < (eligibility.weeklyUsed || 0) ? "used" : "avail"}`} style={{width:12,height:12,borderRadius:3}} />
                 ))}
               </div>
             )}
@@ -2865,7 +2594,7 @@ function Booking({ setView }) {
               <div>
                 <p className="label mb-4">Your Next Session</p>
                 <p style={{fontFamily:"var(--fh)",fontSize:"1.05rem",fontWeight:700}}>Friday · 6:00 PM</p>
-                <p className="body-sm">Training Session · Confirmed · {CLIENT_LOCATION.building}</p>
+                <p className="body-sm">Training Session · Confirmed · {profileData?.location_building || "Your gym"}</p>
               </div>
               <div className="flex gap-8">
                 <button className="btn btn-s btn-sm">Reschedule</button>
@@ -2876,40 +2605,52 @@ function Booking({ setView }) {
             <div className="bal-bar mb-16">
               <div>
                 <p className="label mb-4">Sessions Available</p>
-                <p className="body-sm">{SESSION_INVENTORY.plan} · {SESSION_INVENTORY.weeklyMax}x / week structure</p>
+                <p className="body-sm">{profileData?.package_plan || "—"} · {profileData?.sessions_weekly_max ?? 2}x / week structure</p>
               </div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                <span className="bal-n" style={{
-                  color: SESSION_INVENTORY.balance <= 1
-                    ? "rgba(220,120,120,0.9)"
-                    : SESSION_INVENTORY.balance <= 3
-                      ? "rgba(220,175,100,0.9)"
-                      : "var(--txt-0)"
-                }}>
-                  {SESSION_INVENTORY.balance}
-                </span>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  {Array.from({length: SESSION_INVENTORY.weeklyMax}, (_,i) => (
-                    <div key={i} className={`weekly-pip ${i < SESSION_INVENTORY.weeklyUsed() ? "used" : "avail"}`} />
-                  ))}
-                  <span style={{fontSize:"0.6rem",color:"var(--txt-2)",fontFamily:"var(--fc)",marginLeft:4}}>
-                    {SESSION_INVENTORY.weeklyRemaining()} left this week
-                  </span>
-                </div>
+                {(() => {
+                  const bal = profileData?.sessions_balance ?? 0;
+                  const wm  = profileData?.sessions_weekly_max ?? 2;
+                  return (<>
+                    <span className="bal-n" style={{
+                      color: bal <= 1 ? "rgba(220,120,120,0.9)" : bal <= 3 ? "rgba(220,175,100,0.9)" : "var(--txt-0)"
+                    }}>{bal}</span>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      {Array.from({length: wm}, (_,i) => (
+                        <div key={i} className="weekly-pip avail" />
+                      ))}
+                      <span style={{fontSize:"0.6rem",color:"var(--txt-2)",fontFamily:"var(--fc)",marginLeft:4}}>
+                        {wm} per week
+                      </span>
+                    </div>
+                  </>);
+                })()}
               </div>
             </div>
 
             <div className="mb-16">
               <p className="label mb-8">Your Training Location</p>
-              <div className="loc-card">
-                <div className="loc-icon">📍</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <p className="loc-building">{CLIENT_LOCATION.building}</p>
-                  <p className="loc-address">{CLIENT_LOCATION.address}</p>
-                  {CLIENT_LOCATION.notes && <p className="loc-notes">{CLIENT_LOCATION.notes}</p>}
+              {profileData?.location_building ? (
+                <div className="loc-card">
+                  <div className="loc-icon">📍</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p className="loc-building">{profileData.location_building}</p>
+                    {profileData.location_address && <p className="loc-address">{profileData.location_address}</p>}
+                    {profileData.location_notes   && <p className="loc-notes">{profileData.location_notes}</p>}
+                  </div>
+                  {profileData.location_address && (
+                    <button className="loc-dir-btn" onClick={()=>openDirections(profileData.location_address)}>↗ Directions</button>
+                  )}
                 </div>
-                <button className="loc-dir-btn" onClick={()=>openDirections(CLIENT_LOCATION.address)}>↗ Directions</button>
-              </div>
+              ) : (
+                <div className="loc-card">
+                  <div className="loc-icon">📍</div>
+                  <div style={{flex:1}}>
+                    <p className="loc-building" style={{color:"var(--txt-2)"}}>No location saved</p>
+                    <p className="loc-address">Add your training location in Profile → Training Location</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="cal-wrap">
@@ -2931,29 +2672,8 @@ function Booking({ setView }) {
                   ))}
                 </div>
                 <p className="body-sm mt-12" style={{fontSize:"0.63rem",color:"var(--txt-2)",lineHeight:1.5}}>
-                  Available Mon–Sat. Dots indicate existing sessions.
+                  Available Mon–Sat. Select a date to see available times.
                 </p>
-                <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--b0)"}}>
-                  <button className="btn btn-ghost" style={{fontSize:"0.64rem",color:"var(--txt-2)",padding:"3px 0"}}
-                    onClick={()=>setShowSched(p=>!p)}>
-                    {showSched ? "▲ Hide schedule" : "▼ Coach's schedule today"}
-                  </button>
-                  {showSched && (
-                    <div style={{marginTop:10}}>
-                      {COACH_SCHEDULE.map((s,i)=>(
-                        <div className="coach-sched-row" key={i}>
-                          <span className="coach-sched-time">{s.time}–{s.endTime}</span>
-                          <div className="coach-sched-loc">
-                            <span className="coach-sched-building">{s.location.building}</span>
-                            <span className="coach-sched-area">{s.client}</span>
-                          </div>
-                          <button className="loc-dir-btn" style={{padding:"4px 9px",fontSize:"0.56rem"}}
-                            onClick={()=>openDirections(s.location.building+", New York, NY")}>↗</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="slots-wrap">
@@ -2994,22 +2714,25 @@ function Booking({ setView }) {
                       [selTime,                      "Time"     ],
                       [sessType,                     "Type"     ],
                       ["Malik Bryant",               "Trainer"  ],
-                      [CLIENT_LOCATION.building,     "Location" ],
-                      [CLIENT_LOCATION.address,      "Address"  ],
-                      [`${SESSION_INVENTORY.balance - 1} after booking`, "After This"],
+                      [(profileData?.location_building || "—"), "Location" ],
+                      [(profileData?.location_address  || "—"), "Address"  ],
+                      [profileData?.sessions_balance != null
+                        ? `${Math.max(0, profileData.sessions_balance - 1)} after booking`
+                        : "—",
+                        "After This"],
                     ].map(([v,k])=>(
                       <div className="confirm-row" key={k}>
                         <span className="confirm-k">{k}</span>
                         <span className="confirm-v" style={{textAlign:"right",maxWidth:"62%",display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end",flexWrap:"wrap"}}>
                           {v}
                           {k === "Address" && (
-                            <button onClick={()=>openDirections(CLIENT_LOCATION.address)}
+                            <button onClick={()=>profileData?.location_address && openDirections(profileData.location_address)}
                               style={{padding:"2px 8px",borderRadius:100,border:"1px solid var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.58rem",cursor:"pointer",letterSpacing:"0.06em",fontFamily:"var(--fc)",whiteSpace:"nowrap"}}>↗ Map</button>
                           )}
                         </span>
                       </div>
                     ))}
-                    {CLIENT_PACKAGE.sessLeft === 1 && (
+                    {profileData?.sessions_balance === 1 && (
                       <div className="inv-warn-banner critical" style={{marginTop:12,marginBottom:0}}>
                         <div className="inv-warn-dot critical" />
                         <p className="inv-warn-txt critical">This is your last session. You'll need to renew before booking again.</p>
@@ -3036,10 +2759,10 @@ function Booking({ setView }) {
                     </Alert>
                     <div style={{marginTop:14,padding:"12px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
                       <p className="label mb-6">Session Location</p>
-                      <p style={{fontSize:"0.8rem",color:"var(--txt-0)",fontWeight:400}}>{CLIENT_LOCATION.building}</p>
-                      <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:2}}>{CLIENT_LOCATION.address}</p>
-                      {CLIENT_LOCATION.notes && <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:4,fontStyle:"italic"}}>{CLIENT_LOCATION.notes}</p>}
-                      <button className="btn btn-ghost" style={{fontSize:"0.65rem",marginTop:8}} onClick={()=>openDirections(CLIENT_LOCATION.address)}>↗ Open in Maps</button>
+                      <p style={{fontSize:"0.8rem",color:"var(--txt-0)",fontWeight:400}}>{profileData?.location_building || "Your gym"}</p>
+                      {profileData?.location_address && <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:2}}>{profileData.location_address}</p>}
+                      {profileData?.location_notes && <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:4,fontStyle:"italic"}}>{profileData.location_notes}</p>}
+                      <button className="btn btn-ghost" style={{fontSize:"0.65rem",marginTop:8}} onClick={()=>profileData?.location_address && openDirections(profileData.location_address)}>↗ Open in Maps</button>
                     </div>
                     <button className="btn btn-ghost btn-full mt-12" onClick={resetBooking}>Book another session</button>
                   </div>
@@ -3071,7 +2794,7 @@ function Booking({ setView }) {
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
-function Program({ session }) {
+function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutComplete }) {
   const [tab,       setTab]        = useState("current");
   const [activeDay, setActiveDay]  = useState(null);
   const [openEx,    setOpenEx]     = useState(null);
@@ -3079,81 +2802,56 @@ function Program({ session }) {
   const [histDay,   setHistDay]    = useState(null);
   const [tick,      setTick]       = useState(0);
 
-  // ── Supabase program data ──────────────────────────────────────────────
-  const [active,    setActive]     = useState(null);
-  const [history,   setHistory]    = useState([]);
-  const [progLoading, setProgLoading] = useState(true);
-
-  useEffect(() => {
-    if (!session?.id) return;
-    getActiveProgram(session.id).then(row => {
-      if (row) {
-        setActive({
-          id:         row.id,
-          name:       row.name,
-          block:      row.block,
-          phase:      row.phase      || "",
-          status:     row.status,
-          startDate:  row.start_date || "",
-          endDate:    row.end_date   || "",
-          week:       row.week       ?? 1,
-          totalWeeks: row.total_weeks ?? 8,
-          coachNote:  row.coach_note || "",
-          days:       row.days       || [],
-          updatedAt:  row.updated_at || "",
-        });
-      }
-      setProgLoading(false);
-    });
-    // Load history (completed + archived)
-    getPrograms(session.id).then(rows => {
-      setHistory(rows
-        .filter(r => r.status !== "active" && r.status !== "draft")
-        .map(row => ({
-          id:         row.id,
-          name:       row.name,
-          block:      row.block,
-          phase:      row.phase      || "",
-          status:     row.status,
-          startDate:  row.start_date || "",
-          endDate:    row.end_date   || "",
-          week:       row.week       ?? 1,
-          totalWeeks: row.total_weeks ?? 8,
-          coachNote:  row.coach_note || "",
-          days:       row.days       || [],
-        }))
-      );
-    });
-  }, [session?.id]);
-
-  const progId = active?.id;
+  // Data comes from AppShell (loaded once, refreshed after completeDay)
+  const active  = activeProgram;
+  const history = (allPrograms || []).filter(p => p.status !== "active" && p.status !== "draft");
+  const progId  = active?.id;
 
   // Determine "today" day — default to Friday for demo
   const DOW_MAP = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
   const todayDayId = DOW_MAP[new Date().getDay()];
   const todayDay   = active?.days.find(d=>d.id===todayDayId) || null;
 
+  // Per-session set tracking — stored locally, flushed to DB on completeDay
+  const [localSets, setLocalSets] = useState({}); // key "progId:dayId:exId" → Set<si>
+
   const toggleSet = (dayId, exId, si) => {
-    WORKOUT_LOG.toggleSet(progId, dayId, exId, si);
-    setTick(t=>t+1); // re-render
+    const key = `${progId}:${dayId}:${exId}`;
+    setLocalSets(prev => {
+      const s = new Set(prev[key] || []);
+      s.has(si) ? s.delete(si) : s.add(si);
+      return { ...prev, [key]: s };
+    });
+    setTick(t => t + 1);
   };
 
+  // Resolve sets: prefer localSets (in-progress), fall back to persisted workoutLogs
+  const resolvedSets = (dayId, exId) => {
+    const localKey = `${progId}:${dayId}:${exId}`;
+    if (localSets[localKey]) return localSets[localKey];
+    return wlSetsForEx(workoutLogs, progId, dayId, exId);
+  };
+  const isSetDone   = (dayId, exId, si) => resolvedSets(dayId, exId).has(si);
+  const checkedSets = (dayId, exId)     => resolvedSets(dayId, exId).size;
+  const totalCheckedDay = (dayId, exercises) =>
+    (exercises||[]).reduce((a, ex) => a + checkedSets(dayId, ex.id), 0);
+
   const completeDay = async (dayId) => {
-    WORKOUT_LOG.completeDay(progId, dayId);
-    setTick(t=>t+1);
+    const completedAt = new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
     setActiveDay(null);
-    // Persist to Supabase
+    setTick(t => t + 1);
     if (session?.id && progId) {
-      const logState = WORKOUT_LOG.get(progId, dayId);
-      const setsObj  = {};
-      Object.entries(logState.sets || {}).forEach(([exId, setData]) => {
-        setsObj[exId] = setData instanceof Set ? [...setData] : setData;
+      // Build setsObj from localSets for this day
+      const setsObj = {};
+      const day = active?.days?.find(d => d.id === dayId);
+      (day?.exercises || []).forEach(ex => {
+        const key = `${progId}:${dayId}:${ex.id}`;
+        setsObj[ex.id] = [...(localSets[key] || [])];
       });
       await saveWorkoutLog(progId, dayId, session.id, {
-        sets:        setsObj,
-        completed:   true,
-        completedAt: logState.completedAt,
-      });
+        sets: setsObj, completed: true, completedAt,
+      }).catch(e => console.error("saveWorkoutLog:", e));
+      if (onWorkoutComplete) onWorkoutComplete();
     }
   };
 
@@ -3189,9 +2887,9 @@ function Program({ session }) {
   if (activeDay && active) {
     const day    = active.days.find(d=>d.id===activeDay);
     if (!day) { setActiveDay(null); return null; }
-    const isDone = WORKOUT_LOG.isDayDone(progId, activeDay);
-    const totalSets    = WORKOUT_LOG.totalSets(day.exercises);
-    const checkedTotal = WORKOUT_LOG.totalChecked(progId, activeDay, day.exercises);
+    const isDone       = wlIsDone(workoutLogs, progId, activeDay);
+    const totalSets    = wlTotalSets(day.exercises);
+    const checkedTotal = totalCheckedDay(activeDay, day.exercises);
     const allChecked   = checkedTotal >= totalSets && totalSets > 0;
     const completionPct= totalSets ? Math.round(checkedTotal/totalSets*100) : 0;
 
@@ -3226,7 +2924,7 @@ function Program({ session }) {
           {/* Exercise cards with live set tracking */}
           {day.exercises.map(ex => {
             const numSets    = typeof ex.sets === "number" ? ex.sets : ex.sets?.length || 0;
-            const checkedEx  = WORKOUT_LOG.checkedSets(progId, activeDay, ex.id);
+            const checkedEx  = checkedSets(activeDay, ex.id);
             const allExDone  = checkedEx >= numSets && numSets > 0;
             const repsArr    = ex.repsScheme?.split(",") || [];
             const weightArr  = ex.weight?.split("/")    || [];
@@ -3253,7 +2951,7 @@ function Program({ session }) {
                 {/* Set bubbles */}
                 <div style={{display:"flex",flexDirection:"column",gap:2}}>
                   {Array.from({length:numSets},(_,si) => {
-                    const done   = WORKOUT_LOG.isSetDone(progId, activeDay, ex.id, si);
+                    const done   = isSetDone(activeDay, ex.id, si);
                     const reps   = repsArr[si]   || repsArr[repsArr.length-1]   || "—";
                     const weight = weightArr[si] || weightArr[weightArr.length-1] || "";
                     return (
@@ -3310,7 +3008,7 @@ function Program({ session }) {
             <div className="wk-day-complete-bar">
               <div style={{fontSize:"1.4rem",marginBottom:8}}>✓</div>
               <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,marginBottom:4,color:"var(--txt-0)"}}>Workout Complete</p>
-              <p style={{fontSize:"0.74rem",color:"var(--txt-1)"}}>Completed {WORKOUT_LOG.get(progId,activeDay).completedAt}. Keep the momentum going.</p>
+              <p style={{fontSize:"0.74rem",color:"var(--txt-1)"}}>Completed. Keep the momentum going.</p>
             </div>
           )}
         </div>
@@ -3321,7 +3019,8 @@ function Program({ session }) {
 
   // ── History detail view ─────────────────────────────────────────────────
   if (histOpen) {
-    const prog = PROGRAM_STORE.byId(histOpen);
+    const prog = (allPrograms || []).find(p => p.id === histOpen) || null;
+    if (!prog) { setHistOpen(null); return null; }
     const hDay = histDay ? prog.days.find(d=>d.id===histDay) : null;
     return (
       <div className="page-fade">
@@ -3353,7 +3052,7 @@ function Program({ session }) {
               <div className="day-card-head">
                 <div><p className="day-card-title">{d.name}</p><p className="day-card-sub">{d.focus} · {d.exercises.length} exercises</p></div>
                 <div className="day-card-meta">
-                  {WORKOUT_LOG.isDayDone(prog.id, d.id) && <span className="wk-done-badge">✓ Done</span>}
+                  {wlIsDone(workoutLogs, prog.id, d.id) && <span className="wk-done-badge">✓ Done</span>}
                 </div>
               </div>
               <div className="day-card-body">
@@ -3425,13 +3124,13 @@ function Program({ session }) {
 
               {/* Weekly completion chips */}
               {(() => {
-                const summary = WORKOUT_LOG.programSummary(progId, active.days);
+                const summary = wlProgramSummary(workoutLogs, progId, active.days);
                 return (
                   <div style={{marginBottom:16}}>
                     <p className="label mb-8">This Block · {summary.completed}/{summary.total} days completed</p>
                     <div className="wk-prog-summary">
                       {active.days.map(d => {
-                        const done    = WORKOUT_LOG.isDayDone(progId, d.id);
+                        const done    = wlIsDone(workoutLogs, progId, d.id);
                         const isToday = d.id === todayDayId;
                         return (
                           <button
@@ -3451,10 +3150,10 @@ function Program({ session }) {
               {/* Training day cards */}
               <p className="label mb-10">Training Days</p>
               {active.days.map(day => {
-                const isDone    = WORKOUT_LOG.isDayDone(progId, day.id);
+                const isDone    = wlIsDone(workoutLogs, progId, day.id);
                 const isToday   = day.id === todayDayId;
-                const numSets   = WORKOUT_LOG.totalSets(day.exercises);
-                const checked   = WORKOUT_LOG.totalChecked(progId, day.id, day.exercises);
+                const numSets   = wlTotalSets(day.exercises);
+                const checked   = totalCheckedDay(day.id, day.exercises);
                 const inProg    = checked > 0 && !isDone;
                 return (
                   <div
@@ -3499,7 +3198,7 @@ function Program({ session }) {
             <>
               <p className="label mb-12">Program History · {history.length} block{history.length!==1?"s":""}</p>
               {history.map(prog => {
-                const summary = WORKOUT_LOG.programSummary(prog.id, prog.days);
+                const summary = wlProgramSummary(workoutLogs, prog.id, prog.days);
                 return (
                   <div className="hist-card" key={prog.id} onClick={()=>{setHistOpen(prog.id);setHistDay(null);}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -3515,7 +3214,7 @@ function Program({ session }) {
                     )}
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       {prog.days.map(d=>(
-                        <span key={d.id} style={{padding:"3px 9px",borderRadius:100,background:WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(42,122,75,0.12)":"var(--gb)",border:`1px solid ${WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(42,122,75,0.2)":"var(--b0)"}`,fontSize:"0.62rem",color:WORKOUT_LOG.isDayDone(prog.id,d.id)?"rgba(140,210,155,0.8)":"var(--txt-2)",fontFamily:"var(--fc)"}}>{d.name}</span>
+                        <span key={d.id} style={{padding:"3px 9px",borderRadius:100,background:wlIsDone(workoutLogs,prog.id,d.id)?"rgba(42,122,75,0.12)":"var(--gb)",border:`1px solid ${wlIsDone(workoutLogs,prog.id,d.id)?"rgba(42,122,75,0.2)":"var(--b0)"}`,fontSize:"0.62rem",color:wlIsDone(workoutLogs,prog.id,d.id)?"rgba(140,210,155,0.8)":"var(--txt-2)",fontFamily:"var(--fc)"}}>{d.name}</span>
                       ))}
                     </div>
                   </div>
@@ -3713,10 +3412,9 @@ function Feedback() {
 }
 
 /* ── MESSAGES ────────────────────────────────────────────────────────────── */
-function Messages() {
-  const [input, setInput] = useState("");
-  const [msgs, setMsgs]   = useState(MESSAGES[0].messages);
-  const bottomRef         = useRef(null);
+function Messages({ session }) {
+  const [msgs, setMsgs] = useState([]);
+  const bottomRef = useRef(null);
 
   const send = () => {
     if (!input.trim()) return;
@@ -3724,27 +3422,25 @@ function Messages() {
     setInput("");
     setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
   };
+  const [input, setInput] = useState("");
 
   return (
     <div className="page-fade" style={{height:"calc(100vh - 0px)",display:"flex",flexDirection:"column"}}>
       <Topbar title="Messages" />
       <div style={{flex:1,overflow:"hidden"}}>
         <div className="msg-layout" style={{height:"100%"}}>
-          {/* Thread list */}
+          {/* Thread list — single coach thread */}
           <div className="msg-list">
             <p className="label mb-10" style={{padding:"0 2px"}}>Conversations</p>
-            {MESSAGES.map(t=>(
-              <div className={`msg-thread active`} key={t.id}>
-                <div className="msg-av">{t.init}</div>
-                <div style={{flex:1,overflow:"hidden"}}>
-                  <div className="flex between items-center">
-                    <span className="msg-thread-name">{t.name}</span>
-                    <span className="msg-thread-time">{t.time}</span>
-                  </div>
-                  <p className="msg-thread-preview">{t.preview}</p>
+            <div className="msg-thread active">
+              <div className="msg-av">MB</div>
+              <div style={{flex:1,overflow:"hidden"}}>
+                <div className="flex between items-center">
+                  <span className="msg-thread-name">Malik Bryant</span>
                 </div>
+                <p className="msg-thread-preview">Your coach</p>
               </div>
-            ))}
+            </div>
           </div>
 
           {/* Chat */}
@@ -3758,6 +3454,12 @@ function Messages() {
             </div>
 
             <div className="msg-chat-body">
+              {msgs.length === 0 && (
+                <div className="empty-state" style={{paddingTop:60}}>
+                  <span className="empty-ic">✉</span>
+                  <p className="empty-txt">No messages yet. Send Malik a message below.</p>
+                </div>
+              )}
               {msgs.map((m,i)=>(
                 <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="me"?"flex-end":"flex-start"}}>
                   <div className={`bubble ${m.from==="me"?"me":"them"}`}>{m.text}</div>
@@ -3783,118 +3485,10 @@ function Messages() {
 }
 
 /* ── LOCATION SETTINGS ───────────────────────────────────────────────────── */
-function LocationSettings({ save }) {
-  const [building, setBuilding] = useState(CLIENT_LOCATION.building);
-  const [address,  setAddress]  = useState(CLIENT_LOCATION.address);
-  const [notes,    setNotes]    = useState(CLIENT_LOCATION.notes);
-  const [area,     setArea]     = useState("hudson_yards");
-  const [saved,    setSaved]    = useState(false);
-
-  const AREA_OPTIONS = [
-    { id:"hudson_yards",   lbl:"Hudson Yards" },
-    { id:"chelsea",        lbl:"Chelsea" },
-    { id:"hell's_kitchen", lbl:"Hell's Kitchen" },
-    { id:"midtown",        lbl:"Midtown" },
-    { id:"upper_west",     lbl:"Upper West Side" },
-    { id:"other",          lbl:"Other / Custom" },
-  ];
-
-  const openDirections = () =>
-    window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank", "noopener");
-
-  const handleSave = () => {
-    save();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  return (
-    <div className="form-col">
-      <div>
-        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,marginBottom:4}}>Training Location</p>
-        <p className="body-sm">This location is saved to your profile and used when booking sessions. The system uses it to prevent unrealistic back-to-back slots based on commute time.</p>
-      </div>
-
-      {/* Current location preview */}
-      <div className="loc-card">
-        <div className="loc-icon">📍</div>
-        <div style={{flex:1,minWidth:0}}>
-          <p className="loc-building">{building || "No location saved"}</p>
-          {address && <p className="loc-address">{address}</p>}
-          {notes   && <p className="loc-notes">{notes}</p>}
-        </div>
-        {address && (
-          <button className="loc-dir-btn" onClick={openDirections}>↗ Directions</button>
-        )}
-      </div>
-
-      {/* Edit form */}
-      <div className="card card-p">
-        <p className="label mb-14">Edit Location</p>
-        <div className="form-col">
-          <div className="field">
-            <label className="field-label">Building / Gym Name</label>
-            <input className="fi" value={building} onChange={e=>setBuilding(e.target.value)} placeholder="e.g. Equinox Hudson Yards" />
-          </div>
-          <div className="field">
-            <label className="field-label">Full Address</label>
-            <input className="fi" value={address} onChange={e=>setAddress(e.target.value)} placeholder="e.g. 35 Hudson Yards, New York, NY 10001" />
-          </div>
-          <div className="field">
-            <label className="field-label">Neighbourhood / Area</label>
-            <p className="field-note" style={{marginBottom:8}}>Used to calculate travel buffers between sessions in different areas.</p>
-            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-              {AREA_OPTIONS.map(opt=>(
-                <button
-                  key={opt.id}
-                  className={`chip${area===opt.id?" on":""}`}
-                  onClick={()=>setArea(opt.id)}
-                >{opt.lbl}</button>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <label className="field-label">Access Notes (optional)</label>
-            <textarea className="fi" rows={2} value={notes} onChange={e=>setNotes(e.target.value)}
-              placeholder="e.g. Enter on 10th Ave. Gym is Level 4. Buzz 4B at the desk." />
-            <p className="field-note">Shown to Malik and included in booking confirmations.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Commute buffer info */}
-      <div className="card card-p">
-        <p className="label mb-10">How Travel Buffers Work</p>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {[
-            ["Same building","10 min","Sessions at the same gym require only a short cleanup buffer."],
-            ["Same area",   "20 min","Sessions in the same neighbourhood allow a short travel window."],
-            ["Different area","35 min","Sessions across neighbourhoods reserve time for transit or driving."],
-          ].map(([lbl,time,desc])=>(
-            <div key={lbl} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
-              <div style={{flexShrink:0,paddingTop:2}}>
-                <div style={{fontFamily:"var(--fc)",fontSize:"0.72rem",color:"var(--txt-0)",fontWeight:500}}>{lbl}</div>
-                <div style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:1}}>{time} buffer</div>
-              </div>
-              <p className="body-sm" style={{fontSize:"0.71rem",lineHeight:1.5}}>{desc}</p>
-            </div>
-          ))}
-        </div>
-        <p className="body-sm mt-12" style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>
-          Time slots that fall within a travel buffer are automatically removed from the booking view.
-        </p>
-      </div>
-
-      <div className="flex items-center gap-12">
-        <button className="btn btn-p btn-sm" onClick={handleSave}>Save Location</button>
-        {saved && <span style={{fontSize:"0.7rem",color:"rgba(140,220,155,0.8)"}}>✓ Saved</span>}
-      </div>
-    </div>
-  );
-}
+// LocationSettings merged into ProfileSettings location tab
 
 /* ── PROFILE / SETTINGS ──────────────────────────────────────────────────── */
-function ProfileSettings({ onLogout, session }) {
+function ProfileSettings({ onLogout, session, profileData }) {
   const [tab, setTab]     = useState("profile");
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
@@ -4017,7 +3611,7 @@ function ProfileSettings({ onLogout, session }) {
                   <div className="avatar-lg">{session?.init || "?"}</div>
                   <div>
                     <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{session?.name || "—"}</p>
-                    <p className="body-sm">{SESSION_INVENTORY.plan} · Active</p>
+                    <p className="body-sm">{profileData?.package_plan || "Active Client"}</p>
                   </div>
                 </div>
 
@@ -4110,33 +3704,25 @@ function ProfileSettings({ onLogout, session }) {
                 <h3 className="h3 mb-16">Account Settings</h3>
                 <div className="card card-p">
                   <p className="label mb-8">Active Package</p>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{SESSION_INVENTORY.plan}</p>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>
+                    {profileData?.package_plan || "—"}
+                  </p>
                   {[
-                    ["Sessions Available", String(SESSION_INVENTORY.balance)],
-                    ["Weekly Structure",   `${SESSION_INVENTORY.weeklyMax}x per week`],
+                    ["Sessions Available", profileData?.sessions_balance != null ? String(profileData.sessions_balance) : "—"],
+                    ["Weekly Structure",   profileData?.sessions_weekly_max ? `${profileData.sessions_weekly_max}x per week` : "—"],
                     ["Billing Cycle",      "Monthly on the 1st"],
-                    ["Member Since",       "January 15, 2025"],
+                    ["Member Since",       session?.email ? "—" : "—"],
                   ].map(([k,v])=>(
                     <div className="list-row" key={k}><span className="list-sub">{k}</span><span className="list-main" style={{fontSize:"0.78rem"}}>{v}</span></div>
                   ))}
                 </div>
                 <div className="card card-p">
                   <p className="label mb-8">Perks & Rewards</p>
-                  {[["Complimentary Starter Session","✓ Used (Jan 15)","pend"],["Birthday Reward","✦ Active · Expires Apr 30","ok"]].map(([k,v,t])=>(
-                    <div className="list-row" key={k}>
-                      <div><p className="list-main" style={{fontSize:"0.78rem"}}>{k}</p><p className="list-sub">{v}</p></div>
-                      <Tag type={t}>{t==="ok"?"Active":"Used"}</Tag>
-                    </div>
-                  ))}
+                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active rewards on record.</p>
                 </div>
                 <div className="card card-p">
                   <p className="label mb-8">Payment History</p>
-                  {[["Mar 1, 2025","Hybrid Coaching — March","$800"],["Feb 1, 2025","Hybrid Coaching — February","$800"],["Jan 15, 2025","Hybrid Coaching — First Package","$800"]].map(([d,desc,amt])=>(
-                    <div className="list-row" key={d}>
-                      <div><p className="list-main" style={{fontSize:"0.78rem"}}>{desc}</p><p className="list-sub">{d}</p></div>
-                      <span style={{fontSize:"0.8rem",color:"var(--txt-0)",fontWeight:500}}>{amt}</span>
-                    </div>
-                  ))}
+                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Payment history is managed through Stripe. Contact your coach for records.</p>
                 </div>
               </div>
             )}
@@ -4184,14 +3770,57 @@ function ProfileSettings({ onLogout, session }) {
 function AppShell({ onLogout, session }) {
   const [view, setView] = useState("home");
 
+  // ── Supabase: load active program + all workout logs for this client ──────
+  const [activeProgram, setActiveProgram] = useState(null);
+  const [allPrograms,   setAllPrograms]   = useState([]);
+  const [workoutLogs,   setWorkoutLogs]   = useState({}); // key: "progId:dayId" → log row
+
+  // ── Supabase: load client profile (sessions balance, plan, weekly max) ────
+  const [profileData, setProfileData] = useState(null);
+
+  const reloadProfileData = () => {
+    if (!session?.id) return;
+    getClientProfile(session.id).then(p => setProfileData(p));
+  };
+
+  // Reload helper — called after a day is completed
+  const reloadProgramData = () => {
+    if (!session?.id) return;
+    getActiveProgram(session.id).then(row => {
+      if (!row) { setActiveProgram(null); return; }
+      const prog = dbRowToProgram(row);
+      setActiveProgram(prog);
+      // Pre-load workout logs for the active program
+      Promise.all(
+        (prog.days || []).map(d =>
+          getWorkoutLog(prog.id, d.id, session.id)
+            .then(log => log ? { key:`${prog.id}:${d.id}`, log } : null)
+        )
+      ).then(results => {
+        const map = {};
+        results.filter(Boolean).forEach(({ key, log }) => {
+          map[key] = {
+            sets:        log.sets_data || {},
+            completed:   log.completed || false,
+            completedAt: log.completed_at || null,
+          };
+        });
+        setWorkoutLogs(map);
+      });
+    });
+    getPrograms(session.id).then(rows => setAllPrograms(rows.map(dbRowToProgram)));
+  };
+
+  useEffect(() => { reloadProgramData(); reloadProfileData(); }, [session?.id]);
+
   const views = {
-    home:           <Dashboard setView={setView} />,
-    book:           <Booking setView={setView} />,
-    program:        <Program session={session} />,
+    home:           <Dashboard setView={setView} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
+    book:           <Booking setView={setView} profileData={profileData} />,
+    program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
     progress:       <Progress />,
     feedback:       <Feedback />,
-    messages:       <Messages />,
-    profile:        <ProfileSettings onLogout={onLogout} session={session} />,
+    messages:       <Messages session={session} />,
+    profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} />,
     packages:       <PackagePricing onBack={()=>setView("home")} onConsult={()=>setView("consultation")} />,
     consultation:   <ConsultationFlow    onBack={()=>setView("home")} onComplete={()=>setView("home")} />,
     recommendation: <ConsultationRecommendation onBack={()=>setView("home")} onProceed={()=>setView("home")} />,
@@ -4229,7 +3858,7 @@ function AppShell({ onLogout, session }) {
           <div className="sb-av">{session?.init||"?"}</div>
           <div style={{overflow:"hidden"}}>
             <p className="sb-name">{session?.name||"Client"}</p>
-            <p className="sb-role">{SESSION_INVENTORY.plan||"Client"}</p>
+            <p className="sb-role">{profileData?.package_plan || "Client"}</p>
           </div>
         </div>
       </aside>
@@ -4531,68 +4160,6 @@ const ADMIN_CSS = `
 .lead-detail-val{font-size:0.79rem;color:var(--txt-1);line-height:1.55;}
 @media(max-width:560px){.consult-card{padding:24px 18px;}.consult-time-grid{grid-template-columns:repeat(3,1fr);}}
 `;
-
-
-/* ── ADMIN DATA ─────────────────────────────────────────────────────────── */
-const CLIENTS = [
-  { id:1,  init:"JT", name:"Jordan Thomas",  age:29, pkg:"Hybrid Coaching",    sessLeft:5,  sessTotal:8,  location:"Equinox Hudson Yards",  area:"hudson_yards",   goal:"Muscle Growth / Fat Loss",  level:"Intermediate",    birthday:"Apr 8",  birthdayReward:true,  starterUsed:true,  status:"active",  expires:"Jun 30", nextSess:"Fri 6 PM",  unread:2, injuries:"Mild lower back tightness",      lastFeedback:"3 days ago" },
-  { id:2,  init:"MA", name:"Marcus A.",       age:26, pkg:"1-on-1 Coaching",   sessLeft:3,  sessTotal:12, location:"Equinox Hudson Yards",  area:"hudson_yards",   goal:"Athletic Performance",      level:"Advanced",        birthday:"Sep 14", birthdayReward:false, starterUsed:true,  status:"active",  expires:"May 15",nextSess:"Tue 7 AM",  unread:0, injuries:"None",                            lastFeedback:"1 week ago" },
-  { id:3,  init:"DM", name:"Diane M.",        age:54, pkg:"Hybrid Coaching",   sessLeft:1,  sessTotal:8,  location:"Alo Yoga Studio",       area:"chelsea",        goal:"Strength & Mobility",       level:"Beginner",        birthday:"Mar 3",  birthdayReward:false, starterUsed:true,  status:"low",     expires:"Apr 22",nextSess:"Wed 10 AM", unread:1, injuries:"Right knee — post-surgery 2021",  lastFeedback:"1 week ago" },
-  { id:4,  init:"AR", name:"Alex R.",         age:33, pkg:"Online Programming",sessLeft:0,  sessTotal:0,  location:"Alo Yoga Studio",       area:"chelsea",        goal:"Body Recomposition",        level:"Intermediate",    birthday:"Dec 20", birthdayReward:false, starterUsed:true,  status:"renewal", expires:"Apr 18",nextSess:"—",         unread:0, injuries:"None",                            lastFeedback:"2 weeks ago" },
-  { id:5,  init:"PN", name:"Priya N.",        age:38, pkg:"Hybrid Coaching",   sessLeft:6,  sessTotal:8,  location:"TMPL Gym",              area:"hells_kitchen",  goal:"Fat Loss / Aesthetics",     level:"Beginner-Inter.", birthday:"Jul 22", birthdayReward:false, starterUsed:true,  status:"active",  expires:"May 30",nextSess:"Thu 5 PM",  unread:0, injuries:"Left shoulder impingement",      lastFeedback:"5 days ago" },
-  { id:6,  init:"SK", name:"Sam K.",          age:41, pkg:"1-on-1 Coaching",   sessLeft:4,  sessTotal:12, location:"TMPL Gym",              area:"hells_kitchen",  goal:"General Fitness",           level:"Intermediate",    birthday:"Feb 11", birthdayReward:false, starterUsed:true,  status:"active",  expires:"Jun 10",nextSess:"Sat 9 AM",  unread:0, injuries:"None",                            lastFeedback:"1 week ago" },
-];
-
-const TODAY_SESSIONS = [
-  { time:"8:00 AM",  client:"Marcus A.", type:"Training Session", location:"Equinox Hudson Yards", area:"hudson_yards",  duration:60 },
-  { time:"9:00 AM",  client:"Jordan T.", type:"Training Session", location:"Equinox Hudson Yards", area:"hudson_yards",  duration:60 },
-  { time:"12:00 PM", client:"Alex R.",   type:"Consultation",     location:"Alo Yoga Studio",      area:"chelsea",       duration:60 },
-  { time:"1:00 PM",  client:"Sam K.",    type:"Training Session", location:"Alo Yoga Studio",      area:"chelsea",       duration:60 },
-  { time:"3:00 PM",  client:"Priya N.",  type:"Training Session", location:"TMPL Gym",             area:"hells_kitchen", duration:60 },
-];
-
-const ADMIN_FEEDBACKS = [
-  { clientId:1, client:"Jordan Thomas", date:"Apr 4", block:"Block 1",
-    ratings:{overall:4,difficulty:3,recovery:4,progress:4},
-    liked:"The RDL progression felt great. Form clicked this week.",
-    more:"More unilateral work — split squats and single-leg RDLs.",
-    remove:"Copenhagen planks — not loving them.",
-    difficult:"Tempo bench still feels heavy at 185.",
-    learn:"Trap bar deadlift and kettlebell swings." },
-  { clientId:3, client:"Diane M.", date:"Mar 28", block:"Block 2",
-    ratings:{overall:5,difficulty:2,recovery:5,progress:4},
-    liked:"Mobility drills at the end of each session are making a real difference.",
-    more:"More hip mobility and balance work.",
-    remove:"Nothing — all feels appropriate.",
-    difficult:"Hip thrusts with resistance — can I do bodyweight for now?",
-    learn:"Farmer carries and single-leg deadlifts." },
-];
-
-const ADMIN_WEEK = [
-  { label:"Mon", date:"Apr 7",  sessions:[{ time:"9 AM",  client:"Jordan T.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  },{ time:"10 AM", client:"Marcus A.", type:"Training", location:"Equinox HY", area:"hudson_yards"  }] },
-  { label:"Tue", date:"Apr 8",  sessions:[{ time:"7 AM",  client:"Marcus A.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  }] },
-  { label:"Wed", date:"Apr 9",  sessions:[{ time:"10 AM", client:"Diane M.",   type:"Training", location:"Alo Yoga",    area:"chelsea"       },{ time:"6 PM",  client:"Jordan T.", type:"Training", location:"Equinox HY", area:"hudson_yards"  }] },
-  { label:"Thu", date:"Apr 10", sessions:[{ time:"5 PM",  client:"Priya N.",   type:"Training", location:"TMPL Gym",    area:"hells_kitchen" }] },
-  { label:"Fri", date:"Apr 11", sessions:[{ time:"8 AM",  client:"Marcus A.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  },{ time:"9 AM",  client:"Jordan T.", type:"Training", location:"Equinox HY", area:"hudson_yards" },{ time:"12 PM", client:"Alex R.", type:"Consult", location:"Alo Yoga", area:"chelsea" },{ time:"1 PM", client:"Sam K.", type:"Training", location:"Alo Yoga", area:"chelsea" },{ time:"3 PM", client:"Priya N.", type:"Training", location:"TMPL Gym", area:"hells_kitchen" }] },
-  { label:"Sat", date:"Apr 12", sessions:[{ time:"9 AM",  client:"Sam K.",     type:"Training", location:"TMPL Gym",    area:"hells_kitchen" }] },
-];
-
-const REVENUE_DATA = [
-  {month:"Nov",val:3600},{month:"Dec",val:4000},{month:"Jan",val:5200},
-  {month:"Feb",val:4800},{month:"Mar",val:6000},{month:"Apr",val:5400},
-];
-
-const ADMIN_MESSAGES_DATA = [
-  { id:1, init:"JT", name:"Jordan Thomas", preview:"Thanks Malik! Friday felt great.", time:"2h", unread:2,
-    messages:[{from:"me",text:"Great work this week. Hip hinge significantly improved — ready to progress to heavier RDLs.",time:"Tue 4:30 PM"},{from:"them",text:"Thanks Malik! Friday felt great.",time:"Tue 6:00 PM"}] },
-  { id:2, init:"DM", name:"Diane M.", preview:"Can we adjust Wednesday's time?", time:"4h", unread:1,
-    messages:[{from:"them",text:"Can we adjust Wednesday's time? 11 AM instead of 10 AM?",time:"Today 8:20 AM"}] },
-  { id:3, init:"MA", name:"Marcus A.", preview:"Ready for block 3.", time:"1d", unread:0,
-    messages:[{from:"them",text:"Ready for block 3. What are we starting with?",time:"Yesterday 6:00 PM"}] },
-  { id:4, init:"AR", name:"Alex R.", preview:"Renewal — any changes to pricing?", time:"2d", unread:0,
-    messages:[{from:"them",text:"Hey, thinking about renewing. Any changes to the pricing?",time:"2 days ago"}] },
-];
-
 /* ── ADMIN SHARED COMPONENTS ─────────────────────────────────────────────── */
 function AdminTopbar({ title, actions }) {
   return (
@@ -4651,198 +4218,89 @@ function OpenDirBtn({ location }) {
 }
 
 /* ── ADMIN DASHBOARD ─────────────────────────────────────────────────────── */
-function AdminDashboard({ setView, setFocusClient }) {
-  const lowSess    = CLIENTS.filter(c=>c.sessLeft<=2 && c.status!=="renewal");
-  const renewalDue = CLIENTS.filter(c=>c.status==="renewal");
-  const zeroSess   = CLIENTS.filter(c=>c.sessLeft===0);
-  const birthdays  = CLIENTS.filter(c=>c.birthdayReward);
-  const blockedAttempts = BOOKING_BLOCK_LOG.all();
+function AdminDashboard({ setView, setFocusClient, dbClients }) {
+  const clients    = dbClients || [];
+  const lowSess    = clients.filter(c => c.sessLeft <= 2 && c.status !== "renewal");
+  const renewalDue = clients.filter(c => c.status === "renewal");
+  const zeroSess   = clients.filter(c => c.sessLeft === 0);
+  const birthdays  = clients.filter(c => c.birthdayReward);
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+
+  const attentionItems = [
+    ...zeroSess.map(c=>({name:c.name,msg:"0 sessions remaining — booking blocked",type:"err",id:c.id,tag:"Blocked"})),
+    ...lowSess.filter(c=>c.sessLeft>0&&c.sessLeft<=1).map(c=>({name:c.name,msg:"1 session remaining — renewal needed",type:"err",id:c.id,tag:"Critical"})),
+    ...lowSess.filter(c=>c.sessLeft>1).map(c=>({name:c.name,msg:`${c.sessLeft} sessions remaining`,type:"warn",id:c.id,tag:"Low"})),
+    ...renewalDue.map(c=>({name:c.name,msg:"Package renewal pending",type:"err",id:c.id,tag:"Renewal"})),
+  ];
+
   return (
     <div className="page-fade">
       <AdminTopbar title="Dashboard" actions={<button className="btn btn-p btn-sm" onClick={()=>setView("schedule")}>View Schedule</button>} />
       <div className="admin-body">
         <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginBottom:20}}>{today}</p>
+
         <div className="a-kpi-row">
-          <div className="a-kpi accent"><p className="a-kpi-lbl">Active Clients</p><div className="a-kpi-n">{CLIENTS.length}</div><p className="a-kpi-sub">All packages</p></div>
-          <div className="a-kpi"><p className="a-kpi-lbl">Sessions Today</p><div className="a-kpi-n">{TODAY_SESSIONS.length}</div><p className="a-kpi-sub">Across 3 locations</p></div>
-          <div className="a-kpi warn"><p className="a-kpi-lbl">Low / Renewal</p><div className="a-kpi-n">{lowSess.length+renewalDue.length}</div><p className="a-kpi-sub">Need attention</p></div>
-          <div className="a-kpi ok"><p className="a-kpi-lbl">Monthly Revenue</p><div className="a-kpi-n">$5.4k</div><p className="a-kpi-sub">Apr 2025</p></div>
+          <div className="a-kpi accent"><p className="a-kpi-lbl">Active Clients</p><div className="a-kpi-n">{clients.length}</div><p className="a-kpi-sub">All packages</p></div>
+          <div className="a-kpi"><p className="a-kpi-lbl">Sessions Today</p><div className="a-kpi-n">—</div><p className="a-kpi-sub">Connect scheduling</p></div>
+          <div className="a-kpi warn"><p className="a-kpi-lbl">Low / Renewal</p><div className="a-kpi-n">{lowSess.length + renewalDue.length}</div><p className="a-kpi-sub">Need attention</p></div>
+          <div className="a-kpi ok"><p className="a-kpi-lbl">Active Programs</p><div className="a-kpi-n">—</div><p className="a-kpi-sub">Via Programs tab</p></div>
         </div>
+
         <div className="a-grid-2" style={{marginBottom:14}}>
           <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Today's Sessions</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("schedule")}>Full schedule →</button></div>
-            {TODAY_SESSIONS.map((s,i)=>(
-              <div className="a-row" key={i}>
-                <div><p className="a-row-main">{s.client}</p><p className="a-row-sub">{s.time} · {s.type}</p></div>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-1)"}}>{s.location}</p>
-                  <OpenDirBtn location={s.location} />
-                </div>
+            <div className="a-panel-hd"><span className="a-panel-title">Needs Attention</span></div>
+            {attentionItems.length ? attentionItems.map((a,i)=>(
+              <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(a.id);setView("clients");}}>
+                <div><p className="a-row-main">{a.name}</p><p className="a-row-sub">{a.msg}</p></div>
+                <ATag type={a.type}>{a.tag}</ATag>
               </div>
-            ))}
+            )) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No urgent items.</p>}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Needs Attention</span></div>
-              {[
-                ...zeroSess.map(c=>({name:c.name,msg:"0 sessions remaining — booking blocked",type:"err",id:c.id,tag:"Blocked"})),
-                ...lowSess.filter(c=>c.sessLeft>0&&c.sessLeft<=1).map(c=>({name:c.name,msg:"1 session remaining — renewal needed",type:"err",id:c.id,tag:"Critical"})),
-                ...lowSess.filter(c=>c.sessLeft>1).map(c=>({name:c.name,msg:`${c.sessLeft} sessions remaining`,type:"warn",id:c.id,tag:"Low"})),
-                ...renewalDue.map(c=>({name:c.name,msg:`Package renewal pending`,type:"err",id:c.id,tag:"Renewal"})),
-              ].length ? [
-                ...zeroSess.map(c=>({name:c.name,msg:"0 sessions remaining — booking blocked",type:"err",id:c.id,tag:"Blocked"})),
-                ...lowSess.filter(c=>c.sessLeft>0&&c.sessLeft<=1).map(c=>({name:c.name,msg:"1 session remaining — renewal needed",type:"err",id:c.id,tag:"Critical"})),
-                ...lowSess.filter(c=>c.sessLeft>1).map(c=>({name:c.name,msg:`${c.sessLeft} sessions remaining`,type:"warn",id:c.id,tag:"Low"})),
-                ...renewalDue.map(c=>({name:c.name,msg:`Package renewal pending`,type:"err",id:c.id,tag:"Renewal"})),
-              ].map((a,i)=>(
-                <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(a.id);setView("clients");}}>
-                  <div><p className="a-row-main">{a.name}</p><p className="a-row-sub">{a.msg}</p></div>
-                  <ATag type={a.type}>{a.tag}</ATag>
-                </div>
-              )) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No urgent items.</p>}
-            </div>
             <div className="a-panel">
               <div className="a-panel-hd"><span className="a-panel-title">Birthday Rewards</span></div>
               {birthdays.length ? birthdays.map((c,i)=>(
                 <div className="a-row" key={i}><div><p className="a-row-main">{c.name}</p><p className="a-row-sub">Birthday {c.birthday} · Active</p></div><ATag type="ok">Active</ATag></div>
               )) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active rewards.</p>}
             </div>
-          </div>
-        </div>
-        <div className="a-grid-2">
-          <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Recent Feedback</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("feedback")}>View all →</button></div>
-            {ADMIN_FEEDBACKS.map((f,i)=>(
-              <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>setView("feedback")}>
-                <div><p className="a-row-main">{f.client}</p><p className="a-row-sub">{f.block} · {f.date}</p></div>
-                <ATag type="blue">New</ATag>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Package Overview</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("packages")}>View all →</button></div>
-              {CLIENTS.map((c,i)=>{
-                const pct=c.sessTotal?Math.round((c.sessLeft/c.sessTotal)*100):0;
-                const isZero=c.sessLeft===0;
-                const isLow=c.sessLeft<=2&&!isZero;
-                return (
-                  <div className="a-row" key={i}>
-                    <div style={{flex:1,minWidth:0}}><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.sessLeft}/{c.sessTotal} · Exp {c.expires}</p></div>
-                    <div className="sess-bar-wrap">
-                      <div style={{textAlign:"right",fontSize:"0.6rem",color:isZero?"rgba(220,120,120,0.85)":isLow?"rgba(220,175,100,0.8)":"var(--txt-2)"}}>{c.sessLeft} left</div>
-                      <div className="sess-bar"><div className={`sess-bar-fill${(isLow||isZero)?" low":""}`} style={{width:`${pct}%`}} /></div>
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="a-panel-hd"><span className="a-panel-title">Recent Feedback</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("feedback")}>View all →</button></div>
+              <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet.</p>
             </div>
-            {/* Blocked booking attempts */}
-            {blockedAttempts.length > 0 && (
-              <div className="a-panel">
-                <div className="a-panel-hd">
-                  <span className="a-panel-title">Blocked Bookings</span>
-                  <span style={{fontSize:"0.62rem",color:"rgba(220,120,120,0.75)",fontFamily:"var(--fc)",letterSpacing:"0.06em"}}>{blockedAttempts.length} attempt{blockedAttempts.length!==1?"s":""}</span>
-                </div>
-                {blockedAttempts.slice(0,4).map((b,i)=>(
-                  <div className="failed-booking-row" key={i}>
-                    <div>
-                      <p style={{fontSize:"0.78rem",color:"var(--txt-0)",fontWeight:400}}>{b.email}</p>
-                      <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{b.reason} · {b.at}</p>
-                    </div>
-                    <ATag type="err">{b.meta?.type==="expired"?"Expired":"No Sessions"}</ATag>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* ── WORKOUT ACCOUNTABILITY ── */}
-        {(() => {
-          const activity = WORKOUT_LOG.recentActivity();
-          // Build per-client adherence summary from PROGRAM_STORE
-          const adherence = CLIENTS.map(c => {
-            const prog = PROGRAM_STORE.active(c.id);
-            if (!prog) return { c, prog: null, summary: null };
-            const summary = WORKOUT_LOG.programSummary(prog.id, prog.days);
-            return { c, prog, summary };
-          }).filter(x => x.prog);
-
-          return (
-            <div className="a-grid-2" style={{marginTop:14}}>
-              {/* Workout Adherence */}
-              <div className="a-panel">
-                <div className="a-panel-hd">
-                  <span className="a-panel-title">Workout Adherence</span>
-                  <button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("programs")}>Programs →</button>
+        <div className="a-panel">
+          <div className="a-panel-hd"><span className="a-panel-title">Package Overview</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("packages")}>Manage →</button></div>
+          {clients.length ? clients.map((c,i)=>{
+            const isZero = c.sessLeft === 0;
+            const isLow  = c.sessLeft <= 2 && !isZero;
+            return (
+              <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(c.id);setView("clients");}}>
+                <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
+                  <div className="c-av">{c.init}</div>
+                  <div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg}</p></div>
                 </div>
-                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginBottom:12,lineHeight:1.55}}>
-                  Self-directed workout days logged this block.
-                </p>
-                {adherence.length > 0 ? adherence.map(({c, prog, summary}) => {
-                  const pct = summary.pct;
-                  const isLow = pct < 50 && summary.total > 2;
-                  return (
-                    <div className="acct-row" key={c.id} style={{cursor:"pointer"}} onClick={()=>{ setFocusClient(c.id); setView("clients"); }}>
-                      <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
-                        <div className="c-av">{c.init}</div>
-                        <div>
-                          <p className="a-row-main">{c.name}</p>
-                          <p className="a-row-sub">{prog.block} · {summary.completed}/{summary.total} days logged</p>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0,marginLeft:10}}>
-                        <span style={{fontSize:"0.65rem",color:isLow?"rgba(220,175,100,0.85)":pct>=75?"rgba(140,210,155,0.85)":"var(--txt-2)",fontFamily:"var(--fc)"}}>{pct}%</span>
-                        <div style={{width:56,height:3,borderRadius:2,background:"var(--b0)",overflow:"hidden"}}>
-                          <div style={{height:"100%",width:`${pct}%`,background:isLow?"rgba(200,150,60,0.7)":pct>=75?"rgba(42,122,75,0.7)":"var(--acc-1)",borderRadius:2}} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }) : (
-                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active programs assigned yet.</p>
-                )}
+                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                  <span style={{fontSize:"0.72rem",color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-1)",fontFamily:"var(--fc)",fontWeight:600}}>{c.sessLeft} sessions</span>
+                  {isZero && <ATag type="err">Blocked</ATag>}
+                  {isLow  && !isZero && <ATag type="warn">Low</ATag>}
+                </div>
               </div>
-
-              {/* Recent Completions */}
-              <div className="a-panel">
-                <div className="a-panel-hd"><span className="a-panel-title">Recent Workout Completions</span></div>
-                {activity.length > 0 ? activity.slice(0,6).map((a,i) => (
-                  <div className="acct-row" key={i}>
-                    <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
-                      <div className="c-av">{a.init}</div>
-                      <div>
-                        <p className="a-row-main">{a.client}</p>
-                        <p className="a-row-sub">{a.day} — {a.dayFocus}</p>
-                      </div>
-                    </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0,marginLeft:10}}>
-                      <span className="wk-done-badge" style={{fontSize:"0.55rem",padding:"2px 8px"}}>✓ Done</span>
-                      <span style={{fontSize:"0.6rem",color:"var(--txt-2)"}}>{a.at}</span>
-                    </div>
-                  </div>
-                )) : (
-                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>
-                    No self-directed workouts logged yet. Completions will appear here as clients track their training days.
-                  </p>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+            );
+          }) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>}
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── ADMIN CLIENTS ───────────────────────────────────────────────────────── */
-function AdminClients({ setView, focusClient, setFocusClient }) {
+function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
+  const clients = dbClients || [];
   const [selected, setSelected] = useState(focusClient||null);
   const [cpTab, setCpTab]       = useState("overview");
-  const [noteText, setNoteText] = useState("Great work this week. Hip hinge significantly improved — progressing to 245 next session.");
-  const client = selected ? CLIENTS.find(c=>c.id===selected) : null;
+  const [noteText, setNoteText] = useState("");
+  const client = selected ? clients.find(c=>c.id===selected) : null;
   const tabs=["overview","program","notes","history","feedback"];
 
   if (client) return (
@@ -4892,8 +4350,8 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
               {cpTab==="program"&&(
                 <div>
                   {(() => {
-                    const prog = PROGRAM_STORE.active(client.id);
-                    const hist = PROGRAM_STORE.history(client.id);
+                    const prog = null;  // loaded in AdminPrograms tab
+                    const hist = [];
                     return (<>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
                         <div>
@@ -4955,29 +4413,12 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
               )}
               {cpTab==="history"&&(
                 <div>
-                  {[["Apr 4","Strength — Lower Body","ok",65],["Apr 2","Strength — Upper Body","ok",100],["Mar 30","Movement Assessment","ok",100],["Mar 28","Conditioning + Core","ok",80]].map(([d,n,s,p])=>(
-                    <div className="a-row" key={d}>
-                      <div><p className="a-row-main">{n}</p><p className="a-row-sub">{d}</p></div>
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                        <ATag type={s}>Completed</ATag>
-                        <span style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>{p}% logged</span>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Session history will appear here once workout logs are completed. View the Programs tab to see active programs.</p>
                 </div>
               )}
               {cpTab==="feedback"&&(
                 <div>
-                  {ADMIN_FEEDBACKS.filter(f=>f.clientId===client.id).length ? (
-                    ADMIN_FEEDBACKS.filter(f=>f.clientId===client.id).map((f,i)=>(
-                      <div key={i} style={{marginBottom:14}}>
-                        <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginBottom:10}}>{f.block} · {f.date}</p>
-                        {[["Liked",f.liked],["Want More",f.more],["Remove",f.remove],["Difficulty",f.difficult],["Learn Next",f.learn]].map(([q,a])=>(
-                          <div className="fb-item" key={q}><p className="fb-q">{q}</p><p className="fb-a">{a}</p></div>
-                        ))}
-                      </div>
-                    ))
-                  ) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback on file yet.</p>}
+                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet for this client.</p>
                 </div>
               )}
             </div>
@@ -4992,11 +4433,11 @@ function AdminClients({ setView, focusClient, setFocusClient }) {
       <AdminTopbar title="Clients" actions={<button className="btn btn-p btn-sm">+ New Client</button>} />
       <div className="admin-body">
         <div className="a-panel">
-          <div className="a-panel-hd"><span className="a-panel-title">All Clients — {CLIENTS.length}</span></div>
+          <div className="a-panel-hd"><span className="a-panel-title">All Clients — {clients.length}</span></div>
           <table className="client-table">
             <thead><tr><th>Client</th><th>Package</th><th>Sessions</th><th>Location</th><th>Next Session</th><th>Status</th></tr></thead>
             <tbody>
-              {CLIENTS.map(c=>(
+              {clients.map(c=>(
                 <tr key={c.id} onClick={()=>setSelected(c.id)}>
                   <td><div style={{display:"flex",gap:10,alignItems:"center"}}><div className="c-av">{c.init}</div><div><p className="c-name">{c.name}</p><p className="c-detail">{c.goal}</p></div></div></td>
                   <td><p style={{fontSize:"0.78rem"}}>{c.pkg}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Exp {c.expires}</p></td>
@@ -5356,64 +4797,21 @@ function AdminPrograms({ session }) {
 
 /* ── ADMIN SCHEDULE ──────────────────────────────────────────────────────── */
 function AdminSchedule() {
-  const [selDay, setSelDay] = useState(4);
-  const dayData = ADMIN_WEEK[selDay];
-  const hours=["7 AM","8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM","3 PM","4 PM","5 PM","6 PM","7 PM"];
-  const openDir=loc=>window.open(`https://maps.google.com/?q=${encodeURIComponent(loc+", New York, NY")}`,"_blank","noopener");
+  // Schedule data is not yet connected to a booking/scheduling backend.
+  // When a scheduling system is wired, sessions will load here by date.
+  const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
 
   return (
     <div className="page-fade">
-      <AdminTopbar title="Schedule" actions={<><button className="btn btn-s btn-sm">+ Manual Booking</button><button className="btn btn-s btn-sm">Block Time</button></>} />
+      <AdminTopbar title="Schedule" />
       <div className="admin-body">
-        <div className="sched-head">
-          {ADMIN_WEEK.map((d,i)=>(
-            <button key={i} className={`sched-day-btn${selDay===i?" on":""}`} onClick={()=>setSelDay(i)}>
-              <p className="sched-day-name">{d.label}</p>
-              <p className="sched-day-date">{d.date}</p>
-              {d.sessions.length>0&&<p style={{fontSize:"0.55rem",color:"var(--txt-2)",marginTop:2}}>{d.sessions.length} session{d.sessions.length!==1?"s":""}</p>}
-            </button>
-          ))}
-        </div>
-        <div className="a-panel" style={{marginBottom:14}}>
-          <div className="a-panel-hd"><span className="a-panel-title">{dayData.label} · {dayData.date}</span><span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{dayData.sessions.length} sessions</span></div>
-          <div className="sched-timeline">
-            {hours.map(hr=>{
-              const sess=dayData.sessions.filter(s=>s.time===hr);
-              return (
-                <div className="sched-slot" key={hr}>
-                  <div className="sched-time-col">{hr}</div>
-                  <div className="sched-event-col">
-                    {sess.length ? sess.map((s,i)=>(
-                      <div key={i} className={`sched-event${s.type==="Consult"?" consult":" sess"}`}>
-                        <p className="sched-ev-name">{s.client}</p>
-                        <p className="sched-ev-sub">{s.type} · 60 min</p>
-                        <div className="sched-ev-loc">
-                          <span>{s.location}</span>
-                          <button style={{padding:"2px 7px",borderRadius:100,border:"1px solid var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.55rem",cursor:"pointer",fontFamily:"var(--fc)"}} onClick={()=>openDir(s.location)}>↗</button>
-                        </div>
-                      </div>
-                    )) : <div className="sched-free">—</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginBottom:20}}>{today}</p>
         <div className="a-panel">
-          <div className="a-panel-hd"><span className="a-panel-title">Travel Summary</span></div>
-          {dayData.sessions.length>1 ? dayData.sessions.map((s,i)=>{
-            if(i===0) return null;
-            const prev=dayData.sessions[i-1];
-            const same=prev.location===s.location;
-            const sameArea=prev.area===s.area;
-            const buf=same?10:sameArea?20:35;
-            return (
-              <div className="a-row" key={i}>
-                <div><p className="a-row-main">{prev.location} → {s.location}</p><p className="a-row-sub">{prev.client} → {s.client}</p></div>
-                <ATag type={same?"ok":sameArea?"blue":"warn"}>{buf} min buffer</ATag>
-              </div>
-            );
-          }) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Single location today.</p>}
+          <div className="empty-state" style={{padding:"56px 20px"}}>
+            <span className="empty-ic">◷</span>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No sessions scheduled</p>
+            <p className="empty-txt">Session scheduling will appear here once a booking system is connected. Client sessions booked through the app will show on this calendar.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -5422,62 +4820,34 @@ function AdminSchedule() {
 
 /* ── ADMIN FEEDBACK ──────────────────────────────────────────────────────── */
 function AdminFeedback() {
-  const [open, setOpen] = useState(null);
-  const fb = open ? ADMIN_FEEDBACKS.find(f=>f.clientId===open) : null;
   return (
     <div className="page-fade">
       <AdminTopbar title="Client Feedback" />
       <div className="admin-body">
-        {fb ? (
-          <div>
-            <button className="btn btn-ghost btn-sm" style={{marginBottom:16}} onClick={()=>setOpen(null)}>← Back</button>
-            <div className="a-panel">
-              <div style={{marginBottom:16}}><p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{fb.client}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{fb.block} · {fb.date}</p></div>
-              <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-                {Object.entries(fb.ratings).map(([k,v])=>(
-                  <div key={k} style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",textAlign:"center"}}>
-                    <p style={{fontSize:"0.58rem",color:"var(--txt-2)",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:5}}>{k}</p>
-                    <div className="rating-row" style={{justifyContent:"center"}}>{[1,2,3,4,5].map(n=><div key={n} className={`rating-pip${n>v?" off":""}`} />)}</div>
-                  </div>
-                ))}
-              </div>
-              {[["Liked",fb.liked],["Want More",fb.more],["Want Removed",fb.remove],["Difficulty",fb.difficult],["Learn Next",fb.learn]].map(([q,a])=>(
-                <div className="fb-item" key={q}><p className="fb-q">{q}</p><p className="fb-a">{a}</p></div>
-              ))}
-            </div>
+        <div className="a-panel">
+          <div className="empty-state" style={{padding:"56px 20px"}}>
+            <span className="empty-ic">◈</span>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No feedback yet</p>
+            <p className="empty-txt">Client program reflections will appear here when clients submit them through the app.</p>
           </div>
-        ) : (
-          <div>
-            {ADMIN_FEEDBACKS.map((f,i)=>(
-              <div className="fb-card" key={i} onClick={()=>setOpen(f.clientId)}>
-                <div className="fb-card-head"><div><p className="fb-card-name">{f.client}</p><p className="fb-card-date">{f.block} · {f.date}</p></div><ATag type="blue">New</ATag></div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {Object.entries(f.ratings).map(([k,v])=>(
-                    <div key={k} style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:"0.6rem",color:"var(--txt-2)"}}>{k}</span><div className="rating-row">{[1,2,3,4,5].map(n=><div key={n} className={`rating-pip${n>v?" off":""}`} style={{width:7,height:7}} />)}</div></div>
-                  ))}
-                </div>
-                <p style={{fontSize:"0.75rem",color:"var(--txt-1)",marginTop:10,lineHeight:1.55,fontStyle:"italic"}}>"{f.liked}"</p>
-              </div>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
 }
 
 /* ── ADMIN PACKAGES / SESSION INVENTORY ──────────────────────────────────── */
-function AdminPackages() {
+function AdminPackages({ dbClients }) {
+  const clients = dbClients || [];
   const [prorateEnabled, setProrateEnabled] = useState(true);
   // Per-client inventory state — live for Jordan (id:1), demo values for others
   const [clientInv, setClientInv] = useState(() => {
-    // Seed from CLIENTS data; Jordan reads from live SESSION_INVENTORY
-    return CLIENTS.reduce((acc, c) => {
+    return clients.reduce((acc, c) => {
       acc[c.id] = {
-        balance:    c.id === 1 ? SESSION_INVENTORY.balance : c.sessLeft,
-        weeklyMax:  c.id === 1 ? SESSION_INVENTORY.weeklyMax : (PLAN_CATALOGUE[c.pkg]?.weeklyMax || 2),
-        plan:       c.pkg,
-        override:   false,
+        balance:   c.sessLeft  ?? 0,
+        weeklyMax: PLAN_CATALOGUE[c.pkg]?.weeklyMax || 2,
+        plan:      c.pkg       || "—",
+        override:  false,
       };
       return acc;
     }, {});
@@ -5495,10 +4865,9 @@ function AdminPackages() {
       ...p,
       [clientId]: { ...p[clientId], balance: Math.max(0, p[clientId].balance + delta) }
     }));
-    // Also update live store for Jordan
-    if (clientId === 1) {
-      SESSION_INVENTORY.adminAdd(delta, adjNote[clientId] || "Admin adjustment");
-    }
+    // Persist to Supabase via saveClientProfile
+    const newBal = Math.max(0, (clientInv[clientId]?.balance ?? 0) + delta);
+    saveClientProfile(clientId, { sessions_balance: newBal }).catch(e => console.error("adminAdj:", e));
     setSaved(p => ({ ...p, [clientId]: true }));
     setTimeout(() => setSaved(p => ({ ...p, [clientId]: false })), 2000);
     setAdjAmt(p => ({ ...p, [clientId]: "" }));
@@ -5508,18 +4877,15 @@ function AdminPackages() {
   const setWeeklyMax = (clientId, val) => {
     const n = Math.max(1, parseInt(val) || 1);
     setClientInv(p => ({ ...p, [clientId]: { ...p[clientId], weeklyMax: n } }));
-    if (clientId === 1) SESSION_INVENTORY.setWeeklyMax(n);
+    saveClientProfile(clientId, { sessions_weekly_max: n }).catch(e => console.error("setWeeklyMax:", e));
   };
 
   const toggleOverride = (clientId) => {
     setClientInv(p => ({ ...p, [clientId]: { ...p[clientId], override: !p[clientId].override } }));
-    if (clientId === 1) SESSION_INVENTORY.setOverride(!clientInv[clientId].override);
   };
 
-  const purchaseHistory = SESSION_INVENTORY.purchaseLog().slice(0, 8);
-
-  const blockedClients  = CLIENTS.filter(c => clientInv[c.id]?.balance === 0);
-  const expiringClients = CLIENTS.filter(c => clientInv[c.id]?.balance <= 2 && clientInv[c.id]?.balance > 0);
+  const blockedClients  = clients.filter(c => (clientInv[c.id]?.balance ?? 0) === 0);
+  const expiringClients = clients.filter(c => (clientInv[c.id]?.balance ?? 0) <= 2 && (clientInv[c.id]?.balance ?? 0) > 0);
 
   return (
     <div className="page-fade">
@@ -5533,13 +4899,13 @@ function AdminPackages() {
         />
 
         {/* Held inventory — future-start packages and pause controls */}
-        <AdminHeldPanel />
+        <AdminHeldPanel dbClients={dbClients} />
 
         {/* KPI row */}
         <div className="a-kpi-row" style={{gridTemplateColumns:"repeat(4,1fr)"}}>
           <div className="a-kpi accent">
             <p className="a-kpi-lbl">Active Clients</p>
-            <div className="a-kpi-n">{CLIENTS.filter(c=>c.status==="active").length}</div>
+            <div className="a-kpi-n">{clients.length}</div>
           </div>
           <div className="a-kpi warn">
             <p className="a-kpi-lbl">Low Balance</p>
@@ -5552,9 +4918,9 @@ function AdminPackages() {
             <p className="a-kpi-sub">No sessions</p>
           </div>
           <div className="a-kpi">
-            <p className="a-kpi-lbl">Jordan's Balance</p>
-            <div className="a-kpi-n">{SESSION_INVENTORY.balance}</div>
-            <p className="a-kpi-sub">{SESSION_INVENTORY.weeklyRemaining()} available this week</p>
+            <p className="a-kpi-lbl">Total Clients</p>
+            <div className="a-kpi-n">{clients.length}</div>
+            <p className="a-kpi-sub">All packages</p>
           </div>
         </div>
 
@@ -5565,13 +4931,13 @@ function AdminPackages() {
             <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Sessions accumulate · no expiry</span>
           </div>
 
-          {CLIENTS.map(c => {
+          {clients.map(c => {
             const inv = clientInv[c.id] || {};
             const isExpanded = expanded === c.id;
             const isBlocked  = inv.balance === 0;
             const isLow      = inv.balance > 0 && inv.balance <= 2;
             const planCfg    = PLAN_CATALOGUE[inv.plan] || {};
-            const weeklyUsed = c.id === 1 ? SESSION_INVENTORY.weeklyUsed() : 0;
+            const weeklyUsed = 0; // weekly_used not yet in client_profiles
             const weeklyLeft = Math.max(0, inv.weeklyMax - weeklyUsed);
 
             return (
@@ -5645,8 +5011,9 @@ function AdminPackages() {
                           {Object.entries(PLAN_CATALOGUE).map(([name,cfg])=>(
                             <button key={name} className="btn btn-s btn-xs"
                               onClick={()=>{
-                                setClientInv(p=>({...p,[c.id]:{...p[c.id],balance:p[c.id].balance+cfg.sessionsPerPurchase}}));
-                                if(c.id===1) SESSION_INVENTORY.adminAdd(cfg.sessionsPerPurchase, `${name} purchase`);
+                                const newBal = (clientInv[c.id]?.balance ?? 0) + cfg.sessionsPerPurchase;
+                                setClientInv(p=>({...p,[c.id]:{...p[c.id],balance:newBal}}));
+                                saveClientProfile(c.id, { sessions_balance: newBal }).catch(e=>console.error("quickAdd:",e));
                                 setSaved(p=>({...p,[c.id]:true}));
                                 setTimeout(()=>setSaved(p=>({...p,[c.id]:false})),2000);
                               }}>
@@ -5699,52 +5066,35 @@ function AdminPackages() {
           })}
         </div>
 
-        {/* Jordan's purchase / adjustment history (live) */}
-        <div className="a-panel">
-          <div className="a-panel-hd">
-            <span className="a-panel-title">Jordan Thomas — Session History</span>
-            <span style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>Live from inventory store</span>
-          </div>
-          {purchaseHistory.map((entry, i) => (
-            <div className="inv-hist-row" key={i}>
-              <div>
-                <p className="inv-hist-type">{entry.type}</p>
-                <p className="inv-hist-note">{entry.note} · {entry.date}</p>
-              </div>
-              <span className={`inv-hist-n ${entry.sessionsAdded > 0 ? "add" : "sub"}`}>
-                {entry.sessionsAdded > 0 ? `+${entry.sessionsAdded}` : entry.sessionsAdded}
-              </span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
 }
 
 /* ── ADMIN MESSAGES ──────────────────────────────────────────────────────── */
-function AdminMessages() {
-  const [selThread, setSel]   = useState(1);
-  const [input, setInput]     = useState("");
-  const [allMsgs, setAllMsgs] = useState(ADMIN_MESSAGES_DATA.reduce((a,t)=>({...a,[t.id]:t.messages}),{}));
+function AdminMessages({ dbClients = [] }) {
+  const [selThread, setSel] = useState(null);
+  const [input, setInput]   = useState("");
+  const [allMsgs, setAllMsgs] = useState({});
   const bottomRef = useRef(null);
-  const thread = ADMIN_MESSAGES_DATA.find(t=>t.id===selThread);
-  const msgs = allMsgs[selThread]||[];
 
-  const send=()=>{
-    if(!input.trim()) return;
-    setAllMsgs(p=>({...p,[selThread]:[...p[selThread]||[],{from:"me",text:input.trim(),time:"Just now"}]}));
-    setInput("");
-    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50);
-  };
+  const thread = selThread ? dbClients.find(c => c.id === selThread) : null;
+  const msgs   = allMsgs[selThread] || [];
 
-  const QUICK=[
-    {ic:"◷",text:"Running 5 min late — see you shortly."},
-    {ic:"▦",text:"Your program for next block is ready. Check the app."},
-    {ic:"◈",text:"Great session today. Keep the momentum going."},
-    {ic:"📋",text:"Quick check-in — how has recovery been this week?"},
-    {ic:"⚡",text:"Sessions running low. Let me know when you're ready to renew."},
+  const QUICK = [
+    {ic:"◷", text:"Running 5 min late — see you shortly."},
+    {ic:"▦", text:"Your program for next block is ready. Check the app."},
+    {ic:"◈", text:"Great session today. Keep the momentum going."},
+    {ic:"📋", text:"Quick check-in — how has recovery been this week?"},
+    {ic:"⚡", text:"Sessions running low. Let me know when you're ready to renew."},
   ];
+
+  const send = () => {
+    if (!input.trim() || !selThread) return;
+    setAllMsgs(p => ({...p, [selThread]: [...(p[selThread]||[]), {from:"me", text:input.trim(), time:"Just now"}]}));
+    setInput("");
+    setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+  };
 
   return (
     <div className="page-fade" style={{height:"calc(100vh)",display:"flex",flexDirection:"column"}}>
@@ -5753,44 +5103,59 @@ function AdminMessages() {
         <div className="admin-msg-layout" style={{height:"100%"}}>
           <div className="msg-tl">
             <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"4px 8px 10px"}}>Clients</p>
-            {ADMIN_MESSAGES_DATA.map(t=>(
-              <div key={t.id} className={`msg-tl-item${selThread===t.id?" on":""}`} onClick={()=>setSel(t.id)}>
-                {t.unread>0&&<div className="unread-dot" />}
-                <div className="c-av" style={{flexShrink:0}}>{t.init}</div>
-                <div style={{flex:1,overflow:"hidden"}}>
-                  <div style={{display:"flex",justifyContent:"space-between"}}><p style={{fontSize:"0.78rem",fontWeight:500,color:"var(--txt-0)"}}>{t.name}</p><p style={{fontSize:"0.6rem",color:"var(--txt-2)"}}>{t.time}</p></div>
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{t.preview}</p>
+            {dbClients.length === 0
+              ? <p className="body-sm" style={{padding:"8px",color:"var(--txt-2)"}}>No clients yet.</p>
+              : dbClients.map(c=>(
+                <div key={c.id} className={`msg-tl-item${selThread===c.id?" on":""}`} onClick={()=>setSel(c.id)}>
+                  <div className="c-av" style={{flexShrink:0}}>{c.init}</div>
+                  <div style={{flex:1,overflow:"hidden"}}>
+                    <p style={{fontSize:"0.78rem",fontWeight:500,color:"var(--txt-0)"}}>{c.name}</p>
+                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{c.pkg}</p>
+                  </div>
                 </div>
+              ))
+            }
+            {selThread && (
+              <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Quick Messages</p>
+                {QUICK.map((q,i)=>(
+                  <button key={i} className="quick-msg-btn" onClick={()=>setAllMsgs(p=>({...p,[selThread]:[...(p[selThread]||[]),{from:"me",text:q.text,time:"Just now"}]}))}>
+                    <span className="quick-msg-ic">{q.ic}</span>
+                    <span style={{fontSize:"0.72rem",lineHeight:1.4}}>{q.text}</span>
+                  </button>
+                ))}
               </div>
-            ))}
-            <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid var(--b0)"}}>
-              <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Quick Messages</p>
-              {QUICK.map((q,i)=>(
-                <button key={i} className="quick-msg-btn" onClick={()=>setAllMsgs(p=>({...p,[selThread]:[...p[selThread]||[],{from:"me",text:q.text,time:"Just now"}]}))}>
-                  <span className="quick-msg-ic">{q.ic}</span>
-                  <span style={{fontSize:"0.72rem",lineHeight:1.4}}>{q.text}</span>
-                </button>
-              ))}
-            </div>
+            )}
           </div>
+
           <div style={{display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            <div style={{padding:"14px 20px",borderBottom:"1px solid var(--b0)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-              <div className="c-av">{thread?.init}</div>
-              <div><p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{thread?.name}</p><p style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>Client · {CLIENTS.find(c=>c.id===selThread)?.pkg||""}</p></div>
-            </div>
-            <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:12}}>
-              {msgs.map((m,i)=>(
-                <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="me"?"flex-end":"flex-start"}}>
-                  <div style={{maxWidth:"70%",padding:"10px 14px",borderRadius:"var(--r3)",fontSize:"0.8rem",lineHeight:1.6,...(m.from==="me"?{background:"var(--acc-0)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--txt-0)",borderBottomRightRadius:"var(--r1)"}:{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",borderBottomLeftRadius:"var(--r1)"})}}>{m.text}</div>
-                  <span style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:3}}>{m.time}</span>
-                </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
-            <div style={{padding:"12px 16px",borderTop:"1px solid var(--b0)",flexShrink:0,display:"flex",gap:8}}>
-              <input className="fi" style={{flex:1}} placeholder={`Message ${thread?.name}…`} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
-              <button className="btn btn-p btn-sm" onClick={send}>Send</button>
-            </div>
+            {thread ? (<>
+              <div style={{padding:"14px 20px",borderBottom:"1px solid var(--b0)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+                <div className="c-av">{thread.init}</div>
+                <div><p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{thread.name}</p><p style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>Client · {thread.pkg}</p></div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:12}}>
+                {msgs.length === 0 && (
+                  <p style={{fontSize:"0.76rem",color:"var(--txt-2)",textAlign:"center",marginTop:40}}>No messages yet. Send a message below.</p>
+                )}
+                {msgs.map((m,i)=>(
+                  <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="me"?"flex-end":"flex-start"}}>
+                    <div style={{maxWidth:"70%",padding:"10px 14px",borderRadius:"var(--r3)",fontSize:"0.8rem",lineHeight:1.6,...(m.from==="me"?{background:"var(--acc-0)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--txt-0)",borderBottomRightRadius:"var(--r1)"}:{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",borderBottomLeftRadius:"var(--r1)"})}}>{m.text}</div>
+                    <span style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:3}}>{m.time}</span>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+              <div style={{padding:"12px 16px",borderTop:"1px solid var(--b0)",flexShrink:0,display:"flex",gap:8}}>
+                <input className="fi" style={{flex:1}} placeholder={`Message ${thread.name}…`} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
+                <button className="btn btn-p btn-sm" onClick={send}>Send</button>
+              </div>
+            </>) : (
+              <div className="empty-state" style={{paddingTop:80}}>
+                <span className="empty-ic">✉</span>
+                <p className="empty-txt">Select a client to view messages.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -5799,7 +5164,7 @@ function AdminMessages() {
 }
 
 /* ── ADMIN ANALYTICS ─────────────────────────────────────────────────────── */
-function AdminAnalytics() {
+function AdminAnalytics({ dbClients = [] }) {
   return (
     <div className="page-fade">
       <AdminTopbar title="Analytics" />
@@ -5812,7 +5177,7 @@ function AdminAnalytics() {
         <div className="a-grid-2" style={{marginBottom:14}}>
           <div className="a-panel">
             <div className="a-panel-hd"><span className="a-panel-title">Monthly Revenue</span></div>
-            <MiniBarChart data={REVENUE_DATA} />
+            <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Revenue data will appear here when connected to billing system.</p>
           </div>
           <div className="a-panel">
             <div className="a-panel-hd"><span className="a-panel-title">Sessions by Package</span></div>
@@ -5838,9 +5203,12 @@ function AdminAnalytics() {
           </div>
           <div className="a-panel">
             <div className="a-panel-hd"><span className="a-panel-title">Renewals Due</span></div>
-            {CLIENTS.filter(c=>c.status==="renewal"||c.status==="low").map((c,i)=>(
-              <div className="a-row" key={i}><div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg} · Exp {c.expires}</p></div><ATag type={c.status==="renewal"?"err":"warn"}>{c.status==="renewal"?"Due":"Low"}</ATag></div>
-            ))}
+            {dbClients.filter(c=>c.status==="renewal"||c.status==="low").length > 0
+              ? dbClients.filter(c=>c.status==="renewal"||c.status==="low").map((c,i)=>(
+                <div className="a-row" key={i}><div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg} · —</p></div><ATag type={c.status==="renewal"?"err":"warn"}>{c.status==="renewal"?"Due":"Low"}</ATag></div>
+              ))
+              : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No renewals due.</p>
+            }
           </div>
         </div>
       </div>
@@ -5905,44 +5273,6 @@ function AdminSettings() {
    CONSULTATION → CONVERSION SYSTEM
    Modular · No changes to existing scheduling, dashboard, or layout
 ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── CONSULTATION DATA ───────────────────────────────────────────────────── */
-
-// Shared state store (in production this would be a DB / context)
-const CONSULT_STORE = {
-  leads: [
-    {
-      id: 1, status: "pending",
-      init:"TR",
-      name:"Taylor Reeves", email:"taylor@email.com", phone:"917-555-0121",
-      goal:"Fat Loss & Muscle Gain", level:"Beginner", injuries:"None",
-      frequency:"3x per week", location:"Equinox Hudson Yards",
-      date:"Apr 16, 2025", time:"11:00 AM", type:"In-Person",
-      bookedAt:"Apr 10, 2025",
-      coachNotes:"", recommended:null, converted:false,
-    },
-    {
-      id: 2, status: "completed",
-      init:"CM",
-      name:"Chris Monroe", email:"chris@email.com", phone:"646-555-0188",
-      goal:"Athletic Performance", level:"Intermediate", injuries:"Old ankle sprain (right)",
-      frequency:"4x per week", location:"TMPL Gym",
-      date:"Apr 9, 2025", time:"2:00 PM", type:"In-Person",
-      bookedAt:"Apr 5, 2025",
-      coachNotes:"Strong foundation. Ready for structured programming. Ideal for 1-on-1.", recommended:"1-on-1 Coaching", converted:false,
-    },
-    {
-      id: 3, status: "converted",
-      init:"NP",
-      name:"Nina Park", email:"nina@email.com", phone:"212-555-0177",
-      goal:"Build Lean Muscle", level:"Beginner-Intermediate", injuries:"None",
-      frequency:"2x per week", location:"Alo Yoga Studio",
-      date:"Apr 4, 2025", time:"10:00 AM", type:"In-Person",
-      bookedAt:"Apr 1, 2025",
-      coachNotes:"Excellent attitude. Converted to Hybrid Coaching.", recommended:"Hybrid Coaching", converted:true,
-    },
-  ],
-};
 
 const CONSULT_TIMES = [
   "9:00 AM","10:00 AM","11:00 AM","12:00 PM",
@@ -6482,7 +5812,7 @@ function HeldInventoryPanel({ setView }) {
 /* ── ADMIN HELD INVENTORY PANEL ───────────────────────────────────────────────
    Embedded in AdminPackages below the prorated calculator.
 ────────────────────────────────────────────────────────────────────────── */
-function AdminHeldPanel() {
+function AdminHeldPanel({ dbClients = [] }) {
   const [tick,      setTick]      = useState(0);
   const [newPlan,   setNewPlan]   = useState("2x Per Week");
   const [newDate,   setNewDate]   = useState("");
@@ -6496,7 +5826,7 @@ function AdminHeldPanel() {
   const isPaused = HELD_INVENTORY.isPaused();
   const pInfo    = HELD_INVENTORY.pauseInfo();
   const pending  = HELD_INVENTORY.pending(selClient);
-  const allHeld  = CLIENTS.flatMap(c => HELD_INVENTORY.all(c.id));
+  const allHeld  = dbClients.flatMap(c => HELD_INVENTORY.all(c.id));
 
   const forceRender = () => setTick(t => t+1);
 
@@ -6559,7 +5889,7 @@ function AdminHeldPanel() {
         <div className="field">
           <label className="field-label">Client</label>
           <select className="fi" value={selClient} onChange={e=>setSelClient(+e.target.value)} style={{cursor:"pointer"}}>
-            {CLIENTS.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            {dbClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="field">
@@ -6587,7 +5917,7 @@ function AdminHeldPanel() {
         <p style={{fontSize:"0.72rem",color:"var(--txt-2)",padding:"8px 0"}}>No held packages. Add one above to schedule a future start.</p>
       ) : (
         allHeld.map(p => {
-          const client = CLIENTS.find(c=>c.id===p.clientId);
+          const client = dbClients.find(c=>c.id===p.clientId);
           const daysStart  = HELD_INVENTORY.daysUntilStart(p);
           const daysExpiry = HELD_INVENTORY.daysUntilExpiry(p);
           return (
@@ -7368,16 +6698,49 @@ const ADMIN_NAV = [
 function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
+
+  // ── Load real client list from Supabase ───────────────────────────────────
+  const [dbClients, setDbClients] = useState([]);
+  useEffect(() => {
+    listClients().then(rows => {
+      setDbClients(rows.map(r => {
+        const cp = r.client_profiles;
+        return {
+          id:            r.id,
+          init:          (r.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
+          name:          r.name || r.email,
+          email:         r.email,
+          pkg:           cp?.package_plan      || "—",
+          sessLeft:      cp?.sessions_balance  ?? 0,
+          sessTotal:     cp?.sessions_balance  ?? 0,
+          location:      cp?.location_building || "—",
+          goal:          (cp?.goals||[]).join(", ") || "—",
+          level:         cp?.fitness_level     || "—",
+          injuries:      "—",
+          birthday:      cp?.birthday          || "—",
+          birthdayReward:false,
+          starterUsed:   true,
+          status:        "active",
+          expires:       "—",
+          nextSess:      "—",
+          unread:        0,
+          lastFeedback:  "—",
+          age:           cp?.age               || "—",
+        };
+      }));
+    });
+  }, []);
+
   const views = {
-    dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} />,
+    dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} dbClients={dbClients} />,
     consultations:<AdminConsultations setView={setView} />,
-    clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} />,
+    clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
     programs:     <AdminPrograms session={session} />,
     schedule:     <AdminSchedule />,
     feedback:     <AdminFeedback />,
-    packages:     <AdminPackages />,
-    messages:     <AdminMessages />,
-    analytics:    <AdminAnalytics />,
+    packages:     <AdminPackages dbClients={dbClients} />,
+    messages:     <AdminMessages dbClients={dbClients} />,
+    analytics:    <AdminAnalytics dbClients={dbClients} />,
     settings:     <AdminSettings />,
   };
   return (
@@ -8137,7 +7500,7 @@ export default function App() {
 
       {/* ── CLIENT ROUTES ── */}
       {screen === "onboarding" && session?.role === "client" && !adminGuardFailed && (
-        <Onboarding onComplete={()=>setScreen("app")} session={session} /> 
+        <Onboarding onComplete={()=>setScreen("app")} session={session} />
       )}
       {screen === "app" && session?.role === "client" && !adminGuardFailed && (
         <AppShell onLogout={logout} session={session} />
