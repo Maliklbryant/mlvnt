@@ -1,12 +1,12 @@
 /**
- * MLVNT Auth Helpers
- * ------------------
+ * MLVNT Auth Helpers (auth.js)
+ * ----------------------------
  * All Supabase auth operations live here.
- * App.jsx imports from this file so no Supabase calls are scattered.
+ * App.jsx imports from this file — no supabase auth calls scattered elsewhere.
  *
  * Role system:
  *   - Roles are stored in public.profiles (role TEXT, is_owner BOOLEAN)
- *   - mlvnt2026@gmail.com is seeded as role="owner" by the SQL below
+ *   - mlvnt2026@gmail.com is seeded as role="owner" by the SQL trigger
  *   - Every other sign-up defaults to role="client"
  *   - Role is NEVER accepted from the browser — always read from the DB
  */
@@ -48,7 +48,7 @@ function buildSession(supaUser, profile) {
     emailVerified: !!supaUser.email_confirmed_at,
     mfaRequired:   role === "owner" || role === "admin",
     mfaSetupDone:  profile?.mfa_setup_done ?? false,
-    sessionId:     supaUser.id,  // keep legacy shape
+    sessionId:     supaUser.id,
   };
 }
 
@@ -73,7 +73,6 @@ export async function signIn(email, password) {
   });
 
   if (error) {
-    // Map Supabase error messages to user-friendly copy
     if (error.message.includes("Invalid login credentials")) {
       return { ok: false, error: "Incorrect email or password." };
     }
@@ -97,7 +96,7 @@ export async function signUp(email, password, name) {
     email: norm,
     password,
     options: {
-      data: { full_name: name },          // stored in auth.users.user_metadata
+      data: { full_name: name },
       emailRedirectTo: window.location.origin,
     },
   });
@@ -109,13 +108,10 @@ export async function signUp(email, password, name) {
     return { ok: false, error: error.message };
   }
 
-  // Profile row is created by a Supabase DB trigger (see SQL below).
-  // Role defaults to "client" — owner is pre-seeded separately.
   return {
     ok: true,
     needsEmailVerification: !data.user?.email_confirmed_at,
     email: norm,
-    // Role from profile (trigger may not have run yet — use client as safe default)
     role: norm === OWNER_EMAIL ? "owner" : "client",
   };
 }
@@ -137,14 +133,12 @@ export async function sendPasswordReset(email) {
   );
 
   // Always return ok:true to avoid leaking which emails exist
-  // (Supabase silently drops the request if email is unknown)
   if (error) console.error("resetPasswordForEmail:", error.message);
   return { ok: true };
 }
 
 // ─────────────────────────────────────────────────────────────
 // UPDATE PASSWORD — called after user clicks the email link
-// The link sets a session automatically; just call updateUser.
 // ─────────────────────────────────────────────────────────────
 export async function updatePassword(newPassword) {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -153,7 +147,7 @@ export async function updatePassword(newPassword) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// MARK MFA SETUP DONE — write to profiles table
+// MARK MFA SETUP DONE
 // ─────────────────────────────────────────────────────────────
 export async function markMfaSetupDone(userId) {
   await supabase
@@ -163,7 +157,7 @@ export async function markMfaSetupDone(userId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SUBSCRIBE TO AUTH CHANGES — for session persistence on reload
+// SUBSCRIBE TO AUTH CHANGES
 // ─────────────────────────────────────────────────────────────
 export function onAuthStateChange(callback) {
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -176,5 +170,5 @@ export function onAuthStateChange(callback) {
       }
     }
   );
-  return subscription; // call subscription.unsubscribe() to clean up
+  return subscription;
 }
