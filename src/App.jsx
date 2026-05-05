@@ -4584,7 +4584,7 @@ function AdminPrograms({ session }) {
     const id = Date.now();
     setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
       days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:""}]})}));
+        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:"", video:""}]})}));
   };
   const removeEx = (exId) => {
     setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
@@ -4619,31 +4619,55 @@ function AdminPrograms({ session }) {
         </>} />
         <div className="admin-body">
           <div className="a-panel" style={{marginBottom:14}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+            {/* Row 1: name / block / phase */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
               <div className="field"><label className="field-label">Program Name</label>
                 <input className="fi" value={editProg.name} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,name:e.target.value}:x))} /></div>
               <div className="field"><label className="field-label">Block</label>
                 <input className="fi" value={editProg.block} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,block:e.target.value}:x))} /></div>
               <div className="field"><label className="field-label">Phase</label>
                 <input className="fi" value={editProg.phase} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,phase:e.target.value}:x))} /></div>
-              <div className="field"><label className="field-label">Total Weeks</label>
-                <input className="fi" type="number" value={editProg.totalWeeks} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:+e.target.value}:x))} /></div>
             </div>
-            <div className="field mt-12"><label className="field-label">Coach Note</label>
+            {/* Row 2: duration presets / start date / end date */}
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:12,alignItems:"end",marginBottom:12}}>
+              <div className="field">
+                <label className="field-label">Duration</label>
+                <div style={{display:"flex",gap:6}}>
+                  {[2,4,8,12].map(w=>(
+                    <button key={w}
+                      onClick={()=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:w}:x))}
+                      style={{padding:"7px 12px",borderRadius:"var(--r2)",border:`1px solid ${editProg.totalWeeks===w?"var(--b1)":"var(--b0)"}`,background:editProg.totalWeeks===w?"var(--acc-0)":"none",color:editProg.totalWeeks===w?"var(--txt-0)":"var(--txt-1)",fontFamily:"var(--fh)",fontSize:"0.66rem",fontWeight:600,cursor:"pointer",transition:"all 0.17s",whiteSpace:"nowrap"}}
+                    >{w}w</button>
+                  ))}
+                  <input className="fi" type="number" min="1" max="52"
+                    value={editProg.totalWeeks}
+                    title="Custom weeks"
+                    style={{width:58,textAlign:"center"}}
+                    onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:Math.max(1,+e.target.value||1)}:x))} />
+                </div>
+              </div>
+              <div className="field"><label className="field-label">Start Date</label>
+                <input className="fi" type="date" value={editProg.startDate}
+                  onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,startDate:e.target.value}:x))} /></div>
+              <div className="field"><label className="field-label">End Date</label>
+                <input className="fi" type="date" value={editProg.endDate}
+                  onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,endDate:e.target.value}:x))} /></div>
+            </div>
+            <div className="field"><label className="field-label">Coach Note</label>
               <textarea className="note-area" rows={2} value={editProg.coachNote} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,coachNote:e.target.value}:x))} /></div>
           </div>
 
           <div className="pe-layout">
             <div className="pe-days">
               <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Training Days</p>
-              {days.map(d=>(
+              {days.map((d, idx)=>(
                 <div key={d.id} className={`pe-day-tab${curDayId===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
-                  <p className="pe-day-name">{d.name}</p>
+                  <p className="pe-day-name">Day {d.dayNumber || idx + 1} · {d.name}</p>
                   <p className="pe-day-type">{d.focus}</p>
                 </div>
               ))}
               <button style={{margin:"12px 10px 0",padding:"7px 10px",borderRadius:"var(--r2)",border:"1px dashed var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.66rem",cursor:"pointer",width:"calc(100% - 20px)"}} onClick={()=>{
-                const newDay={id:`d${Date.now()}`,name:"New Day",focus:"",exercises:[]};
+                const newDay={id:`d${Date.now()}`,dayNumber:days.length+1,name:"New Day",focus:"",warmup:"",exercises:[]};
                 setPrograms(p=>p.map(x=>x.id===editProgId?{...x,days:[...x.days,newDay]}:x));
                 setDay(newDay.id);
               }}>+ Add Day</button>
@@ -4651,14 +4675,23 @@ function AdminPrograms({ session }) {
 
             <div className="pe-content">
               {curDay && (<>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:10}}>
-                  <div className="form-grid" style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}}>
+                  <div className="form-grid" style={{flex:1,gridTemplateColumns:"90px 1fr 1fr"}}>
+                    <div className="field"><label className="field-label">Day #</label>
+                      <input className="fi" type="number" min="1" value={curDay.dayNumber || days.findIndex(d=>d.id===curDayId)+1} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,dayNumber:Math.max(1,+e.target.value||1)})}))} /></div>
                     <div className="field"><label className="field-label">Day Name</label>
                       <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
                     <div className="field"><label className="field-label">Focus / Type</label>
                       <input className="fi" value={curDay.focus} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,focus:e.target.value})}))} /></div>
                   </div>
                   <button className="btn btn-s btn-sm" onClick={addEx}>+ Exercise</button>
+                </div>
+                <div className="field" style={{marginBottom:14}}>
+                  <label className="field-label">Warm-Up Notes</label>
+                  <textarea className="note-area" rows={2}
+                    placeholder="Warm-up protocol, activation sets, mobility drills…"
+                    value={curDay.warmup||""}
+                    onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,warmup:e.target.value})}))} />
                 </div>
                 {(editDayObj||curDay).exercises.map((ex,ei)=>(
                   <div className="ex-editor" key={ex.id}>
@@ -4669,14 +4702,15 @@ function AdminPrograms({ session }) {
                       <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
                         onClick={()=>removeEx(ex.id)}>Remove</button>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px",gap:6,marginTop:10}}>
-                      {["Sets","Reps","Weight","Tempo","Rest","Note"].map(h=><div className="set-hd" key={h}>{h}</div>)}
+                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px 1fr",gap:6,marginTop:10}}>
+                      {["Sets","Reps","Weight","Tempo","Rest","Note","Video Link"].map(h=><div className="set-hd" key={h}>{h}</div>)}
                       <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
                       <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
                       <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
                       <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
                       <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
                       <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
+                      <input className="set-inp" value={ex.video||""} placeholder="https://…" onChange={e=>updateExField(ex.id,"video",e.target.value)} />
                     </div>
                   </div>
                 ))}
