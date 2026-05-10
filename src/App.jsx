@@ -17,11 +17,13 @@ import {
   listClients,
   getPrograms,
   getActiveProgram,
+  getAllPrograms,
   createProgram,
   saveProgram,
   duplicateProgram,
   archiveProgram,
   publishProgram,
+  deleteProgram,
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
@@ -4505,239 +4507,312 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
 /* ── ADMIN PROGRAMS ──────────────────────────────────────────────────────── */
 /* ── ADMIN PROGRAMS ─────────────────────────────────────────────────────── */
 function AdminPrograms({ session }) {
-  const [clients,     setClients]   = useState([]);
-  const [selClientId, setSelClient] = useState(null);
-  const [view,        setView]      = useState("list");
-  const [editProgId,  setEditProg]  = useState(null);
-  const [activeDay,   setDay]       = useState(null);
-  const [programs,    setPrograms]  = useState([]);
-  const [saving,      setSaving]    = useState(false);
-  const [saved,       setSaved]     = useState(false);
-  const [loading,     setLoading]   = useState(true);
-  const [saveErr,     setSaveErr]   = useState("");
+  // ── State ────────────────────────────────────────────────────────────
+  const [clients,    setClients]   = useState([]);
+  const [allProgs,   setAllProgs]  = useState([]);  // all programs from getAllPrograms()
+  const [loading,    setLoading]   = useState(true);
+  const [tab,        setTab]       = useState("library"); // "library" | "assigned"
+  const [view,       setView]      = useState("list");    // "list" | "edit"
+  const [editProgId, setEditProg]  = useState(null);
+  const [activeDay,  setDay]       = useState(null);
+  const [saving,     setSaving]    = useState(false);
+  const [saved,      setSaved]     = useState(false);
+  const [saveErr,    setSaveErr]   = useState("");
+  // Assign modal
+  const [assignModal,   setAssignModal]   = useState(null);  // programId being assigned
+  const [assignClientId,setAssignClient]  = useState("");
+  const [assigning,     setAssigning]     = useState(false);
+  const [assignErr,     setAssignErr]     = useState("");
+  // Client filter for Assigned tab
+  const [selClientId, setSelClient] = useState("");
 
-  // ── Load clients on mount ─────────────────────────────────────────────
-  useEffect(() => {
-    listClients().then(rows => {
-      // Normalise to the shape the UI expects
-      const mapped = rows.map(r => {
+  // ── Load everything on mount ─────────────────────────────────────────
+  const reload = () => {
+    setLoading(true);
+    Promise.all([listClients(), getAllPrograms()]).then(([cRows, pRows]) => {
+      const mapped = cRows.map(r => {
         const cp = r.client_profiles;
         return {
           id:       r.id,
           init:     (r.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
-          name:     r.name  || r.email,
+          name:     r.name || r.email,
           email:    r.email,
           pkg:      cp?.package_plan    || "—",
           goal:     (cp?.goals||[]).join(", ") || "—",
           level:    cp?.fitness_level   || "—",
           sessLeft: cp?.sessions_balance ?? 0,
-          location: cp?.location_building || "—",
-          injuries: "—",
-          status:   "active",
         };
       });
       setClients(mapped);
       if (mapped.length > 0 && !selClientId) setSelClient(mapped[0].id);
+      setAllProgs(pRows.map(dbToUI));
       setLoading(false);
     });
-  }, []);
+  };
+  useEffect(reload, []);
 
-  // ── Load programs whenever selected client changes ────────────────────
-  useEffect(() => {
-    if (!selClientId) return;
-    setLoading(true);
-    getPrograms(selClientId).then(rows => {
-      // Map DB snake_case → UI camelCase
-      setPrograms(rows.map(dbToUI));
-      setLoading(false);
-    });
-  }, [selClientId]);
-
-  // ── DB ↔ UI shape converters ──────────────────────────────────────────
+  // ── DB row → UI shape ────────────────────────────────────────────────
   function dbToUI(r) {
     return {
       id:          r.id,
-      clientId:    r.client_id,
-      name:        r.name        || "New Program",
-      block:       r.block       || "Block 1",
-      phase:       r.phase       || "",
-      status:      r.status      || "draft",
-      startDate:   r.start_date  || "",
-      endDate:     r.end_date    || "",
-      week:        r.week        ?? 1,
-      totalWeeks:  r.total_weeks ?? 8,
-      coachNote:   r.coach_note  || "",
-      days:        r.days        || [],
-      updatedAt:   r.updated_at  || "",
+      clientId:    r.client_id     || null,
+      clientName:  r.profiles?.name || r.profiles?.email || null,
+      name:        r.name          || "New Program",
+      block:       r.block         || "Block 1",
+      phase:       r.phase         || "",
+      status:      r.status        || "draft",
+      startDate:   r.start_date    || "",
+      endDate:     r.end_date      || "",
+      week:        r.week          ?? 1,
+      totalWeeks:  r.total_weeks   ?? 8,
+      coachNote:   r.coach_note    || "",
+      days:        Array.isArray(r.days) ? r.days : [],
+      updatedAt:   r.updated_at    || "",
     };
   }
 
-  const client   = clients.find(c => c.id === selClientId);
-  const active   = programs.find(p => p.status === "active");
-  const history  = programs.filter(p => p.status !== "active" && p.status !== "draft");
-  const drafts   = programs.filter(p => p.status === "draft");
-  const editProg = editProgId ? programs.find(p => p.id === editProgId) : null;
-  const editDayObj = editProg && activeDay ? editProg.days.find(d => d.id === activeDay) : null;
+  // Derived lists
+  const templates   = allProgs.filter(p => !p.clientId && p.status === "draft");
+  const allDrafts   = allProgs.filter(p => p.status === "draft");
+  const editProg    = editProgId ? allProgs.find(p => p.id === editProgId) : null;
+  const editDayObj  = editProg && activeDay ? editProg.days.find(d => d.id === activeDay) : null;
+  const curDayId    = activeDay || editProg?.days[0]?.id || null;
+  const curDay      = editDayObj || editProg?.days[0] || null;
 
-  // ── Persist + update local state ──────────────────────────────────────
+  // Client-filtered programs for Assigned tab
+  const clientProgs = selClientId
+    ? allProgs.filter(p => p.clientId === selClientId)
+    : [];
+  const clientActive  = clientProgs.find(p => p.status === "active");
+  const clientDrafts  = clientProgs.filter(p => p.status === "draft");
+  const clientHistory = clientProgs.filter(p => p.status !== "active" && p.status !== "draft");
+  const selClient     = clients.find(c => c.id === selClientId);
+
+  // ── Mutate helpers ────────────────────────────────────────────────────
+  const mutate = updater =>
+    setAllProgs(prev => prev.map(p => p.id === editProgId ? updater(p) : p));
+  const mutateDay = (dayId, updater) =>
+    mutate(p => ({ ...p, days: p.days.map(d => d.id === dayId ? updater(d) : d) }));
+  const updateExField = (exId, field, val) =>
+    mutate(p => ({ ...p, days: p.days.map(d =>
+      d.id !== curDayId ? d : { ...d, exercises: d.exercises.map(e =>
+        e.id !== exId ? e : { ...e, [field]: val }) }) }));
+
+  const addEx = () => {
+    const id = `e${Date.now()}`;
+    mutate(p => ({ ...p, days: p.days.map(d =>
+      d.id !== curDayId ? d : { ...d, exercises: [...(d.exercises||[]),
+        { id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:"" }] }) }));
+  };
+  const removeEx = exId =>
+    mutate(p => ({ ...p, days: p.days.map(d =>
+      d.id !== curDayId ? d : { ...d, exercises: d.exercises.filter(e => e.id !== exId) }) }));
+
+  // ── Supabase actions ─────────────────────────────────────────────────
   const saveAndPush = async () => {
     if (!editProg) return;
     setSaving(true); setSaveErr("");
     const result = await saveProgram(editProg);
     setSaving(false);
     if (!result.ok) { setSaveErr(result.error || "Save failed"); return; }
-    // Update local state from DB response
-    setPrograms(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
-    setSaved(true); setTimeout(() => setSaved(false), 2200);
+    setAllProgs(prev => prev.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
+    setSaved(true); setTimeout(() => setSaved(false), 2400);
   };
 
-  const archiveProg = async (id) => {
-    const result = await archiveProgram(id);
-    if (result.ok) setPrograms(p => p.map(x => x.id === id ? {...x, status:"completed"} : x));
-  };
-
-  const duplicateProg = async (id) => {
-    const result = await duplicateProgram(id, session?.id);
-    if (result.ok) setPrograms(p => [...p, dbToUI(result.program)]);
-  };
-
-  const publishProg = async (id) => {
-    const result = await publishProgram(id, selClientId);
-    if (result.ok) {
-      setPrograms(p => p.map(x =>
-        x.id === id ? {...x, status:"active"} :
-        x.status === "active" ? {...x, status:"completed"} : x
-      ));
-    }
-  };
-
-  const createNewProgram = async () => {
-    const result = await createProgram(selClientId, session?.id);
+  const createTemplate = async () => {
+    const result = await createProgram(null, session?.id);
     if (!result.ok) return;
     const np = dbToUI(result.program);
-    setPrograms(p => [...p, np]);
+    setAllProgs(prev => [...prev, np]);
     setEditProg(np.id);
     setDay(null);
     setView("edit");
   };
 
-  // ── In-memory exercise edits (saved on "Save & Push") ────────────────
-  const updateExField = (exId, field, val) => {
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: d.exercises.map(e => e.id !== exId ? e : {...e, [field]:val})})}));
-  };
-  const addEx = () => {
-    const id = Date.now();
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:"", video:""}]})}));
-  };
-  const removeEx = (exId) => {
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: d.exercises.filter(e => e.id !== exId)})}));
+  const createForClient = async (clientId) => {
+    const result = await createProgram(clientId, session?.id);
+    if (!result.ok) return;
+    const np = dbToUI(result.program);
+    setAllProgs(prev => [...prev, np]);
+    setEditProg(np.id);
+    setDay(null);
+    setView("edit");
   };
 
+  const archiveProg = async id => {
+    const result = await archiveProgram(id);
+    if (result.ok) setAllProgs(prev => prev.map(x => x.id === id ? { ...x, status:"completed" } : x));
+  };
+
+  const dupProg = async id => {
+    const result = await duplicateProgram(id, session?.id);
+    if (result.ok) setAllProgs(prev => [...prev, dbToUI(result.program)]);
+  };
+
+  const deleteProg = async id => {
+    const result = await deleteProgram(id);
+    if (result.ok) setAllProgs(prev => prev.filter(x => x.id !== id));
+  };
+
+  const openAssign = (progId) => {
+    setAssignModal(progId);
+    setAssignClient(clients[0]?.id || "");
+    setAssignErr("");
+  };
+
+  const confirmAssign = async () => {
+    if (!assignClientId) { setAssignErr("Select a client."); return; }
+    setAssigning(true); setAssignErr("");
+    const result = await publishProgram(assignModal, assignClientId);
+    setAssigning(false);
+    if (!result.ok) { setAssignErr(result.error || "Assign failed"); return; }
+    // Reload everything so both tabs reflect the change
+    setAssignModal(null);
+    reload();
+  };
+
+  // ── Loading ──────────────────────────────────────────────────────────
   if (loading) return (
     <div className="page-fade">
-      <AdminTopbar title="Program Management" />
-      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:60}}>
-        <div style={{textAlign:"center",color:"var(--txt-2)",fontSize:"0.78rem"}}>
-          <div style={{marginBottom:12,fontSize:"1.4rem",opacity:0.4}}>⊙</div>Loading…
-        </div>
+      <AdminTopbar title="Programs" />
+      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:80}}>
+        <Spinner />
       </div>
     </div>
   );
 
-  // ── EDIT VIEW ───────────────────────────────────────────────────────────
+  // ── EDIT VIEW ────────────────────────────────────────────────────────
   if (view === "edit" && editProg) {
-    const days      = editProg.days;
-    const curDayId  = activeDay || days[0]?.id;
-    const curDay    = editDayObj || days[0];
     return (
       <div className="page-fade">
-        <AdminTopbar title={`Editing: ${editProg.name}`} actions={<>
-          <p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{client?.name} · {editProg.block}</p>
+        <AdminTopbar title={editProg.name || "Edit Program"} actions={<>
+          {editProg.clientName
+            ? <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>→ {editProg.clientName}</span>
+            : <span style={{fontSize:"0.65rem",color:"rgba(220,175,100,0.8)"}}>Template (unassigned)</span>}
           {saveErr && <span style={{fontSize:"0.65rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
-          <button className="btn btn-s btn-sm" onClick={()=>duplicateProg(editProg.id)}>Duplicate</button>
-          {editProg.status==="active" && <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive Block</button>}
-          <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
+          {saved   && <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
+          <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+          <button className="btn btn-s btn-sm" onClick={()=>dupProg(editProg.id)}>Duplicate</button>
+          {!editProg.clientId && (
+            <button className="btn btn-s btn-sm" onClick={()=>openAssign(editProg.id)}>Assign to Client</button>
+          )}
+          {editProg.status==="active" && (
+            <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive</button>
+          )}
+          <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>
+            {saving ? <><Spinner />Saving…</> : saved ? "✓ Saved" : "Save"}
+          </button>
         </>} />
+
         <div className="admin-body">
+          {/* Program settings */}
           <div className="a-panel" style={{marginBottom:14}}>
-            {/* Row 1: name / block / phase */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
               <div className="field"><label className="field-label">Program Name</label>
-                <input className="fi" value={editProg.name} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,name:e.target.value}:x))} /></div>
+                <input className="fi" value={editProg.name}
+                  onChange={e=>mutate(p=>({...p,name:e.target.value}))} /></div>
               <div className="field"><label className="field-label">Block</label>
-                <input className="fi" value={editProg.block} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,block:e.target.value}:x))} /></div>
+                <input className="fi" value={editProg.block}
+                  onChange={e=>mutate(p=>({...p,block:e.target.value}))} /></div>
               <div className="field"><label className="field-label">Phase</label>
-                <input className="fi" value={editProg.phase} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,phase:e.target.value}:x))} /></div>
+                <input className="fi" value={editProg.phase}
+                  onChange={e=>mutate(p=>({...p,phase:e.target.value}))} /></div>
             </div>
-            {/* Row 2: duration presets / start date / end date */}
             <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:12,alignItems:"end",marginBottom:12}}>
               <div className="field">
                 <label className="field-label">Duration</label>
                 <div style={{display:"flex",gap:6}}>
                   {[2,4,8,12].map(w=>(
                     <button key={w}
-                      onClick={()=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:w}:x))}
-                      style={{padding:"7px 12px",borderRadius:"var(--r2)",border:`1px solid ${editProg.totalWeeks===w?"var(--b1)":"var(--b0)"}`,background:editProg.totalWeeks===w?"var(--acc-0)":"none",color:editProg.totalWeeks===w?"var(--txt-0)":"var(--txt-1)",fontFamily:"var(--fh)",fontSize:"0.66rem",fontWeight:600,cursor:"pointer",transition:"all 0.17s",whiteSpace:"nowrap"}}
+                      onClick={()=>mutate(p=>({...p,totalWeeks:w}))}
+                      style={{padding:"7px 12px",borderRadius:"var(--r2)",border:`1px solid ${editProg.totalWeeks===w?"var(--b1)":"var(--b0)"}`,background:editProg.totalWeeks===w?"var(--acc-0)":"none",color:editProg.totalWeeks===w?"var(--txt-0)":"var(--txt-1)",fontFamily:"var(--fh)",fontSize:"0.66rem",fontWeight:600,cursor:"pointer",transition:"all 0.17s"}}
                     >{w}w</button>
                   ))}
-                  <input className="fi" type="number" min="1" max="52"
-                    value={editProg.totalWeeks}
-                    title="Custom weeks"
+                  <input className="fi" type="number" min="1" max="52" value={editProg.totalWeeks} title="Custom"
                     style={{width:58,textAlign:"center"}}
-                    onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:Math.max(1,+e.target.value||1)}:x))} />
+                    onChange={e=>mutate(p=>({...p,totalWeeks:Math.max(1,+e.target.value||1)}))} />
                 </div>
               </div>
               <div className="field"><label className="field-label">Start Date</label>
                 <input className="fi" type="date" value={editProg.startDate}
-                  onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,startDate:e.target.value}:x))} /></div>
+                  onChange={e=>mutate(p=>({...p,startDate:e.target.value}))} /></div>
               <div className="field"><label className="field-label">End Date</label>
                 <input className="fi" type="date" value={editProg.endDate}
-                  onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,endDate:e.target.value}:x))} /></div>
+                  onChange={e=>mutate(p=>({...p,endDate:e.target.value}))} /></div>
             </div>
             <div className="field"><label className="field-label">Coach Note</label>
-              <textarea className="note-area" rows={2} value={editProg.coachNote} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,coachNote:e.target.value}:x))} /></div>
+              <textarea className="note-area" rows={2} value={editProg.coachNote}
+                onChange={e=>mutate(p=>({...p,coachNote:e.target.value}))} /></div>
           </div>
 
+          {/* Day + exercise editor */}
           <div className="pe-layout">
             <div className="pe-days">
-              <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Training Days</p>
-              {days.map(d=>(
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 8px 10px",borderBottom:"1px solid var(--b0)",marginBottom:8}}>
+                <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)"}}>Days</p>
+                <button className="btn btn-xs btn-p" style={{padding:"4px 10px",fontSize:"0.6rem"}}
+                  onClick={()=>{
+                    const n = (editProg.days||[]).length + 1;
+                    const nd = {id:`d${Date.now()}`,name:`Day ${n}`,focus:"",warmup:"",exercises:[]};
+                    mutate(p=>({...p,days:[...(p.days||[]),nd]}));
+                    setDay(nd.id);
+                  }}>+ Day</button>
+              </div>
+              {(editProg.days||[]).length === 0 && (
+                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",padding:"8px 10px",lineHeight:1.55}}>No days yet.</p>
+              )}
+              {(editProg.days||[]).map(d=>(
                 <div key={d.id} className={`pe-day-tab${curDayId===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
-                  <p className="pe-day-name">{d.name}</p>
-                  <p className="pe-day-type">{d.focus}</p>
+                  <p className="pe-day-name">{d.name||"Unnamed"}</p>
+                  <p className="pe-day-type">{d.focus||"No focus"}</p>
                 </div>
               ))}
-              <button style={{margin:"12px 10px 0",padding:"7px 10px",borderRadius:"var(--r2)",border:"1px dashed var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.66rem",cursor:"pointer",width:"calc(100% - 20px)"}} onClick={()=>{
-                const newDay={id:`d${Date.now()}`,name:"New Day",focus:"",warmup:"",exercises:[]};
-                setPrograms(p=>p.map(x=>x.id===editProgId?{...x,days:[...x.days,newDay]}:x));
-                setDay(newDay.id);
-              }}>+ Add Day</button>
             </div>
 
             <div className="pe-content">
-              {curDay && (<>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}}>
-                  <div className="form-grid" style={{flex:1}}>
-                    <div className="field"><label className="field-label">Day Name</label>
-                      <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
-                    <div className="field"><label className="field-label">Focus / Type</label>
-                      <input className="fi" value={curDay.focus} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,focus:e.target.value})}))} /></div>
-                  </div>
-                  <button className="btn btn-s btn-sm" onClick={addEx}>+ Exercise</button>
+              {!curDay ? (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:10,color:"var(--txt-2)"}}>
+                  <span style={{fontSize:"1.8rem",opacity:0.2}}>▦</span>
+                  <p style={{fontSize:"0.76rem"}}>Add a day to start building.</p>
+                </div>
+              ) : (<>
+                {/* Day fields */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,marginBottom:12,alignItems:"end"}}>
+                  <div className="field"><label className="field-label">Day Name</label>
+                    <input className="fi" value={curDay.name}
+                      onChange={e=>mutateDay(curDayId,d=>({...d,name:e.target.value}))} /></div>
+                  <div className="field"><label className="field-label">Focus / Type</label>
+                    <input className="fi" value={curDay.focus}
+                      onChange={e=>mutateDay(curDayId,d=>({...d,focus:e.target.value}))} /></div>
+                  <button className="btn btn-danger btn-xs"
+                    style={{padding:"8px 12px",alignSelf:"flex-end"}}
+                    onClick={()=>{
+                      mutate(p=>({...p,days:p.days.filter(d=>d.id!==curDayId)}));
+                      setDay(null);
+                    }}>Remove</button>
                 </div>
                 <div className="field" style={{marginBottom:14}}>
                   <label className="field-label">Warm-Up Notes</label>
                   <textarea className="note-area" rows={2}
                     placeholder="Warm-up protocol, activation sets, mobility drills…"
                     value={curDay.warmup||""}
-                    onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,warmup:e.target.value})}))} />
+                    onChange={e=>mutateDay(curDayId,d=>({...d,warmup:e.target.value}))} />
                 </div>
+
+                {/* Exercise list */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <p style={{fontSize:"0.58rem",letterSpacing:"0.18em",textTransform:"uppercase",color:"var(--txt-2)"}}>
+                    Exercises ({(curDay.exercises||[]).length})
+                  </p>
+                  <button className="btn btn-p btn-xs" onClick={addEx}>+ Exercise</button>
+                </div>
+
+                {(curDay.exercises||[]).length===0 && (
+                  <div style={{padding:"24px",textAlign:"center",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.76rem"}}>
+                    No exercises yet. Click + Exercise to add one.
+                  </div>
+                )}
+
                 {(editDayObj||curDay).exercises.map((ex,ei)=>(
                   <div className="ex-editor" key={ex.id}>
                     <div className="ex-editor-head">
@@ -4747,129 +4822,328 @@ function AdminPrograms({ session }) {
                       <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
                         onClick={()=>removeEx(ex.id)}>Remove</button>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px 1fr",gap:6,marginTop:10}}>
-                      {["Sets","Reps","Weight","Tempo","Rest","Note","Video Link"].map(h=><div className="set-hd" key={h}>{h}</div>)}
-                      <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
-                      <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
-                      <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
-                      <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
-                      <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
-                      <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
-                      <input className="set-inp" value={ex.video||""} placeholder="https://…" onChange={e=>updateExField(ex.id,"video",e.target.value)} />
+                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 1fr",gap:6,marginTop:10}}>
+                      {["Sets","Reps","Target Weight","Tempo","Rest","Coach Notes"].map(h=>(
+                        <div className="set-hd" key={h}>{h}</div>
+                      ))}
+                      <input className="set-inp" value={ex.sets} placeholder="3"
+                        onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
+                      <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10"
+                        onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
+                      <input className="set-inp" value={ex.weight} placeholder="e.g. 135 lbs"
+                        onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
+                      <input className="set-inp" value={ex.tempo} placeholder="2s"
+                        onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
+                      <input className="set-inp" value={ex.rest} placeholder="90s"
+                        onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
+                      <input className="set-inp" value={ex.note} placeholder="Coaching cues…"
+                        onChange={e=>updateExField(ex.id,"note",e.target.value)} />
                     </div>
                   </div>
                 ))}
-                {(editDayObj||curDay).exercises.length===0&&(
-                  <div style={{padding:"24px",textAlign:"center",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.78rem"}}>No exercises yet. Click + Exercise to add one.</div>
+
+                {/* Assign shortcut */}
+                {!editProg.clientId && (curDay.exercises||[]).length > 0 && (
+                  <div style={{marginTop:20,padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.06)",border:"1px solid rgba(42,122,75,0.18)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div>
+                      <p style={{fontSize:"0.76rem",color:"var(--txt-0)",fontWeight:500}}>Ready to assign?</p>
+                      <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>Save first, then assign this template to a client.</p>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexShrink:0}}>
+                      <button className={`btn btn-s btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>
+                        {saving?<><Spinner />Saving…</>:"Save"}
+                      </button>
+                      <button className="btn btn-p btn-sm" onClick={async()=>{await saveAndPush();openAssign(editProg.id);}}>
+                        Save & Assign →
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>)}
             </div>
           </div>
+
           <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);}}>← Back</button>
-            <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+            <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>
+              {saving?<><Spinner />Saving…</>:saved?"✓ Saved":"Save Program"}
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── LIST VIEW ───────────────────────────────────────────────────────────
+  // ── LIST VIEW ────────────────────────────────────────────────────────
   return (
     <div className="page-fade">
-      <AdminTopbar title="Program Management" actions={<>
-        <select value={selClientId || ""} onChange={e=>{ setSelClient(e.target.value); setView("list"); setEditProg(null); }}
-          style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",padding:"6px 10px",borderRadius:"var(--r2)",fontSize:"0.76rem",cursor:"pointer",outline:"none"}}>
-          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <button className="btn btn-p btn-sm" onClick={createNewProgram}>+ New Program</button>
-      </>} />
+      <AdminTopbar title="Programs" actions={
+        <button className="btn btn-p btn-sm" onClick={createTemplate}>+ New Template</button>
+      } />
       <div className="admin-body">
-        {client && (
-          <div className="a-panel" style={{marginBottom:14,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
-            <div className="c-av" style={{width:40,height:40,fontSize:"0.72rem"}}>{client.init}</div>
-            <div style={{flex:1}}>
-              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client.name}</p>
-              <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{client.pkg} · {client.goal} · {client.level}</p>
-            </div>
-            {active  && <span className="prog-status-pill active">Active Program: {active.block}</span>}
-            {!active && <span className="prog-status-pill draft">No Active Program</span>}
-          </div>
-        )}
 
-        {active && (
-          <div style={{marginBottom:14}}>
-            <p className="label mb-10">Active Program</p>
-            <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.2)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
-                <div>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{active.name}</p>
-                  <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{active.block} · {active.phase} · Week {active.week} of {active.totalWeeks}</p>
-                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{active.startDate} – {active.endDate}</p>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(active.id);setDay(active.days[0]?.id||null);setView("edit");}}>Edit Program</button>
-                  <button className="btn btn-s btn-sm" onClick={()=>duplicateProg(active.id)}>Duplicate</button>
-                  <button className="btn btn-s btn-sm" onClick={()=>archiveProg(active.id)}>Archive Block</button>
+        {/* Tabs */}
+        <div className="prog-tabs" style={{marginBottom:20}}>
+          <button className={`prog-tab${tab==="library"?" on":""}`} onClick={()=>setTab("library")}>
+            Program Library
+            <span style={{marginLeft:5,padding:"1px 6px",borderRadius:100,background:"var(--b0)",fontSize:"0.58rem",fontFamily:"var(--fc)"}}>{allDrafts.length}</span>
+          </button>
+          <button className={`prog-tab${tab==="assigned"?" on":""}`} onClick={()=>setTab("assigned")}>
+            Assigned to Clients
+          </button>
+        </div>
+
+        {/* ── LIBRARY TAB ── */}
+        {tab === "library" && (<>
+          {/* Unassigned templates */}
+          <div style={{marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <p className="label">Templates (Unassigned)</p>
+              <button className="btn btn-p btn-sm" onClick={createTemplate}>+ New Template</button>
+            </div>
+            {templates.length === 0 ? (
+              <div className="a-panel">
+                <div className="empty-state" style={{padding:"48px 20px"}}>
+                  <span className="empty-ic">▦</span>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No program templates yet</p>
+                  <p className="empty-txt">Create your first training plan. Templates can be built before any clients exist and assigned later.</p>
+                  <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={createTemplate}>+ Create Template</button>
                 </div>
               </div>
-              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {active.days.map(d=>(
-                  <div key={d.id} style={{padding:"8px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"0.72rem",fontWeight:700}}>{d.name}</p>
-                    <p style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:2}}>{d.focus}</p>
-                    <p style={{fontSize:"0.6rem",color:"var(--txt-2)",marginTop:1}}>{d.exercises.length} exercises</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {drafts.length > 0 && (
-          <div style={{marginBottom:14}}>
-            <p className="label mb-10">Drafts</p>
-            {drafts.map(p=>(
-              <div className="a-panel" key={p.id} style={{marginBottom:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><p style={{fontFamily:"var(--fh)",fontSize:"0.85rem",fontWeight:700}}>{p.name}</p>
-                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · Draft</p></div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days[0]?.id||null);setView("edit");}}>Edit</button>
-                    <button className="btn btn-p btn-sm" onClick={()=>publishProg(p.id)}>Publish</button>
-                  </div>
+            ) : templates.map(p => (
+              <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
+                    {p.block}{p.phase?` · ${p.phase}`:""} · {p.totalWeeks}w · {(p.days||[]).length} days
+                  </p>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                  <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                  {clients.length > 0 && (
+                    <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Assign →</button>
+                  )}
+                  <button className="btn btn-danger btn-xs" onClick={()=>deleteProg(p.id)}>Delete</button>
                 </div>
               </div>
             ))}
           </div>
-        )}
 
-        {history.length > 0 && (
-          <div>
-            <p className="label mb-10">Program History · {history.length} block{history.length!==1?"s":""}</p>
-            {history.map(p=>(
-              <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid var(--b0)"}}>
-                <div>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · {p.startDate} – {p.endDate}</p>
+          {/* All assigned drafts */}
+          {allProgs.filter(p=>p.clientId && p.status==="draft").length > 0 && (
+            <div>
+              <p className="label mb-12">Client Drafts</p>
+              {allProgs.filter(p=>p.clientId && p.status==="draft").map(p=>(
+                <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <div>
+                    <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                    <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>→ {p.clientName} · {p.block}</p>
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <span className="prog-status-pill draft">Draft</span>
+                    <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                    <button className="btn btn-p btn-xs" onClick={()=>openAssign(p.id)}>Publish</button>
+                  </div>
                 </div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <span className={`prog-status-pill ${p.status}`}>{p.status}</span>
-                  <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days[0]?.id||null);setView("edit");}}>View</button>
-                  <button className="btn btn-s btn-xs" onClick={()=>duplicateProg(p.id)}>Duplicate</button>
+              ))}
+            </div>
+          )}
+        </>)}
+
+        {/* ── ASSIGNED TAB ── */}
+        {tab === "assigned" && (<>
+          {clients.length === 0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"48px 20px"}}>
+                <span className="empty-ic">◉</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
+                <p className="empty-txt">Add clients first, then assign programs here.</p>
+              </div>
+            </div>
+          ) : (<>
+            {/* Client selector */}
+            <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+              {clients.map(c=>(
+                <button key={c.id}
+                  onClick={()=>setSelClient(c.id)}
+                  style={{padding:"8px 14px",borderRadius:"var(--r2)",border:`1px solid ${selClientId===c.id?"var(--b1)":"var(--b0)"}`,background:selClientId===c.id?"var(--acc-0)":"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.17s"}}>
+                  <div className="c-av" style={{width:24,height:24,fontSize:"0.52rem"}}>{c.init}</div>
+                  <span style={{fontSize:"0.78rem",color:selClientId===c.id?"var(--txt-0)":"var(--txt-1)",fontWeight:500}}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Selected client programs */}
+            {selClient && (<>
+              <div className="a-panel" style={{marginBottom:14,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                <div className="c-av" style={{width:38,height:38,fontSize:"0.66rem"}}>{selClient.init}</div>
+                <div style={{flex:1}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{selClient.name}</p>
+                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{selClient.goal} · {selClient.level}</p>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {clientActive && <span className="prog-status-pill active">Active: {clientActive.block}</span>}
+                  {!clientActive && <span className="prog-status-pill draft">No Active Program</span>}
+                  <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ New for {selClient.name}</button>
+                  {templates.length > 0 && (
+                    <button className="btn btn-s btn-sm" onClick={()=>{ setTab("library"); }}>Assign Template →</button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
 
-        {!loading && programs.length === 0 && (
-          <div style={{textAlign:"center",padding:"48px 0",color:"var(--txt-2)",fontSize:"0.78rem"}}>
-            No programs yet for this client.<br />
-            <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={createNewProgram}>+ Create First Program</button>
-          </div>
-        )}
+              {/* Active */}
+              {clientActive && (
+                <div style={{marginBottom:14}}>
+                  <p className="label mb-10">Active Program</p>
+                  <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.2)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{clientActive.name}</p>
+                        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{clientActive.block}{clientActive.phase?` · ${clientActive.phase}`:""} · Wk {clientActive.week}/{clientActive.totalWeeks}</p>
+                        {(clientActive.startDate||clientActive.endDate) && (
+                          <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{clientActive.startDate} – {clientActive.endDate}</p>
+                        )}
+                      </div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(clientActive.id);setDay(clientActive.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>dupProg(clientActive.id)}>Duplicate</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>archiveProg(clientActive.id)}>Archive</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      {(clientActive.days||[]).map(d=>(
+                        <div key={d.id} style={{padding:"8px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                          <p style={{fontFamily:"var(--fh)",fontSize:"0.7rem",fontWeight:700}}>{d.name}</p>
+                          {d.focus && <p style={{fontSize:"0.6rem",color:"var(--txt-2)",marginTop:1}}>{d.focus}</p>}
+                          <p style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:1}}>{(d.exercises||[]).length} ex</p>
+                        </div>
+                      ))}
+                      {(clientActive.days||[]).length===0 && (
+                        <p style={{fontSize:"0.72rem",color:"var(--txt-2)"}}>No days — click Edit to build it out.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Client drafts */}
+              {clientDrafts.length > 0 && (
+                <div style={{marginBottom:14}}>
+                  <p className="label mb-10">Drafts ({clientDrafts.length})</p>
+                  {clientDrafts.map(p=>(
+                    <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700}}>{p.name}</p>
+                        <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · {p.totalWeeks}w</p>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                        <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Publish →</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* History */}
+              {clientHistory.length > 0 && (
+                <div>
+                  <p className="label mb-10">History ({clientHistory.length})</p>
+                  {clientHistory.map(p=>(
+                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:"1px solid var(--b0)"}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                        <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{p.block}{p.startDate?` · ${p.startDate} – ${p.endDate}`:""}</p>
+                      </div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span className={`prog-status-pill ${p.status}`}>{p.status}</span>
+                        <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>View</button>
+                        <button className="btn btn-s btn-xs" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state for client */}
+              {clientProgs.length===0 && (
+                <div className="a-panel" style={{marginTop:8}}>
+                  <div className="empty-state" style={{padding:"40px 20px"}}>
+                    <span className="empty-ic">▦</span>
+                    <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No programs for {selClient.name}</p>
+                    <p className="empty-txt">No program assigned yet. Create one or assign a template.</p>
+                    <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"center"}}>
+                      <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ Create Program</button>
+                      {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template</button>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>)}
+          </>)}
+        </>)}
       </div>
+
+      {/* ── ASSIGN MODAL ── */}
+      {assignModal && (
+        <div style={{position:"fixed",inset:0,background:"rgba(5,6,8,0.88)",backdropFilter:"blur(16px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+          onClick={()=>setAssignModal(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:440,borderRadius:"var(--r5)",padding:28,background:"var(--gb2)",border:"1px solid var(--b1)",backdropFilter:"blur(32px)",boxShadow:"0 32px 80px rgba(0,0,0,0.8)",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)"}} />
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+              <div>
+                <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)"}}>Assign to Client</p>
+                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:3}}>
+                  {allProgs.find(p=>p.id===assignModal)?.name || "Program"}
+                </p>
+              </div>
+              <button onClick={()=>setAssignModal(null)} style={{width:28,height:28,borderRadius:"50%",background:"var(--gb)",border:"1px solid var(--b0)",color:"var(--txt-1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem"}}>✕</button>
+            </div>
+
+            {clients.length === 0 ? (
+              <p style={{fontSize:"0.78rem",color:"var(--txt-2)",textAlign:"center",padding:"16px 0"}}>No clients yet. Add clients first.</p>
+            ) : (<>
+              <div className="field" style={{marginBottom:14}}>
+                <label className="field-label">Select Client</label>
+                <select className="fi" value={assignClientId} onChange={e=>setAssignClient(e.target.value)}
+                  style={{cursor:"pointer"}}>
+                  <option value="">— Choose a client —</option>
+                  {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {assignClientId && (()=>{
+                const c = clients.find(x=>x.id===assignClientId);
+                const existing = allProgs.find(p=>p.clientId===assignClientId && p.status==="active");
+                return (
+                  <div style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",marginBottom:14}}>
+                    <p style={{fontSize:"0.72rem",color:"var(--txt-0)",fontWeight:500}}>{c?.name}</p>
+                    {existing ? (
+                      <p style={{fontSize:"0.65rem",color:"rgba(220,175,100,0.85)",marginTop:3}}>
+                        ⚠ Has active program: {existing.name} — will be archived on publish.
+                      </p>
+                    ) : (
+                      <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:3}}>No active program.</p>
+                    )}
+                  </div>
+                );
+              })()}
+              {assignErr && <p style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.9)",marginBottom:10}}>{assignErr}</p>}
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-s btn-sm" onClick={()=>setAssignModal(null)}>Cancel</button>
+                <button
+                  className={`btn btn-p btn-sm${assigning?" btn-loading":""}`}
+                  style={{flex:1,justifyContent:"center",opacity:assignClientId?1:0.45}}
+                  onClick={confirmAssign}
+                  disabled={!assignClientId||assigning}
+                >
+                  {assigning?<><Spinner />Assigning…</>:"Assign & Publish"}
+                </button>
+              </div>
+            </>)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
