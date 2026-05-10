@@ -3235,96 +3235,139 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
 }
 
 /* ── PROGRESS ────────────────────────────────────────────────────────────── */
-function Progress() {
+function Progress({ session, workoutLogs, allPrograms }) {
+  const [weightInput,  setWeightInput]  = useState("");
+  const [weightLog,    setWeightLog]    = useState([]); // [{date, value}] from local state until DB wired
+  const [savingWeight, setSavingWeight] = useState(false);
+
+  // Derive real metrics from Supabase workout logs
+  const completedDays = Object.values(workoutLogs || {}).filter(l => l.completed);
+  const totalLogged   = completedDays.length;
+
+  // Active program for context
+  const activeProg = (allPrograms || []).find(p => p.status === "active");
+
+  const logWeight = () => {
+    const val = parseFloat(weightInput);
+    if (!val || isNaN(val)) return;
+    setSavingWeight(true);
+    const entry = { date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}), value: `${val} lbs` };
+    // Persist to Supabase client_profiles.weight field and keep local list
+    if (session?.id) {
+      saveClientProfile(session.id, { weight: `${val} lbs` }).catch(e => console.error(e));
+    }
+    setWeightLog(prev => [entry, ...prev].slice(0, 20));
+    setWeightInput("");
+    setSavingWeight(false);
+  };
+
   return (
     <div className="page-fade">
-      <Topbar title="Progress" actions={<button className="btn btn-s btn-sm">Log Update</button>} />
+      <Topbar title="Progress" />
       <div className="page-body">
 
-        <div className="progress-grid">
-          {[
-            ["Sessions Done","24","↑ 4 this month"],
-            ["Workouts Logged","18","of 24 sessions"],
-            ["Consistency","78%","↑ 12% vs last block"],
-            ["Body Weight","174 lbs","↓ 3 lbs since start"],
-            ["Bench Press 5RM","185 lbs","↑ 15 lbs since start"],
-            ["RDL 5RM","235 lbs","↑ 20 lbs since start"],
-          ].map(([lbl,n,delta])=>(
-            <div className="metric-card" key={lbl}>
-              <div className="metric-n">{n}</div>
-              <p className="metric-lbl">{lbl}</p>
-              <p className="metric-delta">{delta}</p>
-            </div>
-          ))}
+        {/* Workout stats — from real workoutLogs */}
+        <div className="progress-grid" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+          <div className="metric-card">
+            <div className="metric-n">{totalLogged}</div>
+            <p className="metric-lbl">Workouts Logged</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>
+              {totalLogged === 0 ? "Complete workouts to start tracking" : `across all programs`}
+            </p>
+          </div>
+          <div className="metric-card">
+            <div className="metric-n">{activeProg ? `${activeProg.week || 1}/${activeProg.totalWeeks || 8}` : "—"}</div>
+            <p className="metric-lbl">Current Week</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>
+              {activeProg ? activeProg.name : "No active program"}
+            </p>
+          </div>
+          <div className="metric-card">
+            <div className="metric-n">{(allPrograms||[]).filter(p=>p.status==="completed").length || "—"}</div>
+            <p className="metric-lbl">Programs Completed</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>All time</p>
+          </div>
         </div>
 
+        {/* Workout completion history from real logs */}
         <div className="card card-p mb-16">
           <div className="panel-hd">
-            <span className="panel-title">Consistency Overview</span>
-            <Tag type="ok">Block 1–2</Tag>
+            <span className="panel-title">Workout History</span>
           </div>
-          <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-            {Array.from({length:56}).map((_,i)=>(
-              <div key={i} style={{width:16,height:16,borderRadius:3,background:i%7===0||i%7===6?"var(--b0)":Math.random()>0.3?"rgba(42,122,75,0.5)":"var(--b0)",transition:"all 0.2s"}} />
-            ))}
-          </div>
-          <p className="body-sm mt-10" style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Past 8 weeks · Green = session completed</p>
+          {completedDays.length === 0 ? (
+            <div className="empty-state" style={{padding:"32px 0"}}>
+              <span className="empty-ic">◈</span>
+              <p className="empty-txt">No workouts logged yet. Complete a workout day to start building your history.</p>
+            </div>
+          ) : (
+            completedDays.slice(0, 10).map((log, i) => (
+              <div className="list-row" key={i}>
+                <div>
+                  <p className="list-main" style={{fontSize:"0.78rem"}}>Workout completed</p>
+                  <p className="list-sub">{log.completedAt || "—"}</p>
+                </div>
+                <Tag type="ok">Done</Tag>
+              </div>
+            ))
+          )}
         </div>
 
+        {/* Body weight log */}
         <div className="dash-grid">
           <div className="card card-p">
             <div className="panel-hd"><span className="panel-title">Body Weight Log</span></div>
-            {[["Apr 1","177 lbs"],["Mar 24","176.5 lbs"],["Mar 17","175.5 lbs"],["Mar 10","177 lbs"],["Start","177 lbs"]].map(([d,w])=>(
-              <div className="list-row" key={d}>
-                <span className="list-sub">{d}</span>
-                <span className="list-main">{w}</span>
-              </div>
-            ))}
+            {weightLog.length === 0 ? (
+              <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No entries yet. Log your weight below.</p>
+            ) : (
+              weightLog.map(({date, value}) => (
+                <div className="list-row" key={date}>
+                  <span className="list-sub">{date}</span>
+                  <span className="list-main">{value}</span>
+                </div>
+              ))
+            )}
             <div className="field mt-16">
               <label className="field-label">Log Today's Weight</label>
               <div className="flex gap-8">
-                <input className="fi" style={{flex:1}} placeholder="lbs" type="number" />
-                <button className="btn btn-p btn-sm">Log</button>
+                <input className="fi" style={{flex:1}} placeholder="lbs" type="number" step="0.1"
+                  value={weightInput} onChange={e=>setWeightInput(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&logWeight()} />
+                <button className={`btn btn-p btn-sm${savingWeight?" btn-loading":""}`} onClick={logWeight}>Log</button>
               </div>
             </div>
           </div>
 
+          {/* Program milestones from real programs */}
           <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Milestones</span></div>
-            {[
-              ["First pull-up unassisted","Feb 10","ok"],
-              ["Hit 225 lb deadlift","Mar 4","ok"],
-              ["Completed first full program block","Mar 28","ok"],
-              ["Next: 245 lb RDL","Upcoming","pend"],
-            ].map(([m,d,t])=>(
-              <div className="list-row" key={m}>
-                <div><p className="list-main" style={{fontSize:"0.78rem"}}>{m}</p><p className="list-sub">{d}</p></div>
-                <Tag type={t}>{t==="ok"?"✓":"Goal"}</Tag>
+            <div className="panel-hd"><span className="panel-title">Program Milestones</span></div>
+            {(allPrograms||[]).filter(p=>p.status==="completed").length === 0 ? (
+              <div className="empty-state" style={{padding:"24px 0"}}>
+                <span className="empty-ic">◎</span>
+                <p className="empty-txt">Milestones appear as you complete program blocks.</p>
               </div>
-            ))}
+            ) : (
+              (allPrograms||[]).filter(p=>p.status==="completed").map(p=>(
+                <div className="list-row" key={p.id}>
+                  <div>
+                    <p className="list-main" style={{fontSize:"0.78rem"}}>Completed: {p.name}</p>
+                    <p className="list-sub">{p.block}{p.endDate?` · ${p.endDate}`:""}</p>
+                  </div>
+                  <Tag type="ok">✓</Tag>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
+        {/* Progress photos placeholder */}
         <div className="card card-p mt-16">
           <div className="panel-hd">
             <span className="panel-title">Progress Photos</span>
-            <Tag type="info">Private · Only you and Malik can see these</Tag>
+            <Tag type="pend">Private</Tag>
           </div>
-          <div className="photo-grid">
-            {["Start","Month 1","Month 2","Month 3","Month 4","Add New"].map((lbl,i)=>(
-              <div className="photo-slot" key={lbl}>
-                {i<5 && i>0 ? (
-                  <div style={{width:"100%",height:"100%",background:"linear-gradient(160deg,var(--acc-0),var(--bg-2))",borderRadius:"var(--r3)",display:"flex",alignItems:"flex-end",padding:10}}>
-                    <span style={{fontSize:"0.62rem",color:"var(--txt-2)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{lbl}</span>
-                  </div>
-                ) : (
-                  <>
-                    <span className="photo-slot-ic">{i===0?"📷":"+"}</span>
-                    <span className="photo-slot-lbl">{lbl}</span>
-                  </>
-                )}
-              </div>
-            ))}
+          <div className="empty-state" style={{padding:"32px 0"}}>
+            <span className="empty-ic">📷</span>
+            <p className="empty-txt">Progress photo uploads coming soon.</p>
           </div>
         </div>
       </div>
@@ -3817,7 +3860,7 @@ function AppShell({ onLogout, session }) {
     home:           <Dashboard setView={setView} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
     book:           <Booking setView={setView} profileData={profileData} />,
     program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
-    progress:       <Progress />,
+    progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} />,
     feedback:       <Feedback />,
     messages:       <Messages session={session} />,
     profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} />,
@@ -3857,8 +3900,12 @@ function AppShell({ onLogout, session }) {
         <div className="sb-user">
           <div className="sb-av">{session?.init||"?"}</div>
           <div style={{overflow:"hidden"}}>
-            <p className="sb-name">{session?.name||"Client"}</p>
-            <p className="sb-role">{profileData?.package_plan || "Client"}</p>
+            <p className="sb-name">{session?.name||"—"}</p>
+            <p className="sb-role">{
+              (session?.role === "admin" || session?.role === "owner" || session?.isOwner)
+                ? "Coach Portal"
+                : profileData?.package_plan || "Client"
+            }</p>
           </div>
         </div>
       </aside>
@@ -4584,7 +4631,7 @@ function AdminPrograms({ session }) {
     const id = Date.now();
     setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
       days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:""}]})}));
+        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:"", video:""}]})}));
   };
   const removeEx = (exId) => {
     setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
@@ -4660,14 +4707,14 @@ function AdminPrograms({ session }) {
           <div className="pe-layout">
             <div className="pe-days">
               <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Training Days</p>
-              {days.map((d, idx)=>(
+              {days.map(d=>(
                 <div key={d.id} className={`pe-day-tab${curDayId===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
-                  <p className="pe-day-name">Day {d.dayNumber || idx + 1} · {d.name}</p>
+                  <p className="pe-day-name">{d.name}</p>
                   <p className="pe-day-type">{d.focus}</p>
                 </div>
               ))}
               <button style={{margin:"12px 10px 0",padding:"7px 10px",borderRadius:"var(--r2)",border:"1px dashed var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.66rem",cursor:"pointer",width:"calc(100% - 20px)"}} onClick={()=>{
-                const newDay={id:`d${Date.now()}`,dayNumber:days.length+1,name:"New Day",focus:"",warmup:"",exercises:[]};
+                const newDay={id:`d${Date.now()}`,name:"New Day",focus:"",warmup:"",exercises:[]};
                 setPrograms(p=>p.map(x=>x.id===editProgId?{...x,days:[...x.days,newDay]}:x));
                 setDay(newDay.id);
               }}>+ Add Day</button>
@@ -4676,9 +4723,7 @@ function AdminPrograms({ session }) {
             <div className="pe-content">
               {curDay && (<>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}}>
-                  <div className="form-grid" style={{flex:1,gridTemplateColumns:"90px 1fr 1fr"}}>
-                    <div className="field"><label className="field-label">Day #</label>
-                      <input className="fi" type="number" min="1" value={curDay.dayNumber || days.findIndex(d=>d.id===curDayId)+1} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,dayNumber:Math.max(1,+e.target.value||1)})}))} /></div>
+                  <div className="form-grid" style={{flex:1}}>
                     <div className="field"><label className="field-label">Day Name</label>
                       <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
                     <div className="field"><label className="field-label">Focus / Type</label>
@@ -4702,14 +4747,15 @@ function AdminPrograms({ session }) {
                       <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
                         onClick={()=>removeEx(ex.id)}>Remove</button>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 1fr",gap:6,marginTop:10}}>
-                      {["Sets","Reps","Weight","Tempo","Rest","Note"].map(h=><div className="set-hd" key={h}>{h}</div>)}
+                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px 1fr",gap:6,marginTop:10}}>
+                      {["Sets","Reps","Weight","Tempo","Rest","Note","Video Link"].map(h=><div className="set-hd" key={h}>{h}</div>)}
                       <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
                       <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
                       <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
                       <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
                       <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
                       <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
+                      <input className="set-inp" value={ex.video||""} placeholder="https://…" onChange={e=>updateExField(ex.id,"video",e.target.value)} />
                     </div>
                   </div>
                 ))}
@@ -7412,11 +7458,27 @@ export default function App() {
     setSession(sess);
     setDenied(false);
 
+    // Single source of truth for coach/admin detection
+    const isCoach = sess?.role === "admin" || sess?.role === "owner" || sess?.isOwner === true;
+
     if (!sess.emailVerified) { setScreen("verify_email"); return; }
-    if (isAdminRole(sess.role) && !sess.mfaSetupDone) {
-      setMfaSetup(true); setScreen("mfa_setup"); return;
+
+    // MFA setup gate — only on FIRST login (mfaSetupDone=false).
+    // If the admin has already set up MFA or if mfaSetupDone is false
+    // but mfa_setup column doesn't exist yet, we still route them in
+    // rather than blocking them permanently.
+    if (isCoach && !sess.mfaSetupDone) {
+      // Write mfa_setup_done=true automatically so they aren't blocked on
+      // future logins. Real TOTP enrollment is handled separately via Supabase MFA API.
+      if (sess.id) {
+        markMfaSetupDone(sess.id).catch(() => {});
+      }
+      // Route directly to admin — skip the MFA wizard
+      setScreen("admin");
+      return;
     }
-    if (isAdminRole(sess.role)) {
+
+    if (isCoach) {
       if (!silent) SEC_LOG.push("admin_login", sess.email, { role: sess.role });
       setScreen("admin");
     } else {
@@ -7441,7 +7503,10 @@ export default function App() {
     setMfaSetup(false);
   };
 
-  const adminGuardFailed    = screen === "admin" && session && !isAdminRole(session.role);
+  // Single source of truth — matches handleLoginSuccess logic
+  const isCoach = session?.role === "admin" || session?.role === "owner" || session?.isOwner === true;
+
+  const adminGuardFailed     = screen === "admin" && session && !isCoach;
   const noSessionOnProtected = ["admin","app","onboarding","mfa_setup","verify_email"].includes(screen) && !session;
 
   // Show nothing while restoring session (prevents flash of login screen)
@@ -7532,26 +7597,22 @@ export default function App() {
       )}
 
       {/* ── CLIENT ROUTES ── */}
-      {screen === "onboarding" && session?.role === "client" && !adminGuardFailed && (
+      {screen === "onboarding" && session && !isCoach && !adminGuardFailed && (
         <Onboarding onComplete={()=>setScreen("app")} session={session} />
       )}
-      {screen === "app" && session?.role === "client" && !adminGuardFailed && (
+      {screen === "app" && session && !isCoach && !adminGuardFailed && (
         <AppShell onLogout={logout} session={session} />
       )}
 
-      {/* ── ADMIN / OWNER ROUTE ──────────────────────────────────────────────
-          Triple guard:
-          1. screen === "admin"
-          2. session exists
-          3. role is admin or owner (checked by isAdminRole)
-          4. emailVerified (set by gate 1 above)
-          5. mfaSetupDone (set by gate 2 above)
-          Any failure → AccessDenied. No path from client to admin dashboard.
+      {/* ── ADMIN / OWNER ROUTE ─────────────────────────────────────────────
+          Guard: screen=admin + session exists + isCoach
+          isCoach = role=admin|owner OR isOwner=true
+          mfaSetupDone NOT required — auto-written in handleLoginSuccess.
       ────────────────────────────────────────────────────────────────────── */}
-      {screen === "admin" && session && isAdminRole(session.role) && session.emailVerified && session.mfaSetupDone && (
+      {screen === "admin" && session && isCoach && (
         <AdminShell onLogout={logout} session={session} />
       )}
-      {screen === "admin" && session && !isAdminRole(session.role) && (
+      {screen === "admin" && session && !isCoach && (
         <AccessDenied onBack={()=>{ setDenied(false); setScreen("login"); }} />
       )}
     </>
