@@ -2369,12 +2369,17 @@ function Dashboard({ setView, activeProgram, workoutLogs, session, profileData }
             </p>
           </div>
           <div className="kpi">
-            <p className="kpi-label">Member</p>
-            {/* REMOVED: hardcoded birthday reward "Expires Apr 30" */}
+            <p className="kpi-label">{
+              (session?.role === "admin" || session?.role === "owner" || session?.isOwner)
+                ? "Coach Portal" : "Member"
+            }</p>
             <div className="kpi-val" style={{fontSize:"0.78rem",marginTop:4,color:"var(--txt-1)"}}>
               {session?.email?.split("@")[0] || "—"}
             </div>
-            <p className="kpi-sub">Active client</p>
+            <p className="kpi-sub">{
+              (session?.role === "admin" || session?.role === "owner" || session?.isOwner)
+                ? "Admin account" : "Active client"
+            }</p>
           </div>
         </div>
 
@@ -3711,7 +3716,7 @@ function ProfileSettings({ onLogout, session, profileData }) {
                 </div>
                 <div className="form-grid">
                   <div className="field"><label className="field-label">Weight</label>
-                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="174 lbs" /></div>
+                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="e.g. 180 lbs" /></div>
                   <div className="field"><label className="field-label">Emergency Contact</label>
                     <input className="fi" value={emergencyContact} onChange={e=>setEmergencyContact(e.target.value)} placeholder="Name — Phone Number" /></div>
                 </div>
@@ -7748,15 +7753,16 @@ export default function App() {
       setBooting(false);
     });
 
-    // Subscribe: keeps session fresh across tab focus / token refresh
+    // Subscribe: keeps session fresh across tab focus / token refresh / sign-in
     const sub = onAuthStateChange((event, sess) => {
       if (event === "SIGNED_OUT") {
         setSession(null);
         setScreen("home");
       } else if (event === "PASSWORD_RECOVERY") {
         setScreen("reset_password");
-      } else if (sess && event === "TOKEN_REFRESHED") {
-        setSession(sess);
+      } else if (sess && (event === "TOKEN_REFRESHED" || event === "SIGNED_IN")) {
+        // Re-route on every valid session event so role changes take effect immediately
+        handleLoginSuccess(sess, true);
       }
     });
     return () => sub.unsubscribe();
@@ -7766,22 +7772,25 @@ export default function App() {
     setSession(sess);
     setDenied(false);
 
-    // Single source of truth for coach/admin detection
-    const isCoach = sess?.role === "admin" || sess?.role === "owner" || sess?.isOwner === true;
+    // Single source of truth for coach/admin detection.
+    // Three tiers: DB role field, DB is_owner flag, email-based owner fallback
+    // (email fallback handles the case where fetchProfile fails due to RLS or
+    //  missing row, which would otherwise cause buildSession to default to "client")
+    const OWNER_EMAILS = ["mlvnt2026@gmail.com"];
+    const isCoach =
+      sess?.role    === "admin"  ||
+      sess?.role    === "owner"  ||
+      sess?.isOwner === true     ||
+      OWNER_EMAILS.includes((sess?.email || "").toLowerCase());
 
     if (!sess.emailVerified) { setScreen("verify_email"); return; }
 
-    // MFA setup gate — only on FIRST login (mfaSetupDone=false).
-    // If the admin has already set up MFA or if mfaSetupDone is false
-    // but mfa_setup column doesn't exist yet, we still route them in
-    // rather than blocking them permanently.
+    // MFA setup gate — auto-bypass: mark done and proceed immediately.
+    // Real TOTP is a Supabase-level concern; the UI gate was a one-time wizard
+    // that blocks new admins. We write mfa_setup_done=true on first pass
+    // so future loads skip this branch entirely.
     if (isCoach && !sess.mfaSetupDone) {
-      // Write mfa_setup_done=true automatically so they aren't blocked on
-      // future logins. Real TOTP enrollment is handled separately via Supabase MFA API.
-      if (sess.id) {
-        markMfaSetupDone(sess.id).catch(() => {});
-      }
-      // Route directly to admin — skip the MFA wizard
+      if (sess.id) markMfaSetupDone(sess.id).catch(() => {});
       setScreen("admin");
       return;
     }
@@ -7811,8 +7820,13 @@ export default function App() {
     setMfaSetup(false);
   };
 
-  // Single source of truth — matches handleLoginSuccess logic
-  const isCoach = session?.role === "admin" || session?.role === "owner" || session?.isOwner === true;
+  // Single source of truth — mirrors handleLoginSuccess exactly
+  const OWNER_EMAILS = ["mlvnt2026@gmail.com"];
+  const isCoach =
+    session?.role    === "admin"  ||
+    session?.role    === "owner"  ||
+    session?.isOwner === true     ||
+    OWNER_EMAILS.includes((session?.email || "").toLowerCase());
 
   const adminGuardFailed     = screen === "admin" && session && !isCoach;
   const noSessionOnProtected = ["admin","app","onboarding","mfa_setup","verify_email"].includes(screen) && !session;
