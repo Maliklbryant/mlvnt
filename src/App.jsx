@@ -2815,7 +2815,11 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
   const todayDay   = active?.days.find(d=>d.id===todayDayId) || null;
 
   // Per-session set tracking — stored locally, flushed to DB on completeDay
-  const [localSets, setLocalSets] = useState({}); // key "progId:dayId:exId" → Set<si>
+  const [localSets,   setLocalSets]   = useState({}); // key "progId:dayId:exId" → Set<si>
+  const [loggedWt,    setLoggedWt]    = useState({}); // key "progId:dayId:exId:si" → string
+  const [loggedReps,  setLoggedReps]  = useState({}); // key "progId:dayId:exId:si" → string
+
+  const logKey = (dayId, exId, si) => `${progId}:${dayId}:${exId}:${si}`;
 
   const toggleSet = (dayId, exId, si) => {
     const key = `${progId}:${dayId}:${exId}`;
@@ -2826,6 +2830,9 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
     });
     setTick(t => t + 1);
   };
+
+  const setActualWt   = (dayId, exId, si, v) => setLoggedWt(  p => ({ ...p, [logKey(dayId,exId,si)]: v }));
+  const setActualReps = (dayId, exId, si, v) => setLoggedReps( p => ({ ...p, [logKey(dayId,exId,si)]: v }));
 
   // Resolve sets: prefer localSets (in-progress), fall back to persisted workoutLogs
   const resolvedSets = (dayId, exId) => {
@@ -2843,12 +2850,20 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
     setActiveDay(null);
     setTick(t => t + 1);
     if (session?.id && progId) {
-      // Build setsObj from localSets for this day
+      // Build setsObj from localSets + logged weight/reps for this day
       const setsObj = {};
       const day = active?.days?.find(d => d.id === dayId);
       (day?.exercises || []).forEach(ex => {
         const key = `${progId}:${dayId}:${ex.id}`;
-        setsObj[ex.id] = [...(localSets[key] || [])];
+        const numSets = typeof ex.sets === "number" ? ex.sets : (ex.sets?.length || 0);
+        setsObj[ex.id] = {
+          checked: [...(localSets[key] || [])],
+          sets: Array.from({length: numSets}, (_,si) => ({
+            done:         (localSets[key]||new Set()).has(si),
+            actualWeight: loggedWt[logKey(dayId,ex.id,si)]  || "",
+            actualReps:   loggedReps[logKey(dayId,ex.id,si)] || "",
+          })),
+        };
       });
       await saveWorkoutLog(progId, dayId, session.id, {
         sets: setsObj, completed: true, completedAt,
@@ -2950,26 +2965,45 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
                   </div>
                 </div>
 
-                {/* Set bubbles */}
-                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                {/* Set rows with actual weight/reps logging */}
+                <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                  {/* Column headers */}
+                  <div style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 1fr 1fr",gap:6,padding:"4px 0 6px",borderBottom:"1px solid var(--b0)",marginBottom:2}}>
+                    {["Set","✓","Target","Actual Weight","Reps Done"].map(h=>(
+                      <p key={h} style={{fontSize:"0.5rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",textAlign:h==="✓"?"center":"left"}}>{h}</p>
+                    ))}
+                  </div>
                   {Array.from({length:numSets},(_,si) => {
                     const done   = isSetDone(activeDay, ex.id, si);
                     const reps   = repsArr[si]   || repsArr[repsArr.length-1]   || "—";
                     const weight = weightArr[si] || weightArr[weightArr.length-1] || "";
+                    const lk     = logKey(activeDay, ex.id, si);
                     return (
-                      <div className="wk-set-row" key={si}>
-                        <span className="wk-set-label">Set {si+1}</span>
-                        <div className="wk-set-targets">
-                          <span className="wk-set-target" style={{fontFamily:"var(--fc)",fontSize:"0.72rem",color:done?"rgba(140,210,155,0.7)":"var(--txt-1)"}}>{reps} reps{weight?` · ${weight}`:""}</span>
+                      <div style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 1fr 1fr",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)",alignItems:"center"}} key={si}>
+                        <span style={{fontSize:"0.68rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Set {si+1}</span>
+                        <div style={{display:"flex",justifyContent:"center"}}>
+                          <button
+                            className={`set-bubble${done?" done":""}`}
+                            onClick={()=>{ if(!isDone) toggleSet(activeDay, ex.id, si); }}
+                            title={done?"Mark incomplete":"Mark set complete"}
+                            style={{cursor:isDone?"default":"pointer"}}
+                          >{done?"✓":""}</button>
                         </div>
-                        <button
-                          className={`set-bubble${done?" done":""}`}
-                          onClick={()=>{ if(!isDone) toggleSet(activeDay, ex.id, si); }}
-                          title={done?"Mark incomplete":"Mark set complete"}
-                          style={{cursor:isDone?"default":"pointer"}}
-                        >
-                          {done ? "✓" : ""}
-                        </button>
+                        <span style={{fontSize:"0.7rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>{reps} reps{weight?` · ${weight}`:""}</span>
+                        <input
+                          disabled={isDone}
+                          placeholder="lbs / kg"
+                          value={loggedWt[lk]||""}
+                          onChange={e=>setActualWt(activeDay,ex.id,si,e.target.value)}
+                          style={{background:"rgba(0,0,0,0.25)",border:`1px solid ${loggedWt[lk]?"var(--b1)":"var(--b0)"}`,borderRadius:"var(--r1)",padding:"5px 8px",fontSize:"0.72rem",color:"var(--txt-0)",fontFamily:"var(--fc)",outline:"none",width:"100%",opacity:isDone?0.45:1}}
+                        />
+                        <input
+                          disabled={isDone}
+                          placeholder="reps"
+                          value={loggedReps[lk]||""}
+                          onChange={e=>setActualReps(activeDay,ex.id,si,e.target.value)}
+                          style={{background:"rgba(0,0,0,0.25)",border:`1px solid ${loggedReps[lk]?"var(--b1)":"var(--b0)"}`,borderRadius:"var(--r1)",padding:"5px 8px",fontSize:"0.72rem",color:"var(--txt-0)",fontFamily:"var(--fc)",outline:"none",width:"100%",opacity:isDone?0.45:1}}
+                        />
                       </div>
                     );
                   })}
