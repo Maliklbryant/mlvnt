@@ -158,15 +158,28 @@ export async function markMfaSetupDone(userId) {
 
 // ─────────────────────────────────────────────────────────────
 // SUBSCRIBE TO AUTH CHANGES
+// Only fetches the profile on TOKEN_REFRESHED (when the token
+// silently rotates). For SIGNED_IN and INITIAL_SESSION the app
+// uses getSession() / signIn() which already build the session
+// with a fresh profile fetch. Calling fetchProfile inside every
+// listener event causes lock contention on "lock:mlvnt-auth".
 // ─────────────────────────────────────────────────────────────
 export function onAuthStateChange(callback) {
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
     async (event, session) => {
-      if (session) {
+      if (!session) {
+        callback(event, null);
+        return;
+      }
+      if (event === "TOKEN_REFRESHED") {
+        // Fetch fresh profile so role/name stay current after a token rotation.
         const profile = await fetchProfile(session.user.id);
         callback(event, buildSession(session.user, profile));
       } else {
-        callback(event, null);
+        // For INITIAL_SESSION, SIGNED_IN, PASSWORD_RECOVERY, USER_UPDATED etc.
+        // pass the event without a profile fetch — App.jsx decides what to do.
+        // We still build a minimal session so callers have a non-null object.
+        callback(event, buildSession(session.user, null));
       }
     }
   );
