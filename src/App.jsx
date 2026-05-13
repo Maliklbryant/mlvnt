@@ -7743,7 +7743,7 @@ export default function App() {
           </div>
         </>
       )}
-
+ 
       {/* ── ACCESS DENIED ── */}
       {(screen === "denied" || adminGuardFailed || noSessionOnProtected) && (
         <AccessDenied onBack={()=>{ setDenied(false); setScreen("login"); }} />
