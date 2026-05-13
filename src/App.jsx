@@ -17,11 +17,13 @@ import {
   listClients,
   getPrograms,
   getActiveProgram,
+  getAllPrograms,
   createProgram,
   saveProgram,
   duplicateProgram,
   archiveProgram,
   publishProgram,
+  deleteProgram,
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
@@ -672,28 +674,6 @@ const MONTHS = ["January","February","March","April","May","June","July","August
    — program history per client
    — admin: assign, edit, duplicate, archive
 ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── PROGRAM DATA STORE ──────────────────────────────────────────────────── */
-// In production: fetched from server, scoped to authenticated client.
-// Statuses: "draft" | "active" | "completed" | "archived"
-
-/* ── PROGRAM / WORKOUT STORES (REMOVED — data flows from Supabase via props) ── */
-// PROGRAM_STORE and WORKOUT_LOG are replaced by Supabase-backed React state.
-// These stubs exist only to prevent crashes in legacy call sites that haven't
-// been updated yet; they return empty / falsy values so the UI renders its
-// "no data" states rather than crashing.
-
-const PROGRAM_STORE = {
-  active:  ()    => null,
-  history: ()    => [],
-  all:     ()    => [],
-  byId:    ()    => null,
-  archive: ()    => {},
-  updateDays: () => {},
-  duplicate:  () => null,
-  create:     () => ({ id:`p${Date.now()}`, clientId:null, name:"New Program", block:"Block 1", phase:"", status:"draft", startDate:"", endDate:"", week:1, totalWeeks:8, coachNote:"", days:[] }),
-};
-
 const PROGRAM_DAYS = [];
 const EXERCISES    = {};
 
@@ -789,108 +769,20 @@ const PLAN_CATALOGUE = {
 // Single source of truth for the active client's session balance,
 // purchase history, weekly usage, and admin adjustments.
 // In production: fetched from server, scoped to authenticated session.
+// SESSION_INVENTORY — replaced by Supabase client_profiles (sessions_balance, package_plan).
+// This stub keeps HELD_INVENTORY from throwing reference errors. No demo data.
 const SESSION_INVENTORY = (() => {
-  const state = {
-    clientId:    1,
-    clientName:  "Jordan Thomas",
-    balance:     5,           // sessions currently available — does NOT expire
-    plan:        "Hybrid Coaching",
-    weeklyMax:   2,           // max sessions per calendar week (admin-configurable)
-    adminOverride: false,     // bypasses all gates when true
-
-    // Weekly usage tracking — keyed by ISO week string "YYYY-Www"
-    weeklyUsage: {},
-
-    // Append-only purchase history
-    purchaseLog: [
-      { id:"p1", date:"Mar 10, 2025", type:"Package",       plan:"Hybrid Coaching",  sessionsAdded: 8,  note:"Initial package purchase" },
-      { id:"p2", date:"Mar 31, 2025", type:"Top-up",        plan:"Hybrid Coaching",  sessionsAdded: 8,  note:"Monthly renewal" },
-      { id:"p3", date:"Apr 2, 2025",  type:"Admin Adjust",  plan:"",                 sessionsAdded:-3,  note:"3 sessions used Mar block" },
-    ],
-
-    // Admin adjustment log
-    adjustLog: [],
-  };
-
-  // ── Week key helper ────────────────────────────────────────────────────
-  function isoWeek(date = new Date()) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const wk = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-    return `${d.getUTCFullYear()}-W${String(wk).padStart(2,"0")}`;
-  }
-
   return {
-    // ── Reads ──────────────────────────────────────────────────────────
-    get balance()    { return state.balance; },
-    get plan()       { return state.plan; },
-    get weeklyMax()  { return state.weeklyMax; },
-    get adminOverride() { return state.adminOverride; },
-
-    weeklyUsed(date) {
-      return state.weeklyUsage[isoWeek(date)] || 0;
-    },
-    weeklyRemaining(date) {
-      return Math.max(0, state.weeklyMax - this.weeklyUsed(date));
-    },
-    weekKey: isoWeek,
-
-    purchaseLog() { return [...state.purchaseLog]; },
-    adjustLog()   { return [...state.adjustLog];   },
-
-    // ── Booking operations ─────────────────────────────────────────────
-    // Deduct one session on confirmed booking.
-    deduct(date = new Date()) {
-      if (state.balance <= 0) return false;
-      state.balance = Math.max(0, state.balance - 1);
-      const wk = isoWeek(date);
-      state.weeklyUsage[wk] = (state.weeklyUsage[wk] || 0) + 1;
-      state.purchaseLog.unshift({
-        id: `u${Date.now()}`, date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),
-        type: "Session Used", plan: state.plan, sessionsAdded: -1, note: "Booking confirmed",
-      });
-      return true;
-    },
-    // Restore one session on valid cancellation.
-    restore(date = new Date()) {
-      state.balance += 1;
-      const wk = isoWeek(date);
-      state.weeklyUsage[wk] = Math.max(0, (state.weeklyUsage[wk] || 0) - 1);
-      state.purchaseLog.unshift({
-        id: `r${Date.now()}`, date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),
-        type: "Session Restored", plan: state.plan, sessionsAdded: 1, note: "Cancellation within policy",
-      });
-    },
-
-    // ── Admin operations ───────────────────────────────────────────────
-    // Add sessions (package purchase, single session, or manual top-up).
-    adminAdd(n, reason = "Manual adjustment", adminName = "Malik") {
-      state.balance += n;
-      const entry = {
-        id: `a${Date.now()}`,
-        date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),
-        type: n > 0 ? (n >= 4 ? "Package" : "Single Session") : "Admin Adjust",
-        plan: state.plan, sessionsAdded: n, note: reason, by: adminName,
-      };
-      state.purchaseLog.unshift(entry);
-      state.adjustLog.unshift({ ...entry, at: new Date().toLocaleTimeString() });
-    },
-    // Set weekly limit (admin-configurable per client).
-    setWeeklyMax(n) { state.weeklyMax = Math.max(1, n); },
-    // Toggle admin override.
-    setOverride(v)  { state.adminOverride = v; },
-    // Set plan.
-    setPlan(planName) {
-      state.plan = planName;
-      const cfg = PLAN_CATALOGUE[planName];
-      if (cfg) state.weeklyMax = cfg.weeklyMax;
-    },
-    // Direct balance set (admin only).
-    setBalance(n)   { state.balance = Math.max(0, n); },
+    get balance()       { return 0; },
+    get plan()          { return ""; },
+    get weeklyMax()     { return 2; },
+    get adminOverride() { return false; },
+    adminAdd()  {},
+    setPlan()   {},
+    setBalance(){ },
   };
 })();
+
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1006,35 +898,16 @@ const HELD_INVENTORY = (() => {
   return self;
 })();
 
-// ── Backwards-compatible CLIENT_PACKAGE alias ─────────────────────────────
-// Existing components that read CLIENT_PACKAGE.sessLeft etc. continue to work.
+// CLIENT_PACKAGE — stub. Real session/package data comes from Supabase profileData.
 const CLIENT_PACKAGE = {
-  get sessLeft()    { return SESSION_INVENTORY.balance; },
-  get sessTotal()   { return PLAN_CATALOGUE[SESSION_INVENTORY.plan]?.sessionsPerPurchase || 0; },
-  get pkg()         { return SESSION_INVENTORY.plan; },
-  expires:    "Ongoing",   // sessions don't expire — balance accumulates
-  expiresDate: new Date("2099-12-31"), // effectively never expires
-  get status() {
-    if (SESSION_INVENTORY.balance === 0) return "renewal";
-    if (SESSION_INVENTORY.balance <= 2)  return "low";
-    return "active";
-  },
-  get adminOverride() { return SESSION_INVENTORY.adminOverride; },
+  sessLeft:      0,
+  sessTotal:     0,
+  pkg:           "—",
+  expires:       "Ongoing",
+  expiresDate:   new Date("2099-12-31"),
+  status:        "active",
+  adminOverride: false,
 };
-
-// Log of blocked booking attempts (shown on admin dashboard)
-const BOOKING_BLOCK_LOG = (() => {
-  const entries = [];
-  return {
-    push(email, reason, meta = {}) {
-      entries.unshift({ email, reason, meta, at: new Date().toLocaleTimeString(), date: new Date().toLocaleDateString() });
-      if (entries.length > 50) entries.pop();
-    },
-    all: () => entries.slice(0, 20),
-    count: () => entries.length,
-  };
-})();
-
 // ── Booking eligibility ───────────────────────────────────────────────────
 // Returns { blocked: false } or { blocked: true, type, reason, detail }
 // Checks: adminOverride → balance → weekly limit
@@ -1084,24 +957,6 @@ function getInventoryWarning(profileData) {
   if (bal <= 3)  return { level:"low",      msg:`${bal} sessions in your account. Consider topping up soon.` };
   return null;
 }
-
-const CLIENT_LOCATION = {
-  building: "Equinox Hudson Yards",
-  address:  "35 Hudson Yards, New York, NY 10001",
-  area:     "hudson_yards",
-  notes:    "Enter on 10th Ave. Gym is on Level 4. Buzz 4B at the desk.",
-};
-
-// Coach's existing schedule for today — used to compute buffers
-// area codes: same_building → 0 min buffer, same_area → 15 min, different → 30 min
-const COACH_SCHEDULE = [
-  { time:"8:00 AM",  endTime:"9:00 AM",  client:"Marcus A.", location:{ building:"Equinox Hudson Yards", area:"hudson_yards" } },
-  { time:"9:00 AM",  endTime:"10:00 AM", client:"Diana M.",  location:{ building:"Equinox Hudson Yards", area:"hudson_yards" } },
-  { time:"12:00 PM", endTime:"1:00 PM",  client:"Alex R.",   location:{ building:"Alo Yoga Studio",      area:"chelsea"      } },
-  { time:"1:00 PM",  endTime:"2:00 PM",  client:"Sam K.",    location:{ building:"Alo Yoga Studio",      area:"chelsea"      } },
-  { time:"3:00 PM",  endTime:"4:00 PM",  client:"Priya N.",  location:{ building:"TMPL Gym",             area:"hell's_kitchen"} },
-];
-
 // Buffer rules (minutes needed after a session ends before next can start, by area match)
 const COMMUTE_RULES = {
   same_building: 10,  // cleanup + brief travel within same floor/building
@@ -1166,26 +1021,7 @@ function getSlotStatus(slotTime, clientArea) {
     }
   }
   return { status: "available", reason: null, buffer: 0 };
-}
-
-const MESSAGES = [
-  { id:1, name:"Malik Bryant", role:"Coach", init:"MB", preview:"Great work this week. Your hip hinge...", time:"2d", unread:2, messages:[
-    { from:"them", text:"Great work this week. Your hip hinge is significantly improved — ready to progress to heavier RDLs next session.", time:"Tue 4:30 PM" },
-    { from:"them", text:"Keep the sleep consistency going. That's making a real difference in your recovery.", time:"Tue 4:31 PM" },
-    { from:"me",   text:"Thanks Malik! I really noticed the difference on Friday's session. Hip felt a lot more stable.", time:"Tue 6:12 PM" },
-    { from:"me",   text:"Sleep has been better — aiming for 7.5hrs consistently now.", time:"Tue 6:13 PM" },
-    { from:"them", text:"Perfect. That's the right goal. See you Friday — we'll bump the RDL to 245.", time:"Wed 9:02 AM" },
-  ]},
-];
-
-const NOTIFS = [
-  { id:1, read:false, ic:"◷", text:"Reminder: Training Session tomorrow at 6:00 PM", time:"4h ago" },
-  { id:2, read:false, ic:"✦", text:"Your birthday reward is active. Book your complimentary session before Apr 30.", time:"1d ago" },
-  { id:3, read:true,  ic:"▦", text:"New program update pushed by Malik. Block 2 is ready.", time:"2d ago" },
-  { id:4, read:true,  ic:"◈", text:"Sessions running low — 2 remaining. Consider renewing.", time:"3d ago" },
-];
-
-const OB_STEPS = [
+}const OB_STEPS = [
   "Personal Info","Your Goals","Training History","Preferences","Health","Lifestyle","Agreements"
 ];
 
@@ -3355,71 +3191,104 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
 }
 
 /* ── PROGRESS ────────────────────────────────────────────────────────────── */
-function Progress() {
+function Progress({ session, workoutLogs, allPrograms }) {
+  const [weightInput,  setWeightInput]  = useState("");
+  const [weightLog,    setWeightLog]    = useState([]);
+  const [savingWeight, setSavingWeight] = useState(false);
+
+  const completedDays  = Object.values(workoutLogs || {}).filter(l => l.completed);
+  const totalLogged    = completedDays.length;
+  const activeProg     = (allPrograms || []).find(p => p.status === "active");
+  const completedProgs = (allPrograms || []).filter(p => p.status === "completed");
+
+  const logWeight = () => {
+    const val = parseFloat(weightInput);
+    if (!val || isNaN(val)) return;
+    setSavingWeight(true);
+    const entry = { date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}), value:`${val} lbs` };
+    if (session?.id) saveClientProfile(session.id, { weight:`${val} lbs` }).catch(()=>{});
+    setWeightLog(prev => [entry, ...prev].slice(0,20));
+    setWeightInput("");
+    setSavingWeight(false);
+  };
+
   return (
     <div className="page-fade">
-      <Topbar title="Progress" actions={<button className="btn btn-s btn-sm">Log Update</button>} />
+      <Topbar title="Progress" />
       <div className="page-body">
 
-        <div className="progress-grid">
-          {[
-            ["Sessions Done","24","↑ 4 this month"],
-            ["Workouts Logged","18","of 24 sessions"],
-            ["Consistency","78%","↑ 12% vs last block"],
-            ["Body Weight","174 lbs","↓ 3 lbs since start"],
-            ["Bench Press 5RM","185 lbs","↑ 15 lbs since start"],
-            ["RDL 5RM","235 lbs","↑ 20 lbs since start"],
-          ].map(([lbl,n,delta])=>(
-            <div className="metric-card" key={lbl}>
-              <div className="metric-n">{n}</div>
-              <p className="metric-lbl">{lbl}</p>
-              <p className="metric-delta">{delta}</p>
-            </div>
-          ))}
+        <div className="progress-grid" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+          <div className="metric-card">
+            <div className="metric-n">{totalLogged || "—"}</div>
+            <p className="metric-lbl">Workouts Logged</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>
+              {totalLogged === 0 ? "Complete workouts to start" : "Across all programs"}
+            </p>
+          </div>
+          <div className="metric-card">
+            <div className="metric-n">{activeProg ? `${activeProg.week ?? 1}/${activeProg.totalWeeks ?? 8}` : "—"}</div>
+            <p className="metric-lbl">Current Week</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>{activeProg ? activeProg.name : "No active program"}</p>
+          </div>
+          <div className="metric-card">
+            <div className="metric-n">{completedProgs.length || "—"}</div>
+            <p className="metric-lbl">Programs Completed</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>All time</p>
+          </div>
         </div>
 
         <div className="card card-p mb-16">
-          <div className="panel-hd">
-            <span className="panel-title">Consistency Overview</span>
-            <Tag type="ok">Block 1–2</Tag>
-          </div>
-          <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-            {Array.from({length:56}).map((_,i)=>(
-              <div key={i} style={{width:16,height:16,borderRadius:3,background:i%7===0||i%7===6?"var(--b0)":Math.random()>0.3?"rgba(42,122,75,0.5)":"var(--b0)",transition:"all 0.2s"}} />
-            ))}
-          </div>
-          <p className="body-sm mt-10" style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Past 8 weeks · Green = session completed</p>
+          <div className="panel-hd"><span className="panel-title">Workout History</span></div>
+          {completedDays.length === 0 ? (
+            <div className="empty-state" style={{padding:"28px 0"}}>
+              <span className="empty-ic">◈</span>
+              <p className="empty-txt">No workouts logged yet. Complete a workout day to start building your history.</p>
+            </div>
+          ) : completedDays.slice(0,10).map((log,i) => (
+            <div className="list-row" key={i}>
+              <p className="list-main" style={{fontSize:"0.78rem"}}>Workout completed</p>
+              <span className="list-sub">{log.completedAt || "—"}</span>
+            </div>
+          ))}
         </div>
 
         <div className="dash-grid">
           <div className="card card-p">
             <div className="panel-hd"><span className="panel-title">Body Weight Log</span></div>
-            {[["Apr 1","177 lbs"],["Mar 24","176.5 lbs"],["Mar 17","175.5 lbs"],["Mar 10","177 lbs"],["Start","177 lbs"]].map(([d,w])=>(
-              <div className="list-row" key={d}>
-                <span className="list-sub">{d}</span>
-                <span className="list-main">{w}</span>
-              </div>
-            ))}
+            {weightLog.length === 0
+              ? <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No entries yet.</p>
+              : weightLog.map(({date,value}) => (
+                <div className="list-row" key={date}>
+                  <span className="list-sub">{date}</span>
+                  <span className="list-main">{value}</span>
+                </div>
+              ))
+            }
             <div className="field mt-16">
               <label className="field-label">Log Today's Weight</label>
               <div className="flex gap-8">
-                <input className="fi" style={{flex:1}} placeholder="lbs" type="number" />
-                <button className="btn btn-p btn-sm">Log</button>
+                <input className="fi" style={{flex:1}} placeholder="lbs" type="number" step="0.1"
+                  value={weightInput} onChange={e=>setWeightInput(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&logWeight()} />
+                <button className={"btn btn-p btn-sm"+(savingWeight?" btn-loading":"")} onClick={logWeight}>Log</button>
               </div>
             </div>
           </div>
 
           <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Milestones</span></div>
-            {[
-              ["First pull-up unassisted","Feb 10","ok"],
-              ["Hit 225 lb deadlift","Mar 4","ok"],
-              ["Completed first full program block","Mar 28","ok"],
-              ["Next: 245 lb RDL","Upcoming","pend"],
-            ].map(([m,d,t])=>(
-              <div className="list-row" key={m}>
-                <div><p className="list-main" style={{fontSize:"0.78rem"}}>{m}</p><p className="list-sub">{d}</p></div>
-                <Tag type={t}>{t==="ok"?"✓":"Goal"}</Tag>
+            <div className="panel-hd"><span className="panel-title">Program Milestones</span></div>
+            {completedProgs.length === 0 ? (
+              <div className="empty-state" style={{padding:"20px 0"}}>
+                <span className="empty-ic">◎</span>
+                <p className="empty-txt">Milestones appear as you complete program blocks.</p>
+              </div>
+            ) : completedProgs.map(p => (
+              <div className="list-row" key={p.id}>
+                <div>
+                  <p className="list-main" style={{fontSize:"0.78rem"}}>Completed: {p.name}</p>
+                  <p className="list-sub">{p.block}{p.endDate ? ` · ${p.endDate}` : ""}</p>
+                </div>
+                <Tag type="ok">✓</Tag>
               </div>
             ))}
           </div>
@@ -3428,23 +3297,11 @@ function Progress() {
         <div className="card card-p mt-16">
           <div className="panel-hd">
             <span className="panel-title">Progress Photos</span>
-            <Tag type="info">Private · Only you and Malik can see these</Tag>
+            <Tag type="pend">Coming Soon</Tag>
           </div>
-          <div className="photo-grid">
-            {["Start","Month 1","Month 2","Month 3","Month 4","Add New"].map((lbl,i)=>(
-              <div className="photo-slot" key={lbl}>
-                {i<5 && i>0 ? (
-                  <div style={{width:"100%",height:"100%",background:"linear-gradient(160deg,var(--acc-0),var(--bg-2))",borderRadius:"var(--r3)",display:"flex",alignItems:"flex-end",padding:10}}>
-                    <span style={{fontSize:"0.62rem",color:"var(--txt-2)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{lbl}</span>
-                  </div>
-                ) : (
-                  <>
-                    <span className="photo-slot-ic">{i===0?"📷":"+"}</span>
-                    <span className="photo-slot-lbl">{lbl}</span>
-                  </>
-                )}
-              </div>
-            ))}
+          <div className="empty-state" style={{padding:"28px 0"}}>
+            <span className="empty-ic">📷</span>
+            <p className="empty-txt">Progress photo uploads coming soon.</p>
           </div>
         </div>
       </div>
@@ -3549,21 +3406,18 @@ function Messages() {
       <Topbar title="Messages" />
       <div style={{flex:1,overflow:"hidden"}}>
         <div className="msg-layout" style={{height:"100%"}}>
-          {/* Thread list */}
+          {/* Thread list — single coach thread */}
           <div className="msg-list">
             <p className="label mb-10" style={{padding:"0 2px"}}>Conversations</p>
-            {MESSAGES.map(t=>(
-              <div className={`msg-thread active`} key={t.id}>
-                <div className="msg-av">{t.init}</div>
-                <div style={{flex:1,overflow:"hidden"}}>
-                  <div className="flex between items-center">
-                    <span className="msg-thread-name">{t.name}</span>
-                    <span className="msg-thread-time">{t.time}</span>
-                  </div>
-                  <p className="msg-thread-preview">{t.preview}</p>
+            <div className="msg-thread active">
+              <div className="msg-av">MB</div>
+              <div style={{flex:1,overflow:"hidden"}}>
+                <div className="flex between items-center">
+                  <span className="msg-thread-name">Malik Bryant</span>
                 </div>
+                <p className="msg-thread-preview">Your coach</p>
               </div>
-            ))}
+            </div>
           </div>
 
           {/* Chat */}
@@ -3749,7 +3603,7 @@ function ProfileSettings({ onLogout, session, profileData }) {
                 </div>
                 <div className="form-grid">
                   <div className="field"><label className="field-label">Weight</label>
-                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="174 lbs" /></div>
+                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="e.g. 185 lbs" /></div>
                   <div className="field"><label className="field-label">Emergency Contact</label>
                     <input className="fi" value={emergencyContact} onChange={e=>setEmergencyContact(e.target.value)} placeholder="Name — Phone Number" /></div>
                 </div>
@@ -3934,7 +3788,7 @@ function AppShell({ onLogout, session }) {
     home:           <Dashboard setView={setView} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
     book:           <Booking setView={setView} profileData={profileData} />,
     program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
-    progress:       <Progress />,
+    progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} />,
     feedback:       <Feedback />,
     messages:       <Messages />,
     profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} />,
@@ -4281,68 +4135,6 @@ const ADMIN_CSS = `
 .lead-detail-val{font-size:0.79rem;color:var(--txt-1);line-height:1.55;}
 @media(max-width:560px){.consult-card{padding:24px 18px;}.consult-time-grid{grid-template-columns:repeat(3,1fr);}}
 `;
-
-
-/* ── ADMIN DATA ─────────────────────────────────────────────────────────── */
-const CLIENTS = [
-  { id:1,  init:"JT", name:"Jordan Thomas",  age:29, pkg:"Hybrid Coaching",    sessLeft:5,  sessTotal:8,  location:"Equinox Hudson Yards",  area:"hudson_yards",   goal:"Muscle Growth / Fat Loss",  level:"Intermediate",    birthday:"Apr 8",  birthdayReward:true,  starterUsed:true,  status:"active",  expires:"Jun 30", nextSess:"Fri 6 PM",  unread:2, injuries:"Mild lower back tightness",      lastFeedback:"3 days ago" },
-  { id:2,  init:"MA", name:"Marcus A.",       age:26, pkg:"1-on-1 Coaching",   sessLeft:3,  sessTotal:12, location:"Equinox Hudson Yards",  area:"hudson_yards",   goal:"Athletic Performance",      level:"Advanced",        birthday:"Sep 14", birthdayReward:false, starterUsed:true,  status:"active",  expires:"May 15",nextSess:"Tue 7 AM",  unread:0, injuries:"None",                            lastFeedback:"1 week ago" },
-  { id:3,  init:"DM", name:"Diane M.",        age:54, pkg:"Hybrid Coaching",   sessLeft:1,  sessTotal:8,  location:"Alo Yoga Studio",       area:"chelsea",        goal:"Strength & Mobility",       level:"Beginner",        birthday:"Mar 3",  birthdayReward:false, starterUsed:true,  status:"low",     expires:"Apr 22",nextSess:"Wed 10 AM", unread:1, injuries:"Right knee — post-surgery 2021",  lastFeedback:"1 week ago" },
-  { id:4,  init:"AR", name:"Alex R.",         age:33, pkg:"Online Programming",sessLeft:0,  sessTotal:0,  location:"Alo Yoga Studio",       area:"chelsea",        goal:"Body Recomposition",        level:"Intermediate",    birthday:"Dec 20", birthdayReward:false, starterUsed:true,  status:"renewal", expires:"Apr 18",nextSess:"—",         unread:0, injuries:"None",                            lastFeedback:"2 weeks ago" },
-  { id:5,  init:"PN", name:"Priya N.",        age:38, pkg:"Hybrid Coaching",   sessLeft:6,  sessTotal:8,  location:"TMPL Gym",              area:"hells_kitchen",  goal:"Fat Loss / Aesthetics",     level:"Beginner-Inter.", birthday:"Jul 22", birthdayReward:false, starterUsed:true,  status:"active",  expires:"May 30",nextSess:"Thu 5 PM",  unread:0, injuries:"Left shoulder impingement",      lastFeedback:"5 days ago" },
-  { id:6,  init:"SK", name:"Sam K.",          age:41, pkg:"1-on-1 Coaching",   sessLeft:4,  sessTotal:12, location:"TMPL Gym",              area:"hells_kitchen",  goal:"General Fitness",           level:"Intermediate",    birthday:"Feb 11", birthdayReward:false, starterUsed:true,  status:"active",  expires:"Jun 10",nextSess:"Sat 9 AM",  unread:0, injuries:"None",                            lastFeedback:"1 week ago" },
-];
-
-const TODAY_SESSIONS = [
-  { time:"8:00 AM",  client:"Marcus A.", type:"Training Session", location:"Equinox Hudson Yards", area:"hudson_yards",  duration:60 },
-  { time:"9:00 AM",  client:"Jordan T.", type:"Training Session", location:"Equinox Hudson Yards", area:"hudson_yards",  duration:60 },
-  { time:"12:00 PM", client:"Alex R.",   type:"Consultation",     location:"Alo Yoga Studio",      area:"chelsea",       duration:60 },
-  { time:"1:00 PM",  client:"Sam K.",    type:"Training Session", location:"Alo Yoga Studio",      area:"chelsea",       duration:60 },
-  { time:"3:00 PM",  client:"Priya N.",  type:"Training Session", location:"TMPL Gym",             area:"hells_kitchen", duration:60 },
-];
-
-const ADMIN_FEEDBACKS = [
-  { clientId:1, client:"Jordan Thomas", date:"Apr 4", block:"Block 1",
-    ratings:{overall:4,difficulty:3,recovery:4,progress:4},
-    liked:"The RDL progression felt great. Form clicked this week.",
-    more:"More unilateral work — split squats and single-leg RDLs.",
-    remove:"Copenhagen planks — not loving them.",
-    difficult:"Tempo bench still feels heavy at 185.",
-    learn:"Trap bar deadlift and kettlebell swings." },
-  { clientId:3, client:"Diane M.", date:"Mar 28", block:"Block 2",
-    ratings:{overall:5,difficulty:2,recovery:5,progress:4},
-    liked:"Mobility drills at the end of each session are making a real difference.",
-    more:"More hip mobility and balance work.",
-    remove:"Nothing — all feels appropriate.",
-    difficult:"Hip thrusts with resistance — can I do bodyweight for now?",
-    learn:"Farmer carries and single-leg deadlifts." },
-];
-
-const ADMIN_WEEK = [
-  { label:"Mon", date:"Apr 7",  sessions:[{ time:"9 AM",  client:"Jordan T.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  },{ time:"10 AM", client:"Marcus A.", type:"Training", location:"Equinox HY", area:"hudson_yards"  }] },
-  { label:"Tue", date:"Apr 8",  sessions:[{ time:"7 AM",  client:"Marcus A.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  }] },
-  { label:"Wed", date:"Apr 9",  sessions:[{ time:"10 AM", client:"Diane M.",   type:"Training", location:"Alo Yoga",    area:"chelsea"       },{ time:"6 PM",  client:"Jordan T.", type:"Training", location:"Equinox HY", area:"hudson_yards"  }] },
-  { label:"Thu", date:"Apr 10", sessions:[{ time:"5 PM",  client:"Priya N.",   type:"Training", location:"TMPL Gym",    area:"hells_kitchen" }] },
-  { label:"Fri", date:"Apr 11", sessions:[{ time:"8 AM",  client:"Marcus A.",  type:"Training", location:"Equinox HY",  area:"hudson_yards"  },{ time:"9 AM",  client:"Jordan T.", type:"Training", location:"Equinox HY", area:"hudson_yards" },{ time:"12 PM", client:"Alex R.", type:"Consult", location:"Alo Yoga", area:"chelsea" },{ time:"1 PM", client:"Sam K.", type:"Training", location:"Alo Yoga", area:"chelsea" },{ time:"3 PM", client:"Priya N.", type:"Training", location:"TMPL Gym", area:"hells_kitchen" }] },
-  { label:"Sat", date:"Apr 12", sessions:[{ time:"9 AM",  client:"Sam K.",     type:"Training", location:"TMPL Gym",    area:"hells_kitchen" }] },
-];
-
-const REVENUE_DATA = [
-  {month:"Nov",val:3600},{month:"Dec",val:4000},{month:"Jan",val:5200},
-  {month:"Feb",val:4800},{month:"Mar",val:6000},{month:"Apr",val:5400},
-];
-
-const ADMIN_MESSAGES_DATA = [
-  { id:1, init:"JT", name:"Jordan Thomas", preview:"Thanks Malik! Friday felt great.", time:"2h", unread:2,
-    messages:[{from:"me",text:"Great work this week. Hip hinge significantly improved — ready to progress to heavier RDLs.",time:"Tue 4:30 PM"},{from:"them",text:"Thanks Malik! Friday felt great.",time:"Tue 6:00 PM"}] },
-  { id:2, init:"DM", name:"Diane M.", preview:"Can we adjust Wednesday's time?", time:"4h", unread:1,
-    messages:[{from:"them",text:"Can we adjust Wednesday's time? 11 AM instead of 10 AM?",time:"Today 8:20 AM"}] },
-  { id:3, init:"MA", name:"Marcus A.", preview:"Ready for block 3.", time:"1d", unread:0,
-    messages:[{from:"them",text:"Ready for block 3. What are we starting with?",time:"Yesterday 6:00 PM"}] },
-  { id:4, init:"AR", name:"Alex R.", preview:"Renewal — any changes to pricing?", time:"2d", unread:0,
-    messages:[{from:"them",text:"Hey, thinking about renewing. Any changes to the pricing?",time:"2 days ago"}] },
-];
-
 /* ── ADMIN SHARED COMPONENTS ─────────────────────────────────────────────── */
 function AdminTopbar({ title, actions }) {
   return (
@@ -4641,339 +4433,657 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
 /* ── ADMIN PROGRAMS ──────────────────────────────────────────────────────── */
 /* ── ADMIN PROGRAMS ─────────────────────────────────────────────────────── */
 function AdminPrograms({ session }) {
-  const [clients,     setClients]   = useState([]);
-  const [selClientId, setSelClient] = useState(null);
-  const [view,        setView]      = useState("list");
-  const [editProgId,  setEditProg]  = useState(null);
-  const [activeDay,   setDay]       = useState(null);
-  const [programs,    setPrograms]  = useState([]);
-  const [saving,      setSaving]    = useState(false);
-  const [saved,       setSaved]     = useState(false);
-  const [loading,     setLoading]   = useState(true);
-  const [saveErr,     setSaveErr]   = useState("");
+  // ── state ─────────────────────────────────────────────────────────────
+  const [clients,      setClients]    = useState([]);
+  const [allProgs,     setAllProgs]   = useState([]);
+  const [loading,      setLoading]    = useState(true);
+  const [tab,          setTab]        = useState("library");
+  const [view,         setView]       = useState("list");
+  const [editProgId,   setEditProg]   = useState(null);
+  const [activeDay,    setDay]        = useState(null);
+  const [saving,       setSaving]     = useState(false);
+  const [saved,        setSaved]      = useState(false);
+  const [saveErr,      setSaveErr]    = useState("");
+  const [assignModal,  setAssignModal]= useState(null);
+  const [assignCId,    setAssignCId]  = useState("");
+  const [assigning,    setAssigning]  = useState(false);
+  const [assignErr,    setAssignErr]  = useState("");
+  const [selClientId,  setSelClient]  = useState("");
 
-  // ── Load clients on mount ─────────────────────────────────────────────
-  useEffect(() => {
-    listClients().then(rows => {
-      // Normalise to the shape the UI expects
-      const mapped = rows.map(r => {
+  // ── load ──────────────────────────────────────────────────────────────
+  const reload = () => {
+    setLoading(true);
+    Promise.all([listClients(), getAllPrograms()]).then(([cRows, pRows]) => {
+      setClients(cRows.map(r => {
         const cp = r.client_profiles;
         return {
           id:       r.id,
           init:     (r.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(),
-          name:     r.name  || r.email,
+          name:     r.name || r.email,
           email:    r.email,
           pkg:      cp?.package_plan    || "—",
           goal:     (cp?.goals||[]).join(", ") || "—",
           level:    cp?.fitness_level   || "—",
           sessLeft: cp?.sessions_balance ?? 0,
-          location: cp?.location_building || "—",
-          injuries: "—",
-          status:   "active",
         };
-      });
-      setClients(mapped);
-      if (mapped.length > 0 && !selClientId) setSelClient(mapped[0].id);
+      }));
+      setAllProgs(pRows.map(dbToUI));
       setLoading(false);
     });
-  }, []);
+  };
+  useEffect(reload, []);
 
-  // ── Load programs whenever selected client changes ────────────────────
-  useEffect(() => {
-    if (!selClientId) return;
-    setLoading(true);
-    getPrograms(selClientId).then(rows => {
-      // Map DB snake_case → UI camelCase
-      setPrograms(rows.map(dbToUI));
-      setLoading(false);
-    });
-  }, [selClientId]);
-
-  // ── DB ↔ UI shape converters ──────────────────────────────────────────
   function dbToUI(r) {
     return {
       id:          r.id,
-      clientId:    r.client_id,
-      name:        r.name        || "New Program",
-      block:       r.block       || "Block 1",
-      phase:       r.phase       || "",
-      status:      r.status      || "draft",
-      startDate:   r.start_date  || "",
-      endDate:     r.end_date    || "",
-      week:        r.week        ?? 1,
-      totalWeeks:  r.total_weeks ?? 8,
-      coachNote:   r.coach_note  || "",
-      days:        r.days        || [],
-      updatedAt:   r.updated_at  || "",
+      clientId:    r.client_id     || null,
+      clientName:  r.profiles?.name || r.profiles?.email || null,
+      name:        r.name          || "New Program",
+      block:       r.block         || "Block 1",
+      phase:       r.phase         || "",
+      weeklyFocus: r.weekly_focus  || "",
+      status:      r.status        || "draft",
+      startDate:   r.start_date    || "",
+      endDate:     r.end_date      || "",
+      week:        r.week          ?? 1,
+      totalWeeks:  r.total_weeks   ?? 8,
+      coachNote:   r.coach_note    || "",
+      days:        Array.isArray(r.days) ? r.days : [],
+      updatedAt:   r.updated_at    || "",
     };
   }
 
-  const client   = clients.find(c => c.id === selClientId);
-  const active   = programs.find(p => p.status === "active");
-  const history  = programs.filter(p => p.status !== "active" && p.status !== "draft");
-  const drafts   = programs.filter(p => p.status === "draft");
-  const editProg = editProgId ? programs.find(p => p.id === editProgId) : null;
-  const editDayObj = editProg && activeDay ? editProg.days.find(d => d.id === activeDay) : null;
+  const templates   = allProgs.filter(p => !p.clientId);
+  const editProg    = editProgId ? allProgs.find(p => p.id === editProgId) : null;
+  const curDay      = editProg && activeDay
+    ? editProg.days.find(d => d.id === activeDay)
+    : editProg?.days[0] || null;
+  const curDayId    = curDay?.id || null;
+  const selClient   = clients.find(c => c.id === selClientId);
+  const clientProgs = selClientId ? allProgs.filter(p => p.clientId === selClientId) : [];
 
-  // ── Persist + update local state ──────────────────────────────────────
+  const mutate    = fn => setAllProgs(p => p.map(x => x.id === editProgId ? fn(x) : x));
+  const mutateDay = (dId, fn) => mutate(p => ({...p, days: p.days.map(d => d.id===dId ? fn(d) : d)}));
+  const mutateEx  = (dId, eId, fn) =>
+    mutateDay(dId, d => ({...d, exercises: d.exercises.map(e => e.id===eId ? fn(e) : e)}));
+
   const saveAndPush = async () => {
     if (!editProg) return;
     setSaving(true); setSaveErr("");
     const result = await saveProgram(editProg);
     setSaving(false);
     if (!result.ok) { setSaveErr(result.error || "Save failed"); return; }
-    // Update local state from DB response
-    setPrograms(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
-    setSaved(true); setTimeout(() => setSaved(false), 2200);
+    setAllProgs(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
+    setSaved(true); setTimeout(() => setSaved(false), 2400);
   };
 
-  const archiveProg = async (id) => {
-    const result = await archiveProgram(id);
-    if (result.ok) setPrograms(p => p.map(x => x.id === id ? {...x, status:"completed"} : x));
-  };
-
-  const duplicateProg = async (id) => {
-    const result = await duplicateProgram(id, session?.id);
-    if (result.ok) setPrograms(p => [...p, dbToUI(result.program)]);
-  };
-
-  const publishProg = async (id) => {
-    const result = await publishProgram(id, selClientId);
-    if (result.ok) {
-      setPrograms(p => p.map(x =>
-        x.id === id ? {...x, status:"active"} :
-        x.status === "active" ? {...x, status:"completed"} : x
-      ));
-    }
-  };
-
-  const createNewProgram = async () => {
-    const result = await createProgram(selClientId, session?.id);
+  const createTemplate = async () => {
+    setSaving(true);
+    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8 });
+    setSaving(false);
     if (!result.ok) return;
     const np = dbToUI(result.program);
-    setPrograms(p => [...p, np]);
+    setAllProgs(p => [...p, np]);
     setEditProg(np.id);
     setDay(null);
     setView("edit");
   };
 
-  // ── In-memory exercise edits (saved on "Save & Push") ────────────────
-  const updateExField = (exId, field, val) => {
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: d.exercises.map(e => e.id !== exId ? e : {...e, [field]:val})})}));
-  };
-  const addEx = () => {
-    const id = Date.now();
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: [...d.exercises, {id, name:"", sets:3, repsScheme:"10,10,10", weight:"", tempo:"", rest:"90s", note:""}]})}));
-  };
-  const removeEx = (exId) => {
-    setPrograms(prev => prev.map(p => p.id !== editProgId ? p : {...p,
-      days: p.days.map(d => d.id !== activeDay ? d : {...d,
-        exercises: d.exercises.filter(e => e.id !== exId)})}));
+  const createForClient = async cId => {
+    setSaving(true);
+    const result = await createProgram(cId, session?.id, { name: "New Program", total_weeks: 8 });
+    setSaving(false);
+    if (!result.ok) return;
+    const np = dbToUI(result.program);
+    setAllProgs(p => [...p, np]);
+    setEditProg(np.id);
+    setDay(null);
+    setView("edit");
   };
 
-  if (loading) return (
-    <div className="page-fade">
-      <AdminTopbar title="Program Management" />
-      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:60}}>
-        <div style={{textAlign:"center",color:"var(--txt-2)",fontSize:"0.78rem"}}>
-          <div style={{marginBottom:12,fontSize:"1.4rem",opacity:0.4}}>⊙</div>Loading…
+  const archiveProg = async id => {
+    const r = await archiveProgram(id);
+    if (r.ok) setAllProgs(p => p.map(x => x.id===id ? {...x, status:"completed"} : x));
+  };
+
+  const dupProg = async id => {
+    const r = await duplicateProgram(id, session?.id);
+    if (r.ok) setAllProgs(p => [...p, dbToUI(r.program)]);
+  };
+
+  const deleteProg = async id => {
+    const r = await deleteProgram(id);
+    if (r.ok) setAllProgs(p => p.filter(x => x.id !== id));
+  };
+
+  const openAssign = progId => {
+    setAssignModal(progId);
+    setAssignCId(clients[0]?.id || "");
+    setAssignErr("");
+  };
+
+  const confirmAssign = async () => {
+    if (!assignCId) { setAssignErr("Select a client."); return; }
+    setAssigning(true); setAssignErr("");
+    const r = await publishProgram(assignModal, assignCId);
+    setAssigning(false);
+    if (!r.ok) { setAssignErr(r.error || "Failed"); return; }
+    setAssignModal(null);
+    reload();
+  };
+
+  const addDay = () => {
+    const n = (editProg?.days?.length || 0) + 1;
+    const d = { id:`d${Date.now()}`, name:`Day ${n}`, focus:"", warmup:"", exercises:[] };
+    mutate(p => ({...p, days:[...(p.days||[]), d]}));
+    setDay(d.id);
+  };
+
+  const removeDay = dId => {
+    mutate(p => ({...p, days: p.days.filter(d => d.id!==dId)}));
+    if (activeDay===dId) setDay(null);
+  };
+
+  const addExercise = () => {
+    const e = {
+      id:`e${Date.now()}`, section:"A1", name:"", sets:4,
+      reps:"10", rest:"90s", rir:"2",
+      w1:"",w2:"",w3:"",w4:"",w5:"",w6:"",w7:"",w8:"",
+      clientNote:"", coachNote:"", videoUrl:"",
+    };
+    mutateDay(curDayId, d => ({...d, exercises:[...(d.exercises||[]), e]}));
+  };
+
+  const removeExercise = eId => mutateDay(curDayId, d => ({...d, exercises:d.exercises.filter(e=>e.id!==eId)}));
+  const updEx = (eId, field, val) => mutateEx(curDayId, eId, e => ({...e, [field]:val}));
+
+  const moveEx = (eId, dir) => {
+    mutateDay(curDayId, d => {
+      const arr = [...d.exercises];
+      const i = arr.findIndex(e => e.id===eId);
+      if (i+dir<0||i+dir>=arr.length) return d;
+      [arr[i],arr[i+dir]] = [arr[i+dir],arr[i]];
+      return {...d, exercises:arr};
+    });
+  };
+
+  const SECTION_LABELS = ["A1","A2","A3","B1","B2","B3","C1","C2","C3","D1","D2"];
+
+  const groupedExercises = exercises => {
+    const groups = {};
+    (exercises||[]).forEach(ex => {
+      const grp = (ex.section||"A1")[0];
+      if (!groups[grp]) groups[grp] = [];
+      groups[grp].push(ex);
+    });
+    return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0]));
+  };
+
+  const AssignModal = () => !assignModal ? null : (
+    <div style={{position:"fixed",inset:0,background:"rgba(5,6,8,0.88)",backdropFilter:"blur(16px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+      onClick={()=>setAssignModal(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,borderRadius:"var(--r5)",padding:28,background:"var(--gb2)",border:"1px solid var(--b1)",backdropFilter:"blur(32px)",boxShadow:"0 32px 80px rgba(0,0,0,0.8)",position:"relative"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)"}} />
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+          <div>
+            <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)"}}>Assign to Client</p>
+            <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:3}}>{allProgs.find(p=>p.id===assignModal)?.name}</p>
+          </div>
+          <button onClick={()=>setAssignModal(null)} style={{width:28,height:28,borderRadius:"50%",background:"var(--gb)",border:"1px solid var(--b0)",color:"var(--txt-1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem"}}>✕</button>
         </div>
+        {clients.length===0
+          ? <p style={{fontSize:"0.78rem",color:"var(--txt-2)",textAlign:"center",padding:"16px 0"}}>No clients yet.</p>
+          : (<>
+            <div className="field" style={{marginBottom:14}}>
+              <label className="field-label">Select Client</label>
+              <select className="fi" value={assignCId} onChange={e=>setAssignCId(e.target.value)} style={{cursor:"pointer"}}>
+                <option value="">— Choose client —</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            {assignCId && (()=>{
+              const existing = allProgs.find(p=>p.clientId===assignCId && p.status==="active");
+              return existing ? (
+                <p style={{fontSize:"0.65rem",color:"rgba(220,175,100,0.85)",marginBottom:12}}>
+                  ⚠ {clients.find(c=>c.id===assignCId)?.name} has an active program ({existing.name}) — it will be archived.
+                </p>
+              ) : null;
+            })()}
+            {assignErr && <p style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.9)",marginBottom:10}}>{assignErr}</p>}
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-s btn-sm" onClick={()=>setAssignModal(null)}>Cancel</button>
+              <button
+                className={"btn btn-p btn-sm"+(assigning?" btn-loading":"")}
+                style={{flex:1,justifyContent:"center",opacity:assignCId?1:0.45}}
+                disabled={!assignCId||assigning}
+                onClick={confirmAssign}
+              >{assigning?<><Spinner />Assigning…</>:"Assign & Publish"}</button>
+            </div>
+          </>)
+        }
       </div>
     </div>
   );
 
-  // ── EDIT VIEW ───────────────────────────────────────────────────────────
-  if (view === "edit" && editProg) {
-    const days      = editProg.days;
-    const curDayId  = activeDay || days[0]?.id;
-    const curDay    = editDayObj || days[0];
+  if (loading) return (
+    <div className="page-fade">
+      <AdminTopbar title="Programs" />
+      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:80}}><Spinner /></div>
+    </div>
+  );
+
+  // ── EDIT VIEW ──────────────────────────────────────────────────────────
+  if (view==="edit" && editProg) {
+    const totalWeeks = editProg.totalWeeks || 8;
+    const weekCols   = Array.from({length:totalWeeks},(_,i)=>`W${i+1}`);
+    const wkGrid     = weekCols.map(()=>"44px").join(" ");
     return (
       <div className="page-fade">
-        <AdminTopbar title={`Editing: ${editProg.name}`} actions={<>
-          <p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{client?.name} · {editProg.block}</p>
+        <AdminTopbar title={editProg.name||"Edit Program"} actions={<>
+          {editProg.clientName
+            ? <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>→ {editProg.clientName}</span>
+            : <span style={{fontSize:"0.65rem",padding:"3px 9px",borderRadius:100,background:"rgba(220,175,80,0.12)",border:"1px solid rgba(220,175,80,0.22)",color:"rgba(220,175,80,0.85)"}}>Template</span>
+          }
           {saveErr && <span style={{fontSize:"0.65rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
-          <button className="btn btn-s btn-sm" onClick={()=>duplicateProg(editProg.id)}>Duplicate</button>
-          {editProg.status==="active" && <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive Block</button>}
-          <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
+          {saved   && <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
+          <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+          <button className="btn btn-s btn-sm" onClick={()=>dupProg(editProg.id)}>Duplicate</button>
+          {!editProg.clientId && <button className="btn btn-s btn-sm" onClick={()=>openAssign(editProg.id)}>Assign →</button>}
+          {editProg.status==="active" && <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive</button>}
+          <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={saveAndPush}>
+            {saving?<><Spinner />Saving…</>:saved?"✓ Saved":"Save"}
+          </button>
         </>} />
-        <div className="admin-body">
-          <div className="a-panel" style={{marginBottom:14}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-              <div className="field"><label className="field-label">Program Name</label>
-                <input className="fi" value={editProg.name} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,name:e.target.value}:x))} /></div>
-              <div className="field"><label className="field-label">Block</label>
-                <input className="fi" value={editProg.block} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,block:e.target.value}:x))} /></div>
-              <div className="field"><label className="field-label">Phase</label>
-                <input className="fi" value={editProg.phase} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,phase:e.target.value}:x))} /></div>
-              <div className="field"><label className="field-label">Total Weeks</label>
-                <input className="fi" type="number" value={editProg.totalWeeks} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,totalWeeks:+e.target.value}:x))} /></div>
+
+        <div style={{padding:"20px 28px"}}>
+          {/* Metadata */}
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:12,marginBottom:14}}>
+            <div className="field"><label className="field-label">Program Name</label>
+              <input className="fi" value={editProg.name} onChange={e=>mutate(p=>({...p,name:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Block</label>
+              <input className="fi" value={editProg.block} onChange={e=>mutate(p=>({...p,block:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Phase</label>
+              <input className="fi" value={editProg.phase} onChange={e=>mutate(p=>({...p,phase:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Duration</label>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                {[2,4,8,12].map(w=>(
+                  <button key={w} onClick={()=>mutate(p=>({...p,totalWeeks:w}))}
+                    style={{padding:"6px 10px",borderRadius:"var(--r2)",border:"1px solid "+(editProg.totalWeeks===w?"var(--b1)":"var(--b0)"),background:editProg.totalWeeks===w?"var(--acc-0)":"none",color:editProg.totalWeeks===w?"var(--txt-0)":"var(--txt-1)",fontSize:"0.64rem",fontFamily:"var(--fh)",fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}
+                  >{w}w</button>
+                ))}
+                <input className="fi" type="number" min="1" max="52" value={editProg.totalWeeks}
+                  style={{width:48,padding:"5px 6px",textAlign:"center",fontSize:"0.72rem"}}
+                  onChange={e=>mutate(p=>({...p,totalWeeks:Math.max(1,+e.target.value||1)}))} />
+              </div>
             </div>
-            <div className="field mt-12"><label className="field-label">Coach Note</label>
-              <textarea className="note-area" rows={2} value={editProg.coachNote} onChange={e=>setPrograms(p=>p.map(x=>x.id===editProgId?{...x,coachNote:e.target.value}:x))} /></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:12,marginBottom:14}}>
+            <div className="field"><label className="field-label">Start Date</label>
+              <input className="fi" type="date" value={editProg.startDate} onChange={e=>mutate(p=>({...p,startDate:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">End Date</label>
+              <input className="fi" type="date" value={editProg.endDate} onChange={e=>mutate(p=>({...p,endDate:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Weekly Focus / Progression</label>
+              <input className="fi" value={editProg.weeklyFocus||""} placeholder="e.g. Wk 1–4 Accumulation → Wk 5–8 Intensification"
+                onChange={e=>mutate(p=>({...p,weeklyFocus:e.target.value}))} /></div>
+          </div>
+          <div className="field" style={{marginBottom:18}}>
+            <label className="field-label">Coach Notes</label>
+            <textarea className="note-area" rows={2} value={editProg.coachNote}
+              placeholder="Program strategy, progressions, client context…"
+              onChange={e=>mutate(p=>({...p,coachNote:e.target.value}))} />
           </div>
 
-          <div className="pe-layout">
-            <div className="pe-days">
-              <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Training Days</p>
-              {days.map(d=>(
-                <div key={d.id} className={`pe-day-tab${curDayId===d.id?" on":""}`} onClick={()=>setDay(d.id)}>
-                  <p className="pe-day-name">{d.name}</p>
-                  <p className="pe-day-type">{d.focus}</p>
+          {/* Day + exercise layout */}
+          <div style={{display:"grid",gridTemplateColumns:"200px 1fr",gap:0,border:"1px solid var(--b0)",borderRadius:"var(--r3)",overflow:"hidden",background:"var(--bg-1)",minHeight:520}}>
+            {/* Day sidebar */}
+            <div style={{borderRight:"1px solid var(--b0)",padding:"14px 10px",display:"flex",flexDirection:"column"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 6px 10px",borderBottom:"1px solid var(--b0)",marginBottom:8}}>
+                <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)"}}>Days</p>
+                <button className="btn btn-xs btn-p" style={{padding:"3px 8px",fontSize:"0.58rem"}} onClick={addDay}>+ Day</button>
+              </div>
+              {(editProg.days||[]).length===0 && (
+                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",padding:"8px 6px",lineHeight:1.55}}>No days yet.</p>
+              )}
+              {(editProg.days||[]).map((d,di)=>(
+                <div key={d.id} className={"pe-day-tab"+(curDayId===d.id?" on":"")} onClick={()=>setDay(d.id)}>
+                  <p className="pe-day-name">{d.name||("Day "+(di+1))}</p>
+                  <p className="pe-day-type">{d.focus||"—"}</p>
+                  <p style={{fontSize:"0.56rem",color:"var(--txt-2)",marginTop:2}}>{(d.exercises||[]).length} exercises</p>
                 </div>
               ))}
-              <button style={{margin:"12px 10px 0",padding:"7px 10px",borderRadius:"var(--r2)",border:"1px dashed var(--b0)",background:"none",color:"var(--txt-2)",fontSize:"0.66rem",cursor:"pointer",width:"calc(100% - 20px)"}} onClick={()=>{
-                const newDay={id:`d${Date.now()}`,name:"New Day",focus:"",exercises:[]};
-                setPrograms(p=>p.map(x=>x.id===editProgId?{...x,days:[...x.days,newDay]}:x));
-                setDay(newDay.id);
-              }}>+ Add Day</button>
             </div>
 
-            <div className="pe-content">
-              {curDay && (<>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:10}}>
-                  <div className="form-grid" style={{flex:1}}>
-                    <div className="field"><label className="field-label">Day Name</label>
-                      <input className="fi" value={curDay.name} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,name:e.target.value})}))} /></div>
-                    <div className="field"><label className="field-label">Focus / Type</label>
-                      <input className="fi" value={curDay.focus} onChange={e=>setPrograms(p=>p.map(x=>x.id!==editProgId?x:{...x,days:x.days.map(d=>d.id!==curDayId?d:{...d,focus:e.target.value})}))} /></div>
-                  </div>
-                  <button className="btn btn-s btn-sm" onClick={addEx}>+ Exercise</button>
+            {/* Exercise area */}
+            <div style={{overflowX:"auto",overflowY:"auto",padding:"20px 22px"}}>
+              {!curDay ? (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12,color:"var(--txt-2)"}}>
+                  <span style={{fontSize:"2rem",opacity:0.15}}>▦</span>
+                  <p style={{fontSize:"0.78rem"}}>Select a day or add a training day.</p>
+                  <button className="btn btn-p btn-sm" onClick={addDay}>+ Add Day</button>
                 </div>
-                {(editDayObj||curDay).exercises.map((ex,ei)=>(
-                  <div className="ex-editor" key={ex.id}>
-                    <div className="ex-editor-head">
-                      <span className="ex-num">{ei+1}</span>
-                      <input className="ex-name-input" value={ex.name} placeholder="Exercise name"
-                        onChange={e=>updateExField(ex.id,"name",e.target.value)} />
-                      <button style={{padding:"4px 10px",borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.25)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}
-                        onClick={()=>removeEx(ex.id)}>Remove</button>
+              ) : (<>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,marginBottom:12,alignItems:"end"}}>
+                  <div className="field"><label className="field-label">Day Name</label>
+                    <input className="fi" value={curDay.name}
+                      onChange={e=>mutateDay(curDayId,d=>({...d,name:e.target.value}))} /></div>
+                  <div className="field"><label className="field-label">Focus</label>
+                    <input className="fi" value={curDay.focus}
+                      onChange={e=>mutateDay(curDayId,d=>({...d,focus:e.target.value}))} /></div>
+                  <button onClick={()=>removeDay(curDayId)}
+                    style={{padding:"8px 12px",alignSelf:"flex-end",borderRadius:"var(--r2)",border:"1px solid rgba(180,60,60,0.22)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)",whiteSpace:"nowrap"}}>Remove Day</button>
+                </div>
+                <div className="field" style={{marginBottom:16}}>
+                  <label className="field-label">Warm-Up Notes</label>
+                  <textarea className="note-area" rows={2}
+                    placeholder="Activation, mobility, ramp sets…"
+                    value={curDay.warmup||""}
+                    onChange={e=>mutateDay(curDayId,d=>({...d,warmup:e.target.value}))} />
+                </div>
+
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <p style={{fontSize:"0.58rem",letterSpacing:"0.16em",textTransform:"uppercase",color:"var(--txt-2)"}}>
+                    Exercises ({(curDay.exercises||[]).length})
+                  </p>
+                  <button className="btn btn-p btn-xs" onClick={addExercise}>+ Exercise</button>
+                </div>
+
+                {(curDay.exercises||[]).length===0 && (
+                  <div style={{padding:"28px",textAlign:"center",borderRadius:"var(--r2)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.75rem"}}>
+                    No exercises yet — click + Exercise to start.
+                  </div>
+                )}
+
+                {groupedExercises(curDay.exercises).map(([grp, exs])=>(
+                  <div key={grp} style={{marginBottom:22}}>
+                    <p style={{fontSize:"0.56rem",letterSpacing:"0.22em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:6,paddingBottom:4,borderBottom:"1px solid var(--b0)"}}>
+                      {grp==="A"?"Primary":grp==="B"?"Secondary":grp==="C"?"Accessory":("Section "+grp)}
+                    </p>
+
+                    {/* Column headers */}
+                    <div style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 44px 80px 44px 32px "+wkGrid+" 100px 100px 100px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                      {["§","↕","Exercise","Sets","Reps","Rest","RIR",...weekCols,"Client Note","Coach Note","Video"].map(h=>(
+                        <div key={h} style={{fontSize:"0.48rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",overflow:"hidden",whiteSpace:"nowrap"}}>{h}</div>
+                      ))}
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 80px 80px",gap:6,marginTop:10}}>
-                      {["Sets","Reps","Weight","Tempo","Rest","Note"].map(h=><div className="set-hd" key={h}>{h}</div>)}
-                      <input className="set-inp" value={ex.sets} placeholder="3" onChange={e=>updateExField(ex.id,"sets",+e.target.value||e.target.value)} />
-                      <input className="set-inp" value={ex.repsScheme} placeholder="10,10,10" onChange={e=>updateExField(ex.id,"repsScheme",e.target.value)} />
-                      <input className="set-inp" value={ex.weight} placeholder="e.g. 135" onChange={e=>updateExField(ex.id,"weight",e.target.value)} />
-                      <input className="set-inp" value={ex.tempo} placeholder="2s" onChange={e=>updateExField(ex.id,"tempo",e.target.value)} />
-                      <input className="set-inp" value={ex.rest} placeholder="90s" onChange={e=>updateExField(ex.id,"rest",e.target.value)} />
-                      <input className="set-inp" value={ex.note} placeholder="Coaching note" onChange={e=>updateExField(ex.id,"note",e.target.value)} />
-                    </div>
+
+                    {exs.map(ex=>{
+                      const absIdx = (curDay.exercises||[]).indexOf(ex);
+                      return (
+                        <div key={ex.id} style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 44px 80px 44px 32px "+wkGrid+" 100px 100px 100px",gap:4,marginBottom:4,alignItems:"center"}}>
+                          <select value={ex.section||"A1"} onChange={e=>updEx(ex.id,"section",e.target.value)}
+                            style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--acc-1)",padding:"4px 3px",borderRadius:"var(--r1)",fontSize:"0.64rem",fontFamily:"var(--fc)",cursor:"pointer",outline:"none"}}>
+                            {SECTION_LABELS.map(s=><option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            <button onClick={()=>moveEx(ex.id,-1)} disabled={absIdx===0}
+                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===0?0.2:1,lineHeight:1}}>↑</button>
+                            <button onClick={()=>moveEx(ex.id,1)} disabled={absIdx===(curDay.exercises.length-1)}
+                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===(curDay.exercises.length-1)?0.2:1,lineHeight:1}}>↓</button>
+                          </div>
+                          <input className="set-inp" value={ex.name} placeholder="Exercise name"
+                            style={{fontWeight:500}} onChange={e=>updEx(ex.id,"name",e.target.value)} />
+                          <input className="set-inp" type="number" min="1" value={ex.sets}
+                            onChange={e=>updEx(ex.id,"sets",+e.target.value||1)} />
+                          <input className="set-inp" value={ex.reps} placeholder="8-10"
+                            onChange={e=>updEx(ex.id,"reps",e.target.value)} />
+                          <input className="set-inp" value={ex.rest} placeholder="90s"
+                            onChange={e=>updEx(ex.id,"rest",e.target.value)} />
+                          <input className="set-inp" value={ex.rir} placeholder="2"
+                            onChange={e=>updEx(ex.id,"rir",e.target.value)} />
+                          {Array.from({length:totalWeeks},(_,wi)=>{
+                            const key = "w"+(wi+1);
+                            return (
+                              <input key={wi} className="set-inp"
+                                value={ex[key]||""}
+                                placeholder="—"
+                                style={{textAlign:"center",fontSize:"0.64rem",padding:"4px 3px"}}
+                                onChange={e=>updEx(ex.id,key,e.target.value)} />
+                            );
+                          })}
+                          <input className="set-inp" value={ex.clientNote||""} placeholder="Client note"
+                            onChange={e=>updEx(ex.id,"clientNote",e.target.value)} />
+                          <input className="set-inp" value={ex.coachNote||""} placeholder="Coach note"
+                            onChange={e=>updEx(ex.id,"coachNote",e.target.value)} />
+                          <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                            <input className="set-inp" value={ex.videoUrl||""} placeholder="https://…"
+                              style={{flex:1,minWidth:0}} onChange={e=>updEx(ex.id,"videoUrl",e.target.value)} />
+                            <button onClick={()=>removeExercise(ex.id)}
+                              style={{flexShrink:0,width:18,height:18,borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.3)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.5rem",cursor:"pointer",lineHeight:1}}>✕</button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
-                {(editDayObj||curDay).exercises.length===0&&(
-                  <div style={{padding:"24px",textAlign:"center",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px dashed var(--b0)",color:"var(--txt-2)",fontSize:"0.78rem"}}>No exercises yet. Click + Exercise to add one.</div>
+
+                {!editProg.clientId && (curDay.exercises||[]).length>0 && clients.length>0 && (
+                  <div style={{marginTop:20,padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.05)",border:"1px solid rgba(42,122,75,0.18)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div>
+                      <p style={{fontSize:"0.76rem",color:"var(--txt-0)",fontWeight:500}}>Ready to assign?</p>
+                      <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>Save first, then assign this template to a client.</p>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexShrink:0}}>
+                      <button className={"btn btn-s btn-sm"+(saving?" btn-loading":"")} onClick={saveAndPush}>
+                        {saving?<><Spinner />Saving…</>:"Save"}
+                      </button>
+                      <button className="btn btn-p btn-sm" onClick={async()=>{await saveAndPush();openAssign(editProg.id);}}>
+                        Save & Assign →
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>)}
             </div>
           </div>
-          <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);}}>← Back</button>
-            <button className={`btn btn-p btn-sm${saving?" btn-loading":""}`} onClick={saveAndPush}>{saved?"✓ Saved":saving?"Saving…":"Save & Push"}</button>
+
+          <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
+            {saveErr && <span style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
+            {saved   && <span style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+            <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={saveAndPush}>
+              {saving?<><Spinner />Saving…</>:saved?"✓ Saved":"Save Program"}
+            </button>
           </div>
         </div>
+        <AssignModal />
       </div>
     );
   }
 
-  // ── LIST VIEW ───────────────────────────────────────────────────────────
+  // ── LIST VIEW ──────────────────────────────────────────────────────────
   return (
     <div className="page-fade">
-      <AdminTopbar title="Program Management" actions={<>
-        <select value={selClientId || ""} onChange={e=>{ setSelClient(e.target.value); setView("list"); setEditProg(null); }}
-          style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",padding:"6px 10px",borderRadius:"var(--r2)",fontSize:"0.76rem",cursor:"pointer",outline:"none"}}>
-          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <button className="btn btn-p btn-sm" onClick={createNewProgram}>+ New Program</button>
-      </>} />
+      <AdminTopbar title="Program Builder" actions={
+        <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={createTemplate}>
+          {saving?<><Spinner />Creating…</>:"+ New Template"}
+        </button>
+      } />
       <div className="admin-body">
-        {client && (
-          <div className="a-panel" style={{marginBottom:14,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
-            <div className="c-av" style={{width:40,height:40,fontSize:"0.72rem"}}>{client.init}</div>
-            <div style={{flex:1}}>
-              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client.name}</p>
-              <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{client.pkg} · {client.goal} · {client.level}</p>
-            </div>
-            {active  && <span className="prog-status-pill active">Active Program: {active.block}</span>}
-            {!active && <span className="prog-status-pill draft">No Active Program</span>}
-          </div>
-        )}
+        <div className="prog-tabs" style={{marginBottom:20}}>
+          <button className={"prog-tab"+(tab==="library"?" on":"")} onClick={()=>setTab("library")}>
+            Program Library
+            <span style={{marginLeft:5,padding:"1px 6px",borderRadius:100,background:"var(--b0)",fontSize:"0.58rem",fontFamily:"var(--fc)"}}>{templates.length}</span>
+          </button>
+          <button className={"prog-tab"+(tab==="assigned"?" on":"")} onClick={()=>setTab("assigned")}>
+            Assigned to Clients
+          </button>
+        </div>
 
-        {active && (
-          <div style={{marginBottom:14}}>
-            <p className="label mb-10">Active Program</p>
-            <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.2)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
-                <div>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{active.name}</p>
-                  <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{active.block} · {active.phase} · Week {active.week} of {active.totalWeeks}</p>
-                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{active.startDate} – {active.endDate}</p>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(active.id);setDay(active.days[0]?.id||null);setView("edit");}}>Edit Program</button>
-                  <button className="btn btn-s btn-sm" onClick={()=>duplicateProg(active.id)}>Duplicate</button>
-                  <button className="btn btn-s btn-sm" onClick={()=>archiveProg(active.id)}>Archive Block</button>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {active.days.map(d=>(
-                  <div key={d.id} style={{padding:"8px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"0.72rem",fontWeight:700}}>{d.name}</p>
-                    <p style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:2}}>{d.focus}</p>
-                    <p style={{fontSize:"0.6rem",color:"var(--txt-2)",marginTop:1}}>{d.exercises.length} exercises</p>
-                  </div>
-                ))}
+        {tab==="library" && (<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <p className="label">Templates (Unassigned)</p>
+            <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={createTemplate}>
+              {saving?<><Spinner />Creating…</>:"+ New Template"}
+            </button>
+          </div>
+          {templates.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"56px 20px"}}>
+                <span className="empty-ic">▦</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No program templates yet</p>
+                <p className="empty-txt">Build programs before clients exist. Templates can be assigned later.</p>
+                <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} style={{marginTop:16}} onClick={createTemplate}>
+                  {saving?<><Spinner />Creating…</>:"+ Create First Template"}
+                </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {drafts.length > 0 && (
-          <div style={{marginBottom:14}}>
-            <p className="label mb-10">Drafts</p>
-            {drafts.map(p=>(
-              <div className="a-panel" key={p.id} style={{marginBottom:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><p style={{fontFamily:"var(--fh)",fontSize:"0.85rem",fontWeight:700}}>{p.name}</p>
-                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · Draft</p></div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days[0]?.id||null);setView("edit");}}>Edit</button>
-                    <button className="btn btn-p btn-sm" onClick={()=>publishProg(p.id)}>Publish</button>
-                  </div>
-                </div>
+          ) : templates.map(p=>(
+            <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
+                  {p.block}{p.phase?" · "+p.phase:""} · {p.totalWeeks}w · {(p.days||[]).length} days
+                </p>
               </div>
-            ))}
-          </div>
-        )}
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Assign →</button>}
+                <button onClick={()=>deleteProg(p.id)}
+                  style={{padding:"6px 10px",borderRadius:"var(--r2)",border:"1px solid rgba(180,60,60,0.22)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}>Delete</button>
+              </div>
+            </div>
+          ))}
 
-        {history.length > 0 && (
-          <div>
-            <p className="label mb-10">Program History · {history.length} block{history.length!==1?"s":""}</p>
-            {history.map(p=>(
-              <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid var(--b0)"}}>
+          {allProgs.filter(p=>p.clientId && p.status==="draft").length>0 && (<>
+            <p className="label mt-20 mb-10">Client Drafts</p>
+            {allProgs.filter(p=>p.clientId && p.status==="draft").map(p=>(
+              <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
                 <div>
                   <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{p.block} · {p.startDate} – {p.endDate}</p>
+                  <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{"→ "+(p.clientName||"—")+" · "+p.block}</p>
                 </div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <span className={`prog-status-pill ${p.status}`}>{p.status}</span>
-                  <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days[0]?.id||null);setView("edit");}}>View</button>
-                  <button className="btn btn-s btn-xs" onClick={()=>duplicateProg(p.id)}>Duplicate</button>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <span className="prog-status-pill draft">Draft</span>
+                  <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                  <button className="btn btn-p btn-xs" onClick={()=>openAssign(p.id)}>Publish</button>
                 </div>
               </div>
             ))}
-          </div>
-        )}
+          </>)}
+        </>)}
 
-        {!loading && programs.length === 0 && (
-          <div style={{textAlign:"center",padding:"48px 0",color:"var(--txt-2)",fontSize:"0.78rem"}}>
-            No programs yet for this client.<br />
-            <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={createNewProgram}>+ Create First Program</button>
-          </div>
-        )}
+        {tab==="assigned" && (<>
+          {clients.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"48px 20px"}}>
+                <span className="empty-ic">◉</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
+                <p className="empty-txt">Add clients first, then assign programs here.</p>
+              </div>
+            </div>
+          ) : (<>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
+              {clients.map(c=>(
+                <button key={c.id} onClick={()=>setSelClient(c.id)}
+                  style={{padding:"8px 14px",borderRadius:"var(--r2)",border:"1px solid "+(selClientId===c.id?"var(--b1)":"var(--b0)"),background:selClientId===c.id?"var(--acc-0)":"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}}>
+                  <div className="c-av" style={{width:22,height:22,fontSize:"0.5rem"}}>{c.init}</div>
+                  <span style={{fontSize:"0.76rem",color:selClientId===c.id?"var(--txt-0)":"var(--txt-1)",fontWeight:500}}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {selClient && (<>
+              <div className="a-panel" style={{marginBottom:14,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                <div className="c-av" style={{width:36,height:36,fontSize:"0.62rem"}}>{selClient.init}</div>
+                <div style={{flex:1}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{selClient.name}</p>
+                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{selClient.goal+" · "+selClient.level}</p>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ New Program</button>
+                  {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template →</button>}
+                </div>
+              </div>
+
+              {clientProgs.filter(p=>p.status==="active").map(p=>(
+                <div key={p.id} style={{marginBottom:14}}>
+                  <p className="label mb-10">Active Program</p>
+                  <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.22)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{p.name}</p>
+                        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{p.block+(p.phase?" · "+p.phase:"")+" · Wk "+p.week+"/"+p.totalWeeks}</p>
+                        {(p.startDate||p.endDate) && <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:2}}>{p.startDate+" – "+p.endDate}</p>}
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>archiveProg(p.id)}>Archive</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      {(p.days||[]).map(d=>(
+                        <div key={d.id} style={{padding:"7px 11px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                          <p style={{fontFamily:"var(--fh)",fontSize:"0.68rem",fontWeight:700}}>{d.name}</p>
+                          {d.focus && <p style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:1}}>{d.focus}</p>}
+                          <p style={{fontSize:"0.56rem",color:"var(--txt-2)",marginTop:1}}>{(d.exercises||[]).length+" ex"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {clientProgs.filter(p=>p.status==="draft").length>0 && (
+                <div style={{marginBottom:14}}>
+                  <p className="label mb-10">Drafts</p>
+                  {clientProgs.filter(p=>p.status==="draft").map(p=>(
+                    <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700}}>{p.name}</p>
+                        <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:2}}>{p.block+" · "+p.totalWeeks+"w"}</p>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                        <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Publish →</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").length>0 && (
+                <div>
+                  <p className="label mb-10">History</p>
+                  {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").map(p=>(
+                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                        <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{p.block+(p.startDate?" · "+p.startDate+" – "+p.endDate:"")}</p>
+                      </div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span className={"prog-status-pill "+p.status}>{p.status}</span>
+                        <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>View</button>
+                        <button className="btn btn-s btn-xs" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {clientProgs.length===0 && (
+                <div className="a-panel" style={{marginTop:8}}>
+                  <div className="empty-state" style={{padding:"40px 20px"}}>
+                    <span className="empty-ic">▦</span>
+                    <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>{"No programs for "+selClient.name}</p>
+                    <p className="empty-txt">No program assigned yet. Create one or assign a template from the Library.</p>
+                    <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"center"}}>
+                      <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ Create Program</button>
+                      {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template</button>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>)}
+
+            {!selClientId && (
+              <p style={{fontSize:"0.76rem",color:"var(--txt-2)",padding:"20px 0"}}>Select a client above.</p>
+            )}
+          </>)}
+        </>)}
       </div>
+      <AssignModal />
     </div>
   );
 }
@@ -6660,7 +6770,7 @@ function ConsultationRecommendation({ onBack, onProceed }) {
 
 /* ── ADMIN: CONSULTATIONS PANEL ──────────────────────────────────────────── */
 function AdminConsultations({ setView: setAdminView }) {
-  const [leads, setLeads]     = useState(CONSULT_STORE.leads);
+  const [leads, setLeads]     = useState([]); // loads from Supabase when consultations table is wired
   const [selId, setSelId]     = useState(null);
   const [filter, setFilter]   = useState("all");
   const [noteVal, setNoteVal] = useState("");
@@ -7743,7 +7853,7 @@ export default function App() {
           </div>
         </>
       )}
- 
+
       {/* ── ACCESS DENIED ── */}
       {(screen === "denied" || adminGuardFailed || noSessionOnProtected) && (
         <AccessDenied onBack={()=>{ setDenied(false); setScreen("login"); }} />
