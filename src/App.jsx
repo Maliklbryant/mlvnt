@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import malikImg from "./assets/malik.jpg";
+import { supabase } from "./lib/supabase.js";
 import {
   signIn,
   signUp,
@@ -30,6 +31,7 @@ import {
   getConsultationRequests,
   updateConsultationStatus,
   saveConsultationRequest,
+  getProgramLogs,
   getMessages,
   sendMessage,
   getUnreadMessageCount,
@@ -3833,7 +3835,32 @@ function AppShell({ onLogout, session }) {
     reloadProfileData();
     reloadUnread();
     const interval = setInterval(reloadUnread, 30000);
-    return () => clearInterval(interval);
+
+    // Realtime: reload when coach publishes/edits a program
+    const progSub = session?.id ? supabase
+      .channel(`programs:client:${session.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "programs",
+        filter: `client_id=eq.${session.id}`,
+      }, () => reloadProgramData())
+      .subscribe()
+    : null;
+
+    // Realtime: reload when a workout log is updated
+    const logSub = session?.id ? supabase
+      .channel(`workout_logs:client:${session.id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "workout_logs",
+        filter: `client_id=eq.${session.id}`,
+      }, () => reloadProgramData())
+      .subscribe()
+    : null;
+
+    return () => {
+      clearInterval(interval);
+      progSub?.unsubscribe();
+      logSub?.unsubscribe();
+    };
   }, [session?.id]);
 
   const navigate = (id) => {
@@ -4337,6 +4364,82 @@ function AdminDashboard({ setView, setFocusClient, dbClients }) {
   );
 }
 
+
+/* ── ADMIN CLIENT WORKOUT HISTORY ───────────────────────────────────────── */
+function AdminClientWorkoutHistory({ clientId }) {
+  const [logs,    setLogs]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [progMap, setProgMap] = useState({});
+
+  useEffect(() => {
+    if (!clientId) return;
+    getPrograms(clientId).then(progs => {
+      const pm = {};
+      progs.forEach(p => { pm[p.id] = p.name || p.block || "Program"; });
+      setProgMap(pm);
+      Promise.all(progs.map(p => getProgramLogs(p.id))).then(results => {
+        const all = results.flat().sort((a,b) =>
+          new Date(b.completed_at||0) - new Date(a.completed_at||0)
+        );
+        setLogs(all);
+        setLoading(false);
+      });
+    }).catch(() => setLoading(false));
+  }, [clientId]);
+
+  if (loading) return <div style={{padding:"20px 0",display:"flex",justifyContent:"center"}}><Spinner /></div>;
+  if (logs.length === 0) return (
+    <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No completed workouts yet for this client.</p>
+  );
+
+  return (
+    <div>
+      <p className="label mb-10">Completed Workouts ({logs.length})</p>
+      {logs.map((log, i) => {
+        const progName = progMap[log.program_id] || "Program";
+        const sets     = log.sets_data || {};
+        const date     = log.completed_at
+          ? new Date(log.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+          : "—";
+        return (
+          <div key={log.id||i} style={{padding:"12px 0",borderBottom:"1px solid var(--b0)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <div>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)"}}>{progName}</p>
+                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>Day: {log.day_id||"—"} · {date}</p>
+              </div>
+              <ATag type="ok">✓ Complete</ATag>
+            </div>
+            {Object.entries(sets).length > 0 && (
+              <div style={{background:"rgba(0,0,0,0.15)",borderRadius:"var(--r2)",padding:"10px 12px",border:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.56rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Logged Performance</p>
+                {Object.entries(sets).map(([exId, exData]) => {
+                  const setsArr = Array.isArray(exData?.sets) ? exData.sets : [];
+                  const hasData = setsArr.some(s => s.actualWeight || s.actualReps);
+                  if (!hasData) return null;
+                  return (
+                    <div key={exId} style={{marginBottom:8}}>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {setsArr.map((s,si) => (s.actualWeight || s.actualReps) ? (
+                          <div key={si} style={{padding:"4px 10px",borderRadius:"var(--r1)",background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",fontSize:"0.66rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>
+                            Set {si+1}: {s.actualWeight||"—"}{s.actualWeight?" · ":""}{s.actualReps||"—"} reps
+                            {s.done&&<span style={{color:"rgba(140,210,155,0.8)",marginLeft:4}}>✓</span>}
+                          </div>
+                        ) : null)}
+                      </div>
+                      {exData?.note&&<p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:4,fontStyle:"italic"}}>Note: {exData.note}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
   const clients = dbClients || [];
   const [selected, setSelected] = useState(focusClient||null);
@@ -4392,49 +4495,17 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
               {cpTab==="program"&&(
                 <div>
                   {(() => {
-                    const prog = null;  // loaded in AdminPrograms tab
-                    const hist = [];
+                    // Programs are managed in the Programs tab.
+                    // This panel shows a quick summary and links to the Programs tab.
                     return (<>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-                        <div>
-                          <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{prog ? prog.name : "No Active Program"}</p>
-                          <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{prog ? `${prog.block} · ${prog.phase} · Week ${prog.week}/${prog.totalWeeks}` : "Assign a program to this client."}</p>
-                        </div>
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                          <button className="btn btn-p btn-sm" onClick={()=>setView("programs")}>
-                            {prog ? "Edit Program" : "Assign Program"}
-                          </button>
-                          {prog && <button className="btn btn-s btn-sm" onClick={()=>setView("programs")}>Archive Block</button>}
-                        </div>
+                        <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65}}>
+                          Manage this client's programs in the Programs tab. Programs are organized by template, draft, and active status.
+                        </p>
+                        <button className="btn btn-p btn-sm" onClick={()=>setView("programs")}>
+                          Open Programs →
+                        </button>
                       </div>
-                      {prog && (<>
-                        {prog.days.map(d=>(
-                          <div key={d.id} style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",marginBottom:6}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                              <div><p style={{fontFamily:"var(--fh)",fontSize:"0.76rem",fontWeight:700}}>{d.name}</p><p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{d.focus}</p></div>
-                              <p style={{fontSize:"0.64rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>{d.exercises.length} exercises</p>
-                            </div>
-                          </div>
-                        ))}
-                        <div style={{marginTop:12,padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.15)",border:"1px solid var(--b0)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <p style={{fontSize:"0.72rem",color:"var(--txt-2)"}}>Last updated: {prog.updatedAt}</p>
-                          <button className="btn btn-s btn-xs" onClick={()=>setView("programs")}>Duplicate Block</button>
-                        </div>
-                      </>)}
-                      {hist.length > 0 && (
-                        <div style={{marginTop:16}}>
-                          <p className="label mb-8">Program History</p>
-                          {hist.map(p=>(
-                            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--b0)"}}>
-                              <div><p style={{fontSize:"0.78rem",color:"var(--txt-0)",fontWeight:400}}>{p.name} — {p.block}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{p.startDate} – {p.endDate}</p></div>
-                              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                                <span className={`prog-status-pill ${p.status}`}>{p.status}</span>
-                                <button className="btn btn-ghost btn-xs" onClick={()=>setView("programs")}>View</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </>);
                   })()}
                 </div>
@@ -4443,20 +4514,18 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
                 <div style={{display:"flex",flexDirection:"column",gap:14}}>
                   <div>
                     <p className="info-block-title" style={{marginBottom:8}}>Coach Notes (visible to client)</p>
-                    <textarea className="note-area" rows={5} value={noteText} onChange={e=>setNoteText(e.target.value)} />
+                    <textarea className="note-area" rows={5} value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Notes for this client…" />
                     <button className="btn btn-p btn-sm" style={{marginTop:10}}>Save Note</button>
                   </div>
                   <div>
                     <p className="info-block-title" style={{marginBottom:8}}>Private Notes (coach only)</p>
-                    <textarea className="note-area" rows={4} defaultValue="Progressing well on hinge pattern. Sleep improving. Check in on stress levels — mentioned work deadlines last session." />
+                    <textarea className="note-area" rows={4} placeholder="Private observations, session notes, context…" />
                     <button className="btn btn-s btn-sm" style={{marginTop:10}}>Save</button>
                   </div>
                 </div>
               )}
               {cpTab==="history"&&(
-                <div>
-                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Session history will appear here once workout logs are completed. View the Programs tab to see active programs.</p>
-                </div>
+                <AdminClientWorkoutHistory clientId={client.id} />
               )}
               {cpTab==="feedback"&&(
                 <div>
@@ -4576,12 +4645,17 @@ function AdminPrograms({ session }) {
 
   const saveAndPush = async () => {
     if (!editProg) return;
-    setSaving(true); setSaveErr("");
+    setSaving(true); setSaved(false); setSaveErr("");
     const result = await saveProgram(editProg);
     setSaving(false);
-    if (!result.ok) { setSaveErr(result.error || "Save failed"); return; }
+    if (!result.ok) {
+      setSaveErr(result.error || "Save failed — check your connection and try again.");
+      return;
+    }
+    // Update local state from the authoritative DB response
     setAllProgs(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
-    setSaved(true); setTimeout(() => setSaved(false), 2400);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2400);
   };
 
   const createTemplate = async () => {
@@ -4653,16 +4727,27 @@ function AdminPrograms({ session }) {
 
   const addExercise = () => {
     const e = {
-      id:`e${Date.now()}`, section:"A1", name:"", sets:4,
-      reps:"10", rest:"90s", rir:"2",
-      w1:"",w2:"",w3:"",w4:"",w5:"",w6:"",w7:"",w8:"",
-      clientNote:"", coachNote:"", videoUrl:"",
+      id: `e${Date.now()}`,
+      section:    "A1",
+      name:       "",
+      sets:       "",
+      reps:       "",
+      rest:       "",
+      rir:        "",
+      tempo:      "",
+      weight:     "",
+      w1:"", w2:"", w3:"", w4:"", w5:"", w6:"", w7:"", w8:"",
+      coachNote:  "",
+      clientNote: "",
+      videoUrl:   "",
     };
     mutateDay(curDayId, d => ({...d, exercises:[...(d.exercises||[]), e]}));
   };
 
   const removeExercise = eId => mutateDay(curDayId, d => ({...d, exercises:d.exercises.filter(e=>e.id!==eId)}));
-  const updEx = (eId, field, val) => mutateEx(curDayId, eId, e => ({...e, [field]:val}));
+
+  // updEx accepts an explicit dayId so it never relies on a stale curDayId closure.
+  const updEx = (dayId, eId, field, val) => mutateEx(dayId, eId, e => ({...e, [field]: val}));
 
   const moveEx = (eId, dir) => {
     mutateDay(curDayId, d => {
@@ -4867,48 +4952,53 @@ function AdminPrograms({ session }) {
                     </p>
 
                     {/* Column headers */}
-                    <div style={{display:"grid",gridTemplateColumns:"50px 34px minmax(160px,2fr) 44px 80px 44px 34px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"50px 34px minmax(180px,2fr) 50px 80px 50px 40px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
                       {["§","↕","Exercise Name","Sets","Reps","Rest","RIR",...weekCols,"Client Note","Coach Note",""].map((h,hi)=>(
                         <div key={hi} style={{fontSize:"0.48rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",overflow:"hidden",whiteSpace:"nowrap"}}>{h}</div>
                       ))}
                     </div>
 
                     {exs.map(ex=>{
-                      const absIdx = (curDay.exercises||[]).indexOf(ex);
+                      const absIdx = (curDay.exercises||[]).findIndex(e => e.id === ex.id);
+                      const totalEx = (curDay.exercises||[]).length;
+                      const dId = curDayId;
                       return (
-                        <div key={ex.id} style={{display:"grid",gridTemplateColumns:"50px 34px minmax(160px,2fr) 44px 80px 44px 34px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:4,alignItems:"center"}}>
-                          {/* Section label */}
-                          <select value={ex.section||"A1"} onChange={e=>updEx(ex.id,"section",e.target.value)}
+                        <div key={ex.id} style={{display:"grid",gridTemplateColumns:"50px 34px minmax(180px,2fr) 50px 80px 50px 40px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:4,alignItems:"center"}}>
+                          {/* Section */}
+                          <select value={ex.section||"A1"}
+                            onChange={e=>updEx(dId, ex.id, "section", e.target.value)}
                             style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--acc-1)",padding:"4px 3px",borderRadius:"var(--r1)",fontSize:"0.64rem",fontFamily:"var(--fc)",cursor:"pointer",outline:"none"}}>
                             {SECTION_LABELS.map(s=><option key={s} value={s}>{s}</option>)}
                           </select>
-                          {/* Move up/down */}
+                          {/* Move */}
                           <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                            <button onClick={()=>moveEx(ex.id,-1)} disabled={absIdx===0}
-                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===0?0.2:1,lineHeight:1}}>↑</button>
-                            <button onClick={()=>moveEx(ex.id,1)} disabled={absIdx===(curDay.exercises.length-1)}
-                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===(curDay.exercises.length-1)?0.2:1,lineHeight:1}}>↓</button>
+                            <button onClick={()=>moveEx(ex.id,-1)} disabled={absIdx<=0}
+                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx<=0?0.2:1,lineHeight:1}}>↑</button>
+                            <button onClick={()=>moveEx(ex.id,1)} disabled={absIdx>=totalEx-1}
+                              style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx>=totalEx-1?0.2:1,lineHeight:1}}>↓</button>
                           </div>
-                          {/* Exercise Name — primary editable field */}
+                          {/* Exercise Name */}
                           <input
                             className="set-inp"
-                            value={ex.name||""}
+                            type="text"
+                            value={ex.name || ""}
                             placeholder="e.g. Trap Bar Deadlift"
+                            autoComplete="off"
                             style={{fontWeight:500,fontSize:"0.78rem",minWidth:0,width:"100%"}}
-                            onChange={e=>updEx(ex.id,"name",e.target.value)}
+                            onChange={e => updEx(dId, ex.id, "name", e.target.value)}
                           />
                           {/* Sets */}
-                          <input className="set-inp" type="number" min="1" value={ex.sets}
-                            onChange={e=>updEx(ex.id,"sets",+e.target.value||1)} />
+                          <input className="set-inp" value={ex.sets||""} placeholder="4"
+                            onChange={e=>updEx(dId, ex.id,"sets",e.target.value)} />
                           {/* Reps */}
-                          <input className="set-inp" value={ex.reps} placeholder="8-10"
-                            onChange={e=>updEx(ex.id,"reps",e.target.value)} />
+                          <input className="set-inp" value={ex.reps||""} placeholder="8-10"
+                            onChange={e=>updEx(dId, ex.id,"reps",e.target.value)} />
                           {/* Rest */}
-                          <input className="set-inp" value={ex.rest} placeholder="90s"
-                            onChange={e=>updEx(ex.id,"rest",e.target.value)} />
+                          <input className="set-inp" value={ex.rest||""} placeholder="90s"
+                            onChange={e=>updEx(dId, ex.id,"rest",e.target.value)} />
                           {/* RIR */}
                           <input className="set-inp" value={ex.rir||""} placeholder="2"
-                            onChange={e=>updEx(ex.id,"rir",e.target.value)} />
+                            onChange={e=>updEx(dId, ex.id,"rir",e.target.value)} />
                           {/* Weekly load cells */}
                           {Array.from({length:totalWeeks},(_,wi)=>{
                             const key = "w"+(wi+1);
@@ -4917,23 +5007,21 @@ function AdminPrograms({ session }) {
                                 value={ex[key]||""}
                                 placeholder="—"
                                 style={{textAlign:"center",fontSize:"0.64rem",padding:"4px 3px"}}
-                                onChange={e=>updEx(ex.id,key,e.target.value)} />
+                                onChange={e=>updEx(dId, ex.id,key,e.target.value)} />
                             );
                           })}
                           {/* Client note */}
                           <input className="set-inp" value={ex.clientNote||""} placeholder="Client note"
-                            onChange={e=>updEx(ex.id,"clientNote",e.target.value)} />
+                            onChange={e=>updEx(dId, ex.id,"clientNote",e.target.value)} />
                           {/* Coach note */}
                           <input className="set-inp" value={ex.coachNote||""} placeholder="Coach note"
-                            onChange={e=>updEx(ex.id,"coachNote",e.target.value)} />
+                            onChange={e=>updEx(dId, ex.id,"coachNote",e.target.value)} />
                           {/* Remove */}
                           <button onClick={()=>removeExercise(ex.id)}
                             style={{width:22,height:22,borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.3)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.52rem",cursor:"pointer",lineHeight:1,flexShrink:0}}>✕</button>
                         </div>
                       );
                     })}
-                  </div>
-                ))}
 
                 {!editProg.clientId && (curDay.exercises||[]).length>0 && clients.length>0 && (
                   <div style={{marginTop:20,padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.05)",border:"1px solid rgba(42,122,75,0.18)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -7458,9 +7546,20 @@ function AdminShell({ onLogout, session }) {
   useEffect(() => {
     loadClients();
     loadNotifCounts();
-    // Refresh notification counts every 60s
     const interval = setInterval(loadNotifCounts, 60000);
-    return () => clearInterval(interval);
+
+    // Realtime: refresh clients when any workout log is saved
+    const logSub = supabase
+      .channel("workout_logs:coach")
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "workout_logs",
+      }, () => loadClients())
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      logSub?.unsubscribe();
+    };
   }, [session?.id]);
 
   // Clear badge when navigating to that section
