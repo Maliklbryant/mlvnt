@@ -91,7 +91,49 @@ export async function getAllPrograms() {
   if (error) { console.error("getAllPrograms:", error.message); return []; }
   return data || [];
 }
+// ─────────────────────────────────────────────────────────────
+// PROGRAM LIBRARY
+// ─────────────────────────────────────────────────────────────
 
+/** Unassigned reusable templates */
+export async function getProgramLibrary() {
+  const { data, error } = await supabase
+    .from("programs")
+    .select("*")
+    .eq("is_template", true)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("getProgramLibrary:", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
+/** Programs currently assigned to clients */
+export async function getAssignedPrograms() {
+  const { data, error } = await supabase
+    .from("programs")
+    .select(`
+      *,
+      profiles!programs_client_id_fkey (
+        id,
+        name,
+        email
+      )
+    `)
+    .eq("is_template", false)
+    .not("client_id", "is", null)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("getAssignedPrograms:", error.message);
+    return [];
+  }
+
+  return data || [];
+}
 /**
  * Create a new program draft.
  * clientId = null creates an unassigned template (no client required).
