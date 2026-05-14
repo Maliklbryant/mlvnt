@@ -324,3 +324,77 @@ export async function getCoachAvailability(coachId) {
   if (error) { console.error("getCoachAvailability:", error.message); return null; }
   return data;
 }
+
+// ─────────────────────────────────────────────────────────────
+// MESSAGING
+// ─────────────────────────────────────────────────────────────
+
+/** Load conversation between two users, ordered oldest-first. */
+export async function getMessages(userId, otherId) {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .or(`and(sender_id.eq.${userId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${userId})`)
+    .order("created_at", { ascending: true });
+  if (error) { console.error("getMessages:", error.message); return []; }
+  return data || [];
+}
+
+/** Send a message from sender to receiver. */
+export async function sendMessage(senderId, receiverId, content) {
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({ sender_id: senderId, receiver_id: receiverId, content, read: false })
+    .select().single();
+  if (error) { console.error("sendMessage:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, message: data };
+}
+
+/** Count unread messages for a user (messages sent TO them that are unread). */
+export async function getUnreadMessageCount(userId) {
+  if (!userId) return 0;
+  const { count, error } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("receiver_id", userId)
+    .eq("read", false);
+  if (error) { console.error("getUnreadMessageCount:", error.message); return 0; }
+  return count || 0;
+}
+
+/** Mark all messages in a conversation as read. */
+export async function markMessagesRead(userId, senderId) {
+  const { error } = await supabase
+    .from("messages")
+    .update({ read: true })
+    .eq("receiver_id", userId)
+    .eq("sender_id", senderId)
+    .eq("read", false);
+  if (error) { console.error("markMessagesRead:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true };
+}
+
+/** Get the coach/owner's user ID (for clients to send messages to). */
+export async function getCoachId() {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .or("role.eq.owner,role.eq.admin,is_owner.eq.true")
+    .limit(1)
+    .maybeSingle();
+  if (error) { console.error("getCoachId:", error.message); return null; }
+  return data?.id || null;
+}
+
+/** Subscribe to new messages in real time. Returns the subscription object. */
+export function subscribeToMessages(userId, callback) {
+  return supabase
+    .channel(`messages:${userId}`)
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "messages",
+      filter: `receiver_id=eq.${userId}`,
+    }, payload => callback(payload.new))
+    .subscribe();
+}
