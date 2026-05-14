@@ -5620,7 +5620,8 @@ function AdminPrograms({ session }) {
               <p style={{fontSize:"0.76rem",color:"var(--txt-2)",padding:"20px 0"}}>Select a client above.</p>
             )}
           </>)}
-        </>)}
+        </>
+        )}
       </div>
       <AssignModal />
     </div>
