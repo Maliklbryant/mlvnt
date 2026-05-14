@@ -7367,6 +7367,19 @@ function AdminConsultations({ setView: setAdminView, session, onReviewed }) {
 }
 
 
+const ADMIN_NAV = [
+  {id:"dashboard",    ic:"⊞", lbl:"Dashboard"},
+  {id:"consultations",ic:"◎", lbl:"Consultations"},
+  {id:"clients",      ic:"◉", lbl:"Clients"},
+  {id:"programs",     ic:"▦", lbl:"Programs"},
+  {id:"schedule",     ic:"◷", lbl:"Schedule"},
+  {id:"feedback",     ic:"◈", lbl:"Feedback"},
+  {id:"packages",     ic:"⬡", lbl:"Packages"},
+  {id:"messages",     ic:"✉", lbl:"Messages"},
+  {id:"analytics",    ic:"△", lbl:"Analytics"},
+  {id:"settings",     ic:"⊙", lbl:"Settings"},
+];
+
 function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
