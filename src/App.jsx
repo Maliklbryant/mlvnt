@@ -25,6 +25,7 @@ import {
   archiveProgram,
   publishProgram,
   deleteProgram,
+  assignProgramTemplate,
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
@@ -4106,13 +4107,64 @@ const ADMIN_CSS = `
 @media(max-width:960px){
   .admin-shell{grid-template-columns:1fr;}
   .admin-sidebar{display:none;}
-  .a-kpi-row{grid-template-columns:repeat(2,1fr);}
+  .admin-mob-nav{display:flex;}
+  .a-kpi-row{grid-template-columns:repeat(2,1fr);gap:10px;}
   .a-grid-2{grid-template-columns:1fr;}
   .cp-layout{grid-template-columns:1fr;}
   .cp-sidebar{border-right:none;border-bottom:1px solid var(--b0);}
   .pe-layout{grid-template-columns:1fr;}
   .pe-days{border-right:none;border-bottom:1px solid var(--b0);display:flex;gap:5px;overflow-x:auto;padding:8px;}
   .pe-day-tab{flex-shrink:0;}
+  .admin-topbar{padding:0 16px;height:50px;}
+  .admin-body{padding:16px 16px 32px;}
+  .admin-topbar-title{font-size:0.82rem;}
+  .admin-quick-actions{display:grid;}
+}
+@media(max-width:768px){
+  /* KPI grid — 2 clean columns */
+  .a-kpi-row{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
+  .a-kpi{padding:14px 14px;border-radius:var(--r2);}
+  .a-kpi-n{font-size:1.4rem;line-height:1.1;}
+  .a-kpi-lbl{font-size:0.54rem;letter-spacing:0.14em;margin-bottom:4px;}
+  .a-kpi-sub{font-size:0.6rem;margin-top:2px;color:var(--txt-2);}
+  /* Panels */
+  .a-panel{padding:14px 14px;border-radius:var(--r2);}
+  .a-panel-title{font-size:0.68rem;letter-spacing:0.08em;}
+  .a-panel-hd{margin-bottom:10px;}
+  /* Rows */
+  .a-row{padding:9px 0;}
+  .a-row-main{font-size:0.78rem;line-height:1.35;}
+  .a-row-sub{font-size:0.65rem;color:var(--txt-2);}
+  /* Body */
+  .admin-body{padding:14px 14px 80px;}
+  /* Topbar */
+  .admin-topbar{padding:0 14px;height:48px;}
+  .admin-topbar .btn{font-size:0.62rem;padding:5px 11px;}
+  .admin-topbar-title{font-size:0.8rem;}
+  /* Tables */
+  .client-table th,.client-table td{font-size:0.7rem;padding:8px 6px;}
+  /* Messages */
+  .admin-msg-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;}
+  .msg-tl{border-right:none;border-bottom:1px solid var(--b0);max-height:180px;overflow-y:auto;}
+  /* Programs */
+  .prog-tabs{flex-wrap:wrap;gap:4px;margin-bottom:14px;}
+  .prog-tab{font-size:0.65rem;padding:6px 10px;}
+  /* Quick actions grid always visible on mobile */
+  .admin-quick-actions{display:grid !important;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
+  .admin-quick-btn{flex-direction:row;justify-content:flex-start;gap:10px;padding:12px 14px;}
+  .admin-quick-btn-ic{font-size:0.9rem;}
+  .admin-quick-btn-lbl{font-size:0.72rem;letter-spacing:0.04em;}
+  /* Grid stacking */
+  .a-grid-2{grid-template-columns:1fr;gap:10px;}
+  .a-grid-3{grid-template-columns:1fr;gap:10px;}
+  /* C-av avatars */
+  .c-av{width:32px;height:32px;font-size:0.54rem;}
+  /* Program builder */
+  .pe-days{padding:6px;}
+  .pe-day-tab{min-width:90px;}
+  .pe-day-name{font-size:0.72rem;}
+  .pe-day-type{font-size:0.6rem;}
+}
   .admin-msg-layout{grid-template-columns:1fr;}
   .msg-tl{display:none;}
 }
@@ -4302,45 +4354,137 @@ function AdminDashboard({ setView, setFocusClient, dbClients }) {
     ...renewalDue.map(c=>({name:c.name,msg:"Package renewal pending",type:"err",id:c.id,tag:"Renewal"})),
   ];
 
+  const QUICK = [
+    {ic:"▦", lbl:"Programs", v:"programs"},
+    {ic:"◉", lbl:"Clients",  v:"clients"},
+    {ic:"◷", lbl:"Schedule", v:"schedule"},
+    {ic:"✉", lbl:"Messages", v:"messages"},
+  ];
+
   return (
     <div className="page-fade">
-      <AdminTopbar title="Dashboard" actions={<button className="btn btn-p btn-sm" onClick={()=>setView("schedule")}>View Schedule</button>} />
+      <AdminTopbar
+        title="Dashboard"
+        actions={
+          <button
+            className="btn btn-p btn-sm"
+            style={{fontSize:"0.66rem",padding:"6px 12px",letterSpacing:"0.04em"}}
+            onClick={()=>setView("schedule")}
+          >Schedule</button>
+        }
+      />
       <div className="admin-body">
-        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginBottom:20}}>{today}</p>
 
-        <div className="a-kpi-row">
-          <div className="a-kpi accent"><p className="a-kpi-lbl">Active Clients</p><div className="a-kpi-n">{clients.length}</div><p className="a-kpi-sub">All packages</p></div>
-          <div className="a-kpi"><p className="a-kpi-lbl">Sessions Today</p><div className="a-kpi-n">—</div><p className="a-kpi-sub">Connect scheduling</p></div>
-          <div className="a-kpi warn"><p className="a-kpi-lbl">Low / Renewal</p><div className="a-kpi-n">{lowSess.length + renewalDue.length}</div><p className="a-kpi-sub">Need attention</p></div>
-          <div className="a-kpi ok"><p className="a-kpi-lbl">Active Programs</p><div className="a-kpi-n">—</div><p className="a-kpi-sub">Via Programs tab</p></div>
+        {/* Date */}
+        <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginBottom:14,letterSpacing:"0.04em"}}>{today}</p>
+
+        {/* Quick Actions — always rendered, CSS controls layout by breakpoint */}
+        <div className="admin-quick-actions" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
+          {QUICK.map(({ic,lbl,v})=>(
+            <button
+              key={v}
+              className="admin-quick-btn"
+              onClick={()=>setView(v)}
+              style={{
+                padding:"12px 8px",
+                borderRadius:"var(--r2)",
+                border:"1px solid var(--b0)",
+                background:"var(--bg-1)",
+                cursor:"pointer",
+                display:"flex",
+                flexDirection:"column",
+                alignItems:"center",
+                gap:6,
+                transition:"border-color 0.17s,background 0.17s",
+              }}
+            >
+              <span className="admin-quick-btn-ic" style={{fontSize:"1rem",opacity:0.65,lineHeight:1}}>{ic}</span>
+              <span className="admin-quick-btn-lbl" style={{fontSize:"0.58rem",color:"var(--txt-1)",fontFamily:"var(--fc)",letterSpacing:"0.08em",textTransform:"uppercase"}}>{lbl}</span>
+            </button>
+          ))}
         </div>
 
+        {/* KPI row */}
+        <div className="a-kpi-row">
+          <div className="a-kpi accent">
+            <p className="a-kpi-lbl">Active Clients</p>
+            <div className="a-kpi-n">{clients.length || "—"}</div>
+            <p className="a-kpi-sub">{clients.length ? "All packages" : "No clients yet"}</p>
+          </div>
+          <div className="a-kpi">
+            <p className="a-kpi-lbl">Sessions Today</p>
+            <div className="a-kpi-n">—</div>
+            <p className="a-kpi-sub">Connect scheduling</p>
+          </div>
+          <div className="a-kpi warn">
+            <p className="a-kpi-lbl">Low / Renewal</p>
+            <div className="a-kpi-n">{lowSess.length + renewalDue.length || "—"}</div>
+            <p className="a-kpi-sub">
+              {lowSess.length + renewalDue.length ? "Need attention" : "All good"}
+            </p>
+          </div>
+          <div className="a-kpi ok">
+            <p className="a-kpi-lbl">Programs</p>
+            <div className="a-kpi-n">—</div>
+            <p className="a-kpi-sub">Via Programs tab</p>
+          </div>
+        </div>
+
+        {/* Attention + secondary panels */}
         <div className="a-grid-2" style={{marginBottom:14}}>
           <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Needs Attention</span></div>
+            <div className="a-panel-hd">
+              <span className="a-panel-title">Needs Attention</span>
+              {attentionItems.length > 0 && (
+                <span style={{fontSize:"0.6rem",color:"rgba(220,120,80,0.8)",fontFamily:"var(--fc)"}}>
+                  {attentionItems.length}
+                </span>
+              )}
+            </div>
             {attentionItems.length ? attentionItems.map((a,i)=>(
               <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(a.id);setView("clients");}}>
-                <div><p className="a-row-main">{a.name}</p><p className="a-row-sub">{a.msg}</p></div>
+                <div>
+                  <p className="a-row-main">{a.name}</p>
+                  <p className="a-row-sub">{a.msg}</p>
+                </div>
                 <ATag type={a.type}>{a.tag}</ATag>
               </div>
-            )) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No urgent items.</p>}
+            )) : (
+              <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No urgent items.</p>
+            )}
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <div className="a-panel">
               <div className="a-panel-hd"><span className="a-panel-title">Birthday Rewards</span></div>
               {birthdays.length ? birthdays.map((c,i)=>(
-                <div className="a-row" key={i}><div><p className="a-row-main">{c.name}</p><p className="a-row-sub">Birthday {c.birthday} · Active</p></div><ATag type="ok">Active</ATag></div>
-              )) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active rewards.</p>}
+                <div className="a-row" key={i}>
+                  <div>
+                    <p className="a-row-main">{c.name}</p>
+                    <p className="a-row-sub">Birthday {c.birthday} · Active</p>
+                  </div>
+                  <ATag type="ok">Active</ATag>
+                </div>
+              )) : (
+                <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active rewards.</p>
+              )}
             </div>
             <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Recent Feedback</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("feedback")}>View all →</button></div>
+              <div className="a-panel-hd">
+                <span className="a-panel-title">Recent Feedback</span>
+                <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("feedback")}>View all →</button>
+              </div>
               <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet.</p>
             </div>
           </div>
         </div>
 
+        {/* Package overview */}
         <div className="a-panel">
-          <div className="a-panel-hd"><span className="a-panel-title">Package Overview</span><button className="btn btn-ghost" style={{fontSize:"0.64rem"}} onClick={()=>setView("packages")}>Manage →</button></div>
+          <div className="a-panel-hd">
+            <span className="a-panel-title">Package Overview</span>
+            <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("packages")}>Manage →</button>
+          </div>
           {clients.length ? clients.map((c,i)=>{
             const isZero = c.sessLeft === 0;
             const isLow  = c.sessLeft <= 2 && !isZero;
@@ -4348,16 +4492,25 @@ function AdminDashboard({ setView, setFocusClient, dbClients }) {
               <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(c.id);setView("clients");}}>
                 <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
                   <div className="c-av">{c.init}</div>
-                  <div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg}</p></div>
+                  <div>
+                    <p className="a-row-main">{c.name}</p>
+                    <p className="a-row-sub">{c.pkg}</p>
+                  </div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-                  <span style={{fontSize:"0.72rem",color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-1)",fontFamily:"var(--fc)",fontWeight:600}}>{c.sessLeft} sessions</span>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <span style={{
+                    fontSize:"0.7rem",
+                    color: isZero ? "rgba(220,120,120,0.9)" : isLow ? "rgba(220,175,100,0.9)" : "var(--txt-1)",
+                    fontFamily:"var(--fc)",fontWeight:600,
+                  }}>{c.sessLeft}</span>
                   {isZero && <ATag type="err">Blocked</ATag>}
                   {isLow  && !isZero && <ATag type="warn">Low</ATag>}
                 </div>
               </div>
             );
-          }) : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>}
+          }) : (
+            <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>
+          )}
         </div>
       </div>
     </div>
@@ -4706,7 +4859,8 @@ function AdminPrograms({ session }) {
   const confirmAssign = async () => {
     if (!assignCId) { setAssignErr("Select a client."); return; }
     setAssigning(true); setAssignErr("");
-    const r = await publishProgram(assignModal, assignCId);
+    // Use assignProgramTemplate to create a client copy, preserving the original template
+    const r = await assignProgramTemplate(assignModal, assignCId, session?.id);
     setAssigning(false);
     if (!r.ok) { setAssignErr(r.error || "Failed"); return; }
     setAssignModal(null);
@@ -5060,6 +5214,10 @@ function AdminPrograms({ session }) {
   }
 
   // ── LIST VIEW ──────────────────────────────────────────────────────────
+  const assignedProgs = allProgs.filter(p => p.clientId && p.status === "active");
+  const draftProgs    = allProgs.filter(p => p.status === "draft");
+  const archivedProgs = allProgs.filter(p => p.status === "completed");
+
   return (
     <div className="page-fade">
       <AdminTopbar title="Program Builder" actions={
@@ -5074,9 +5232,221 @@ function AdminPrograms({ session }) {
             <span style={{marginLeft:5,padding:"1px 6px",borderRadius:100,background:"var(--b0)",fontSize:"0.58rem",fontFamily:"var(--fc)"}}>{templates.length}</span>
           </button>
           <button className={"prog-tab"+(tab==="assigned"?" on":"")} onClick={()=>setTab("assigned")}>
-            Assigned to Clients
+            Assigned
+            {assignedProgs.length>0 && <span style={{marginLeft:5,padding:"1px 6px",borderRadius:100,background:"var(--b0)",fontSize:"0.58rem",fontFamily:"var(--fc)"}}>{assignedProgs.length}</span>}
+          </button>
+          <button className={"prog-tab"+(tab==="drafts"?" on":"")} onClick={()=>setTab("drafts")}>
+            Drafts
+            {draftProgs.length>0 && <span style={{marginLeft:5,padding:"1px 6px",borderRadius:100,background:"var(--b0)",fontSize:"0.58rem",fontFamily:"var(--fc)"}}>{draftProgs.length}</span>}
+          </button>
+          <button className={"prog-tab"+(tab==="archived"?" on":"")} onClick={()=>setTab("archived")}>
+            Archived
           </button>
         </div>
+
+        {/* ── PROGRAM LIBRARY ── */}
+        {tab==="library" && (<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div>
+              <p className="label">Reusable Templates</p>
+              <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>Templates stay in the library when assigned. Assigning creates a client-specific copy.</p>
+            </div>
+            <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={createTemplate}>
+              {saving?<><Spinner />Creating…</>:"+ New Template"}
+            </button>
+          </div>
+          {templates.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"56px 20px"}}>
+                <span className="empty-ic">▦</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No program templates yet</p>
+                <p className="empty-txt">Build programs before clients exist. Templates can be assigned later.</p>
+                <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} style={{marginTop:16}} onClick={createTemplate}>
+                  {saving?<><Spinner />Creating…</>:"+ Create First Template"}
+                </button>
+              </div>
+            </div>
+          ) : templates.map(p=>(
+            <div className="a-panel" key={p.id} style={{marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
+                    {p.block}{p.phase?" · "+p.phase:""} · {p.totalWeeks}w · {(p.days||[]).length} days
+                    {p.updatedAt&&<span> · Updated {new Date(p.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
+                  </p>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                  <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                  {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Assign →</button>}
+                  <button onClick={()=>deleteProg(p.id)}
+                    style={{padding:"6px 10px",borderRadius:"var(--r2)",border:"1px solid rgba(180,60,60,0.22)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}>Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </>)}
+
+        {/* ── ASSIGNED PROGRAMS ── */}
+        {tab==="assigned" && (<>
+          <p className="label mb-12">Active Client Programs</p>
+          {clients.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"48px 20px"}}>
+                <span className="empty-ic">◉</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
+                <p className="empty-txt">Add clients, then assign programs from the Library.</p>
+              </div>
+            </div>
+          ) : (<>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
+              {clients.map(c=>(
+                <button key={c.id} onClick={()=>setSelClient(c.id)}
+                  style={{padding:"8px 14px",borderRadius:"var(--r2)",border:"1px solid "+(selClientId===c.id?"var(--b1)":"var(--b0)"),background:selClientId===c.id?"var(--acc-0)":"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}}>
+                  <div className="c-av" style={{width:22,height:22,fontSize:"0.5rem"}}>{c.init}</div>
+                  <span style={{fontSize:"0.76rem",color:selClientId===c.id?"var(--txt-0)":"var(--txt-1)",fontWeight:500}}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+            {selClient && (<>
+              <div className="a-panel" style={{marginBottom:14,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                <div className="c-av" style={{width:36,height:36,fontSize:"0.62rem"}}>{selClient.init}</div>
+                <div style={{flex:1}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{selClient.name}</p>
+                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{selClient.goal+" · "+selClient.level}</p>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ New Program</button>
+                  {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template →</button>}
+                </div>
+              </div>
+              {clientProgs.filter(p=>p.status==="active").map(p=>(
+                <div key={p.id} style={{marginBottom:14}}>
+                  <p className="label mb-10">Active Program</p>
+                  <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.22)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{p.name}</p>
+                        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{p.block+(p.phase?" · "+p.phase:"")+" · Wk "+p.week+"/"+p.totalWeeks}</p>
+                        {p.startDate&&<p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:2}}>{p.startDate+" – "+p.endDate}</p>}
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                        <button className="btn btn-s btn-sm" onClick={()=>archiveProg(p.id)}>Archive</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      {(p.days||[]).map(d=>(
+                        <div key={d.id} style={{padding:"7px 11px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                          <p style={{fontFamily:"var(--fh)",fontSize:"0.68rem",fontWeight:700}}>{d.name}</p>
+                          {d.focus&&<p style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:1}}>{d.focus}</p>}
+                          <p style={{fontSize:"0.56rem",color:"var(--txt-2)",marginTop:1}}>{(d.exercises||[]).length+" ex"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").length>0 && (
+                <div>
+                  <p className="label mb-10">Program History</p>
+                  {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").map(p=>(
+                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
+                      <div>
+                        <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                        <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{p.block+(p.startDate?" · "+p.startDate+" – "+p.endDate:"")}</p>
+                      </div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span className={"prog-status-pill "+p.status}>{p.status}</span>
+                        <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>View</button>
+                        <button className="btn btn-s btn-xs" onClick={()=>dupProg(p.id)}>Duplicate</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {clientProgs.length===0 && (
+                <div className="a-panel" style={{marginTop:8}}>
+                  <div className="empty-state" style={{padding:"40px 20px"}}>
+                    <span className="empty-ic">▦</span>
+                    <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>{"No programs for "+selClient.name}</p>
+                    <p className="empty-txt">No program assigned yet. Assign a template from the Library or create a new one.</p>
+                    <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"center"}}>
+                      <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ Create Program</button>
+                      {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template</button>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>)}
+            {!selClientId && (
+              <p style={{fontSize:"0.76rem",color:"var(--txt-2)",padding:"20px 0"}}>Select a client above.</p>
+            )}
+          </>)}
+        </>)}
+
+        {/* ── DRAFTS ── */}
+        {tab==="drafts" && (<>
+          <p className="label mb-12">Drafts ({draftProgs.length})</p>
+          {draftProgs.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"48px 20px"}}>
+                <span className="empty-ic">◎</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No drafts</p>
+                <p className="empty-txt">Programs saved as drafts appear here.</p>
+              </div>
+            </div>
+          ) : draftProgs.map(p=>(
+            <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
+                  {p.block} · {p.totalWeeks}w
+                  {p.clientName&&<span> · → {p.clientName}</span>}
+                </p>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
+                {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Publish →</button>}
+              </div>
+            </div>
+          ))}
+        </>)}
+
+        {/* ── ARCHIVED ── */}
+        {tab==="archived" && (<>
+          <p className="label mb-12">Archived / Completed</p>
+          {archivedProgs.length===0 ? (
+            <div className="a-panel">
+              <div className="empty-state" style={{padding:"48px 20px"}}>
+                <span className="empty-ic">◷</span>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No archived programs</p>
+                <p className="empty-txt">Completed or archived programs appear here.</p>
+              </div>
+            </div>
+          ) : archivedProgs.map(p=>(
+            <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
+              <div>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
+                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
+                  {p.block}{p.clientName?" · → "+p.clientName:""}{p.startDate?" · "+p.startDate+" – "+p.endDate:""}
+                </p>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <span className="prog-status-pill completed">Archived</span>
+                <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>View</button>
+                <button className="btn btn-s btn-xs" onClick={()=>dupProg(p.id)}>Duplicate</button>
+              </div>
+            </div>
+          ))}
+        </>)}
+      </div>
+      <AssignModal />
+    </div>
+  );
+}
 
         {tab==="library" && (<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
