@@ -5022,6 +5022,8 @@ function AdminPrograms({ session }) {
                         </div>
                       );
                     })}
+                  </div>
+                ))}
 
                 {!editProg.clientId && (curDay.exercises||[]).length>0 && clients.length>0 && (
                   <div style={{marginTop:20,padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.05)",border:"1px solid rgba(42,122,75,0.18)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
