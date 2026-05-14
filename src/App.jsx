@@ -5624,7 +5624,6 @@ function AdminPrograms({ session }) {
         )}
 
       <AssignModal />
-    </div>
   );
 }
 
