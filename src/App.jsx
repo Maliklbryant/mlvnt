@@ -27,6 +27,14 @@ import {
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
+  getConsultationRequests,
+  updateConsultationStatus,
+  saveConsultationRequest,
+  getMessages,
+  sendMessage,
+  getUnreadMessageCount,
+  markMessagesRead,
+  getCoachId,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -660,7 +668,7 @@ const NAV = [
   { id:"book",    ic:"◷", lbl:"Book" },
   { id:"program", ic:"▦", lbl:"Program" },
   { id:"progress",ic:"◈", lbl:"Progress" },
-  { id:"messages",ic:"✉", lbl:"Messages", badge:2 },
+  { id:"messages",ic:"✉", lbl:"Messages" },
   { id:"profile", ic:"⊙", lbl:"Profile" },
 ];
 
@@ -3389,16 +3397,41 @@ function Feedback() {
 }
 
 /* ── MESSAGES ────────────────────────────────────────────────────────────── */
-function Messages() {
-  const [input, setInput] = useState("");
-  const [msgs, setMsgs]   = useState([]); // messages will load from Supabase
-  const bottomRef         = useRef(null);
+function Messages({ session, onRead }) {
+  const [msgs,    setMsgs]  = useState([]);
+  const [input,   setInput] = useState("");
+  const [loading, setLoad]  = useState(true);
+  const bottomRef           = useRef(null);
 
-  const send = () => {
-    if (!input.trim()) return;
-    setMsgs(p=>[...p,{from:"me",text:input.trim(),time:"Just now"}]);
+  // Coach user ID is fetched from profiles where is_owner=true
+  const [coachId, setCoachId] = useState(null);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    // Find the coach (admin/owner) to message
+    getCoachId().then(id => {
+      setCoachId(id);
+      if (id) {
+        getMessages(session.id, id).then(rows => {
+          setMsgs(rows);
+          setLoad(false);
+          if (onRead) onRead();
+          setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 100);
+        }).catch(() => setLoad(false));
+      } else {
+        setLoad(false);
+      }
+    }).catch(() => setLoad(false));
+  }, [session?.id]);
+
+  const send = async () => {
+    if (!input.trim() || !session?.id || !coachId) return;
+    const text = input.trim();
     setInput("");
-    setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    const optimistic = { id:`tmp-${Date.now()}`, sender_id:session.id, receiver_id:coachId, content:text, created_at:new Date().toISOString() };
+    setMsgs(p => [...p, optimistic]);
+    setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    await sendMessage(session.id, coachId, text).catch(()=>{});
   };
 
   return (
@@ -3431,12 +3464,23 @@ function Messages() {
             </div>
 
             <div className="msg-chat-body">
-              {msgs.map((m,i)=>(
-                <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="me"?"flex-end":"flex-start"}}>
-                  <div className={`bubble ${m.from==="me"?"me":"them"}`}>{m.text}</div>
-                  <span className="bubble-time">{m.time}</span>
+              {loading && <div style={{textAlign:"center",padding:40}}><Spinner /></div>}
+              {!loading && msgs.length === 0 && (
+                <div className="empty-state" style={{paddingTop:60}}>
+                  <span className="empty-ic">✉</span>
+                  <p className="empty-txt">No messages yet. Send Malik a message below.</p>
                 </div>
-              ))}
+              )}
+              {msgs.map((m,i) => {
+                const isMe = m.sender_id === session?.id;
+                const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : "Just now";
+                return (
+                  <div key={m.id||i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+                    <div className={`bubble ${isMe?"me":"them"}`}>{m.content||m.text}</div>
+                    <span className="bubble-time">{time}</span>
+                  </div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 
@@ -3455,10 +3499,6 @@ function Messages() {
   );
 }
 
-/* ── LOCATION SETTINGS ───────────────────────────────────────────────────── */
-// LocationSettings merged into ProfileSettings location tab
-
-/* ── PROFILE / SETTINGS ──────────────────────────────────────────────────── */
 function ProfileSettings({ onLogout, session, profileData }) {
   const [tab, setTab]     = useState("profile");
   const [saving, setSaving] = useState(false);
@@ -3741,27 +3781,28 @@ function ProfileSettings({ onLogout, session, profileData }) {
 function AppShell({ onLogout, session }) {
   const [view, setView] = useState("home");
 
-  // ── Supabase: load active program + all workout logs for this client ──────
+  // ── Supabase: program + workout logs ─────────────────────────────────────
   const [activeProgram, setActiveProgram] = useState(null);
   const [allPrograms,   setAllPrograms]   = useState([]);
-  const [workoutLogs,   setWorkoutLogs]   = useState({}); // key: "progId:dayId" → log row
+  const [workoutLogs,   setWorkoutLogs]   = useState({});
 
-  // ── Supabase: load client profile (sessions balance, plan, weekly max) ────
+  // ── Supabase: client profile ──────────────────────────────────────────────
   const [profileData, setProfileData] = useState(null);
+
+  // ── Real unread message count ─────────────────────────────────────────────
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
 
   const reloadProfileData = () => {
     if (!session?.id) return;
     getClientProfile(session.id).then(p => setProfileData(p));
   };
 
-  // Reload helper — called after a day is completed
   const reloadProgramData = () => {
     if (!session?.id) return;
     getActiveProgram(session.id).then(row => {
       if (!row) { setActiveProgram(null); return; }
       const prog = dbRowToProgram(row);
       setActiveProgram(prog);
-      // Pre-load workout logs for the active program
       Promise.all(
         (prog.days || []).map(d =>
           getWorkoutLog(prog.id, d.id, session.id)
@@ -3782,19 +3823,35 @@ function AppShell({ onLogout, session }) {
     getPrograms(session.id).then(rows => setAllPrograms(rows.map(dbRowToProgram)));
   };
 
-  useEffect(() => { reloadProgramData(); reloadProfileData(); }, [session?.id]);
+  const reloadUnread = () => {
+    if (!session?.id) return;
+    getUnreadMessageCount(session.id).then(n => setUnreadMsgs(n)).catch(() => {});
+  };
+
+  useEffect(() => {
+    reloadProgramData();
+    reloadProfileData();
+    reloadUnread();
+    const interval = setInterval(reloadUnread, 30000);
+    return () => clearInterval(interval);
+  }, [session?.id]);
+
+  const navigate = (id) => {
+    setView(id);
+    if (id === "messages") setUnreadMsgs(0);
+  };
 
   const views = {
-    home:           <Dashboard setView={setView} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
-    book:           <Booking setView={setView} profileData={profileData} />,
+    home:           <Dashboard setView={navigate} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
+    book:           <Booking setView={navigate} profileData={profileData} />,
     program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
     progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} />,
     feedback:       <Feedback />,
-    messages:       <Messages />,
+    messages:       <Messages session={session} onRead={reloadUnread} />,
     profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} />,
-    packages:       <PackagePricing onBack={()=>setView("home")} onConsult={()=>setView("consultation")} />,
-    consultation:   <ConsultationFlow    onBack={()=>setView("home")} onComplete={()=>setView("home")} />,
-    recommendation: <ConsultationRecommendation onBack={()=>setView("home")} onProceed={()=>setView("home")} />,
+    packages:       <PackagePricing onBack={()=>navigate("home")} onConsult={()=>navigate("consultation")} />,
+    consultation:   <ConsultationFlow    onBack={()=>navigate("home")} onComplete={()=>navigate("home")} />,
+    recommendation: <ConsultationRecommendation onBack={()=>navigate("home")} onProceed={()=>navigate("home")} />,
   };
 
   return (
@@ -3808,21 +3865,24 @@ function AppShell({ onLogout, session }) {
           </div>
         </div>
         <p className="sb-sec">Main</p>
-        {NAV.slice(0,5).map(item=>(
-          <div key={item.id}
-            className={`sb-item${view===item.id?" active":""}`}
-            onClick={()=>setView(item.id)}
-          >
-            <span className="ic">{item.ic}</span>
-            <span>{item.lbl}</span>
-            {item.badge&&<span className="sb-badge">{item.badge}</span>}
-          </div>
-        ))}
+        {NAV.slice(0,5).map(item => {
+          const badge = item.id === "messages" ? unreadMsgs : 0;
+          return (
+            <div key={item.id}
+              className={`sb-item${view===item.id?" active":""}`}
+              onClick={()=>navigate(item.id)}
+            >
+              <span className="ic">{item.ic}</span>
+              <span>{item.lbl}</span>
+              {badge > 0 && <span className="sb-badge">{badge}</span>}
+            </div>
+          );
+        })}
         <p className="sb-sec">Account</p>
-        <div className={`sb-item${view==="profile"?" active":""}`} onClick={()=>setView("profile")}>
+        <div className={`sb-item${view==="profile"?" active":""}`} onClick={()=>navigate("profile")}>
           <span className="ic">⊙</span><span>Profile & Settings</span>
         </div>
-        <div className="sb-item" onClick={()=>setView("feedback")}>
+        <div className="sb-item" onClick={()=>navigate("feedback")}>
           <span className="ic">◎</span><span>Program Reflection</span>
         </div>
         <div className="sb-user">
@@ -3846,15 +3906,22 @@ function AppShell({ onLogout, session }) {
       {/* Mobile bottom nav */}
       <nav className="mob-nav">
         <div className="mob-nav-inner">
-          {NAV.map(item=>(
-            <button key={item.id}
-              className={`mob-tab${view===item.id?" active":""}`}
-              onClick={()=>setView(item.id)}
-            >
-              <span className="ic">{item.ic}</span>
-              <span className="lbl">{item.lbl}</span>
-            </button>
-          ))}
+          {NAV.map(item => {
+            const badge = item.id === "messages" ? unreadMsgs : 0;
+            return (
+              <button key={item.id}
+                className={`mob-tab${view===item.id?" active":""}`}
+                onClick={()=>navigate(item.id)}
+                style={{position:"relative"}}
+              >
+                <span className="ic">{item.ic}</span>
+                <span className="lbl">{item.lbl}</span>
+                {badge > 0 && (
+                  <span style={{position:"absolute",top:4,right:"calc(50% - 14px)",width:16,height:16,borderRadius:"50%",background:"rgba(200,80,80,0.9)",color:"white",fontSize:"0.48rem",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--fc)",fontWeight:700}}>{badge}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </nav>
     </div>
@@ -5504,14 +5571,40 @@ function AdminPackages({ dbClients }) {
 }
 
 /* ── ADMIN MESSAGES ──────────────────────────────────────────────────────── */
-function AdminMessages({ dbClients = [] }) {
-  const [selThread, setSel] = useState(null);
-  const [input, setInput]   = useState("");
-  const [allMsgs, setAllMsgs] = useState({});
+function AdminMessages({ dbClients = [], session, onRead }) {
+  const [selThread, setSel]     = useState(null);
+  const [input,     setInput]   = useState("");
+  const [threads,   setThreads] = useState({}); // clientId → []
+  const [loading,   setLoading] = useState({});
   const bottomRef = useRef(null);
 
-  const thread = selThread ? dbClients.find(c => c.id === selThread) : null;
-  const msgs   = allMsgs[selThread] || [];
+  const thread  = selThread ? dbClients.find(c => c.id === selThread) : null;
+  const msgs    = threads[selThread] || [];
+
+  const loadThread = async (clientId) => {
+    if (threads[clientId]) return;
+    setLoading(p => ({...p, [clientId]:true}));
+    const rows = await getMessages(session?.id, clientId).catch(() => []);
+    setThreads(p => ({...p, [clientId]: rows}));
+    setLoading(p => ({...p, [clientId]:false}));
+  };
+
+  const selectThread = async (clientId) => {
+    setSel(clientId);
+    await loadThread(clientId);
+    if (onRead) onRead();
+    setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 100);
+  };
+
+  const send = async () => {
+    if (!input.trim() || !selThread || !session?.id) return;
+    const text = input.trim();
+    setInput("");
+    const optimistic = { id: `tmp-${Date.now()}`, sender_id: session.id, receiver_id: selThread, content: text, created_at: new Date().toISOString(), read: false };
+    setThreads(p => ({...p, [selThread]: [...(p[selThread]||[]), optimistic]}));
+    setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    await sendMessage(session.id, selThread, text).catch(()=>{});
+  };
 
   const QUICK = [
     {ic:"◷", text:"Running 5 min late — see you shortly."},
@@ -5520,13 +5613,6 @@ function AdminMessages({ dbClients = [] }) {
     {ic:"📋", text:"Quick check-in — how has recovery been this week?"},
     {ic:"⚡", text:"Sessions running low. Let me know when you're ready to renew."},
   ];
-
-  const send = () => {
-    if (!input.trim() || !selThread) return;
-    setAllMsgs(p => ({...p, [selThread]: [...(p[selThread]||[]), {from:"me", text:input.trim(), time:"Just now"}]}));
-    setInput("");
-    setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
-  };
 
   return (
     <div className="page-fade" style={{height:"calc(100vh)",display:"flex",flexDirection:"column"}}>
@@ -5537,12 +5623,14 @@ function AdminMessages({ dbClients = [] }) {
             <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"4px 8px 10px"}}>Clients</p>
             {dbClients.length === 0
               ? <p className="body-sm" style={{padding:"8px",color:"var(--txt-2)"}}>No clients yet.</p>
-              : dbClients.map(c=>(
-                <div key={c.id} className={`msg-tl-item${selThread===c.id?" on":""}`} onClick={()=>setSel(c.id)}>
+              : dbClients.map(c => (
+                <div key={c.id} className={`msg-tl-item${selThread===c.id?" on":""}`} onClick={()=>selectThread(c.id)}>
                   <div className="c-av" style={{flexShrink:0}}>{c.init}</div>
                   <div style={{flex:1,overflow:"hidden"}}>
                     <p style={{fontSize:"0.78rem",fontWeight:500,color:"var(--txt-0)"}}>{c.name}</p>
-                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{c.pkg}</p>
+                    <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {(threads[c.id]||[])[((threads[c.id]||[]).length-1)]?.content || c.pkg}
+                    </p>
                   </div>
                 </div>
               ))
@@ -5550,8 +5638,8 @@ function AdminMessages({ dbClients = [] }) {
             {selThread && (
               <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid var(--b0)"}}>
                 <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)",padding:"0 8px 10px"}}>Quick Messages</p>
-                {QUICK.map((q,i)=>(
-                  <button key={i} className="quick-msg-btn" onClick={()=>setAllMsgs(p=>({...p,[selThread]:[...(p[selThread]||[]),{from:"me",text:q.text,time:"Just now"}]}))}>
+                {QUICK.map((q,i) => (
+                  <button key={i} className="quick-msg-btn" onClick={()=>{ setInput(q.text); }}>
                     <span className="quick-msg-ic">{q.ic}</span>
                     <span style={{fontSize:"0.72rem",lineHeight:1.4}}>{q.text}</span>
                   </button>
@@ -5564,22 +5652,28 @@ function AdminMessages({ dbClients = [] }) {
             {thread ? (<>
               <div style={{padding:"14px 20px",borderBottom:"1px solid var(--b0)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
                 <div className="c-av">{thread.init}</div>
-                <div><p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{thread.name}</p><p style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>Client · {thread.pkg}</p></div>
+                <div><p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{thread.name}</p><p style={{fontSize:"0.62rem",color:"var(--txt-2)"}}>{thread.pkg}</p></div>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:12}}>
-                {msgs.length === 0 && (
+                {loading[selThread] && <div style={{textAlign:"center",padding:20}}><Spinner /></div>}
+                {!loading[selThread] && msgs.length === 0 && (
                   <p style={{fontSize:"0.76rem",color:"var(--txt-2)",textAlign:"center",marginTop:40}}>No messages yet. Send a message below.</p>
                 )}
-                {msgs.map((m,i)=>(
-                  <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.from==="me"?"flex-end":"flex-start"}}>
-                    <div style={{maxWidth:"70%",padding:"10px 14px",borderRadius:"var(--r3)",fontSize:"0.8rem",lineHeight:1.6,...(m.from==="me"?{background:"var(--acc-0)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--txt-0)",borderBottomRightRadius:"var(--r1)"}:{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",borderBottomLeftRadius:"var(--r1)"})}}>{m.text}</div>
-                    <span style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:3}}>{m.time}</span>
-                  </div>
-                ))}
+                {msgs.map((m,i) => {
+                  const isMe = m.sender_id === session?.id;
+                  const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : m.time || "";
+                  return (
+                    <div key={m.id||i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+                      <div style={{maxWidth:"70%",padding:"10px 14px",borderRadius:"var(--r3)",fontSize:"0.8rem",lineHeight:1.6,...(isMe?{background:"var(--acc-0)",border:"1px solid rgba(255,255,255,0.1)",color:"var(--txt-0)",borderBottomRightRadius:"var(--r1)"}:{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",borderBottomLeftRadius:"var(--r1)"})}}>{m.content||m.text}</div>
+                      <span style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:3}}>{time}</span>
+                    </div>
+                  );
+                })}
                 <div ref={bottomRef} />
               </div>
               <div style={{padding:"12px 16px",borderTop:"1px solid var(--b0)",flexShrink:0,display:"flex",gap:8}}>
-                <input className="fi" style={{flex:1}} placeholder={`Message ${thread.name}…`} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
+                <input className="fi" style={{flex:1}} placeholder={`Message ${thread.name}…`} value={input}
+                  onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
                 <button className="btn btn-p btn-sm" onClick={send}>Send</button>
               </div>
             </>) : (
@@ -7093,272 +7187,205 @@ function ConsultationRecommendation({ onBack, onProceed }) {
 }
 
 /* ── ADMIN: CONSULTATIONS PANEL ──────────────────────────────────────────── */
-function AdminConsultations({ setView: setAdminView }) {
-  const [leads, setLeads]     = useState([]); // loads from Supabase when consultations table is wired
-  const [selId, setSelId]     = useState(null);
-  const [filter, setFilter]   = useState("all");
+function AdminConsultations({ setView: setAdminView, session, onReviewed }) {
+  const [leads,   setLeads]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selId,   setSelId]   = useState(null);
+  const [filter,  setFilter]  = useState("all");
   const [noteVal, setNoteVal] = useState("");
-  const [recPkg, setRecPkg]   = useState("");
-  const [msgVal, setMsgVal]   = useState("");
-  const [saved, setSaved]     = useState(false);
+  const [recPkg,  setRecPkg]  = useState("");
+  const [saved,   setSaved]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
 
-  const lead = selId ? leads.find(l=>l.id===selId) : null;
+  useEffect(() => {
+    getConsultationRequests().then(rows => {
+      setLeads(rows.map(r => ({
+        id:          r.id,
+        init:        [r.first_name, r.last_name].filter(Boolean).map(w=>w[0]).join("").toUpperCase() || "?",
+        name:        [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email || "—",
+        email:       r.email || "—",
+        phone:       r.phone || "—",
+        age:         r.age   || "—",
+        goal:        (r.goals||[]).join(", ") || r.custom_goal || "—",
+        level:       r.experience_level || "—",
+        injuries:    r.injuries    || "—",
+        surgeries:   r.surgeries   || "—",
+        conditions:  r.conditions  || "—",
+        medications: r.medications || "—",
+        restrictions:r.restrictions|| "—",
+        parqAnswers: r.parq_answers || {},
+        parqAnyYes:  r.parq_any_yes || false,
+        agreedRisk:  r.agreed_risk  || false,
+        frequency:   r.train_frequency || "—",
+        location:    r.location    || "—",
+        date:        r.requested_date  ? `${r.requested_date}` : "—",
+        time:        r.requested_time  || "—",
+        bookedAt:    r.created_at ? new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—",
+        status:      r.status      || "pending",
+        coachNotes:  r.coach_notes || "",
+        recommended: r.recommended_pkg || null,
+        converted:   r.converted   || false,
+      })));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
-  const filtered = filter==="all" ? leads
-    : leads.filter(l=>l.status===filter);
+  const lead     = selId ? leads.find(l => l.id === selId) : null;
+  const filtered = filter === "all" ? leads : leads.filter(l => l.status === filter);
 
-  const markDone = id => setLeads(p=>p.map(l=>l.id===id?{...l,status:"completed"}:l));
-  const convert  = id => setLeads(p=>p.map(l=>l.id===id?{...l,status:"converted",converted:true}:l));
-  const saveNote = () => {
-    setLeads(p=>p.map(l=>l.id===selId?{...l,coachNotes:noteVal,recommended:recPkg||l.recommended}:l));
-    setSaved(true); setTimeout(()=>setSaved(false),2200);
+  const markDone = async id => {
+    await updateConsultationStatus(id, "completed", null).catch(()=>{});
+    setLeads(p => p.map(l => l.id===id ? {...l, status:"completed"} : l));
+    if (onReviewed) onReviewed();
+  };
+  const convertLead = async id => {
+    await updateConsultationStatus(id, "converted", null).catch(()=>{});
+    setLeads(p => p.map(l => l.id===id ? {...l, status:"converted", converted:true} : l));
+    if (onReviewed) onReviewed();
+  };
+  const saveNote = async () => {
+    setSaving(true);
+    await updateConsultationStatus(selId, lead.status, noteVal).catch(()=>{});
+    setLeads(p => p.map(l => l.id===selId ? {...l, coachNotes:noteVal, recommended:recPkg||l.recommended} : l));
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2200);
   };
 
-  const statusColor = s => s==="converted"?"ok":s==="completed"?"blue":s==="pending"?"warn":"pend";
-  const statusLabel = s => s==="converted"?"Converted":s==="completed"?"Completed":s==="pending"?"Upcoming":"—";
+  const sc = s => s==="converted"?"ok":s==="completed"?"blue":s==="pending"?"warn":"pend";
+  const sl = s => s==="converted"?"Converted":s==="completed"?"Completed":s==="pending"?"Pending":"—";
+  const openLead = id => { const l = leads.find(x=>x.id===id); setNoteVal(l?.coachNotes||""); setRecPkg(l?.recommended||""); setSelId(id); };
 
-  // When opening a lead, pre-fill note and pkg
-  const openLead = id => {
-    const l = leads.find(x=>x.id===id);
-    setNoteVal(l?.coachNotes||"");
-    setRecPkg(l?.recommended||"");
-    setSelId(id);
-  };
+  if (loading) return (
+    <div className="page-fade"><AdminTopbar title="Consultations" />
+      <div className="admin-body" style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:60}}><Spinner /></div>
+    </div>
+  );
 
   if (lead) return (
     <div className="page-fade">
-      <AdminTopbar
-        title={lead.name}
-        actions={<>
-          <button className="btn btn-ghost btn-sm" onClick={()=>setSelId(null)}>← All Leads</button>
-          {lead.status==="pending" && (
-            <button className="btn btn-s btn-sm" onClick={()=>markDone(lead.id)}>Mark Completed</button>
-          )}
-          {lead.status==="completed" && !lead.converted && (
-            <button className="btn btn-p btn-sm" onClick={()=>convert(lead.id)}>Convert to Client</button>
-          )}
-        </>}
-      />
+      <AdminTopbar title={lead.name} actions={<>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setSelId(null)}>← All Leads</button>
+        {lead.status==="pending"&&<button className="btn btn-s btn-sm" onClick={()=>markDone(lead.id)}>Mark Completed</button>}
+        {lead.status==="completed"&&!lead.converted&&<button className="btn btn-p btn-sm" onClick={()=>convertLead(lead.id)}>Convert to Client</button>}
+      </>} />
       <div className="admin-body">
         <div className="a-grid-2" style={{alignItems:"start"}}>
-          {/* Left — intake details */}
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <div className="a-panel">
-              <div className="a-panel-hd">
-                <span className="a-panel-title">Consultation Details</span>
-                <ATag type={statusColor(lead.status)}>{statusLabel(lead.status)}</ATag>
-              </div>
-              {[
-                ["Date & Time", `${lead.date} · ${lead.time}`],
-                ["Format",      lead.type],
-                ["Booked On",   lead.bookedAt],
-              ].map(([k,v])=>(
-                <div className="a-row" key={k}>
-                  <span style={{fontSize:"0.76rem",color:"var(--txt-2)"}}>{k}</span>
-                  <span style={{fontSize:"0.78rem",color:"var(--txt-0)",fontWeight:400}}>{v}</span>
+              <div className="a-panel-hd"><span className="a-panel-title">Details</span><ATag type={sc(lead.status)}>{sl(lead.status)}</ATag></div>
+              {[["Date & Time",`${lead.date}${lead.time!=="—"?` · ${lead.time}`:""}`],["Submitted",lead.bookedAt],["Email",lead.email],["Phone",lead.phone],["Age",lead.age!=="—"?`${lead.age} years`:"—"],["Goal(s)",lead.goal],["Experience",lead.level],["Frequency",lead.frequency],["Location",lead.location]].map(([l,v])=>(
+                <div key={l} className="a-row" style={{padding:"7px 0"}}>
+                  <span className="a-row-sub">{l}</span>
+                  <span style={{fontSize:"0.78rem",color:"var(--txt-0)",fontWeight:500,textAlign:"right",flex:1,paddingLeft:12}}>{v}</span>
                 </div>
               ))}
             </div>
-
             <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Intake Responses</span></div>
-              {[
-                ["Goal",       lead.goal],
-                ["Experience", lead.level],
-                ["Frequency",  lead.frequency],
-                ["Location",   lead.location],
-                ["Injuries",   lead.injuries],
-                ["Email",      lead.email],
-                ["Phone",      lead.phone],
-              ].map(([k,v])=>(
-                <div key={k} className="lead-detail">
-                  <p className="lead-detail-lbl">{k}</p>
-                  <p className="lead-detail-val">{v}</p>
+              <div className="a-panel-hd"><span className="a-panel-title">Health Screening</span>{lead.parqAnyYes&&<ATag type="warn">PAR-Q Yes</ATag>}</div>
+              {[["Injuries",lead.injuries],["Surgeries",lead.surgeries],["Conditions",lead.conditions],["Medications",lead.medications],["Restrictions",lead.restrictions]].map(([l,v])=>v&&v!=="—"&&(
+                <div key={l} style={{padding:"7px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <p style={{fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:3}}>{l}</p>
+                  <p style={{fontSize:"0.78rem",color:"var(--txt-0)"}}>{v}</p>
                 </div>
               ))}
+              {lead.parqAnyYes&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(220,175,80,0.07)",border:"1px solid rgba(220,175,80,0.2)"}}>
+                <p style={{fontSize:"0.7rem",color:"rgba(220,175,80,0.85)"}}>⚠ Client answered YES to one or more PAR-Q questions.</p>
+              </div>}
+              <div style={{marginTop:10,display:"flex",gap:6,flexWrap:"wrap"}}>
+                <ATag type={lead.agreedRisk?"ok":"err"}>{lead.agreedRisk?"✓ Risk disclaimer":"✗ Risk disclaimer"}</ATag>
+              </div>
             </div>
           </div>
-
-          {/* Right — coach actions */}
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <div className="a-panel">
-              <div className="a-panel-hd">
-                <span className="a-panel-title">Coach Notes</span>
-                {saved && <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
+              <div className="a-panel-hd"><span className="a-panel-title">Coach Notes</span>{saved&&<span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}</div>
+              <div className="field" style={{marginBottom:12}}>
+                <label className="field-label">Notes from consultation</label>
+                <textarea className="note-area" rows={5} value={noteVal} onChange={e=>setNoteVal(e.target.value)} placeholder="Summary, client readiness, observations…" />
               </div>
-              <textarea
-                className="note-area"
-                rows={4}
-                placeholder="Observations from the consultation, training style, personality, anything relevant…"
-                value={noteVal}
-                onChange={e=>setNoteVal(e.target.value)}
-              />
+              <div className="field" style={{marginBottom:14}}>
+                <label className="field-label">Recommended Package</label>
+                <select className="fi" value={recPkg} onChange={e=>setRecPkg(e.target.value)} style={{cursor:"pointer"}}>
+                  <option value="">— No recommendation yet —</option>
+                  <option>1-on-1 Coaching</option><option>Hybrid Coaching</option>
+                  <option>Online Programming</option><option>Single Session</option>
+                </select>
+              </div>
+              <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={saveNote}>
+                {saving?<><Spinner />Saving…</>:"Save Notes"}
+              </button>
             </div>
-
-            <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Package Recommendation</span></div>
-              <p className="body-sm mb-12" style={{fontSize:"0.71rem"}}>Select the package to recommend to this client after the consultation.</p>
-              {CONSULT_PACKAGES.map(pkg=>(
-                <div
-                  key={pkg.id}
-                  onClick={()=>setRecPkg(pkg.name)}
-                  style={{
-                    padding:"10px 14px",borderRadius:"var(--r2)",border:`1px solid ${recPkg===pkg.name?"var(--b1)":"var(--b0)"}`,
-                    background:recPkg===pkg.name?"var(--acc-0)":"rgba(0,0,0,0.15)",
-                    cursor:"pointer",marginBottom:6,transition:"all 0.17s",
-                  }}
-                >
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"0.78rem",fontWeight:700,color:"var(--txt-0)"}}>{pkg.name}</p>
-                    <span style={{fontSize:"0.7rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>{pkg.price}</span>
-                  </div>
-                  <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:2,lineHeight:1.45}}>{pkg.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Follow-Up Message</span></div>
-              <textarea
-                className="note-area"
-                rows={4}
-                placeholder={`Hi ${lead.name.split(" ")[0]}, great talking with you today. Based on your goals, I'd recommend…`}
-                value={msgVal}
-                onChange={e=>setMsgVal(e.target.value)}
-              />
-              <div style={{display:"flex",gap:8,marginTop:10}}>
-                <button className="btn btn-p btn-sm" onClick={saveNote}>Save Notes</button>
-                {msgVal.trim() && <button className="btn btn-s btn-sm">Send Message</button>}
-              </div>
-            </div>
-
-            {lead.status==="completed" && !lead.converted && (
-              <div style={{padding:"16px 18px",borderRadius:"var(--r3)",background:"rgba(42,122,75,0.08)",border:"1px solid rgba(42,122,75,0.2)"}}>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.76rem",fontWeight:700,color:"rgba(140,210,155,0.9)",marginBottom:6}}>Ready to Convert?</p>
-                <p style={{fontSize:"0.74rem",color:"var(--txt-1)",lineHeight:1.6,marginBottom:12}}>
-                  Mark this lead as a converted client. They'll receive the package recommendation and can proceed with onboarding.
-                </p>
-                <button className="btn btn-p btn-sm" onClick={()=>convert(lead.id)}>Convert to Client →</button>
-              </div>
-            )}
-            {lead.converted && (
-              <div style={{padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.12)",border:"1px solid rgba(42,122,75,0.25)",fontSize:"0.76rem",color:"rgba(140,210,155,0.85)"}}>
-                ✓ Converted to client — {lead.recommended}
-              </div>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
 
-  // Lead list view
   return (
     <div className="page-fade">
-      <AdminTopbar
-        title="Consultations"
-        actions={<>
-          <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>
-            {leads.filter(l=>l.status==="pending").length} upcoming
-          </span>
-          <button className="btn btn-p btn-sm" onClick={()=>setAdminView("schedule")}>View Schedule</button>
-        </>}
-      />
+      <AdminTopbar title="Consultations" />
       <div className="admin-body">
-        {/* Status KPIs */}
-        <div className="a-kpi-row" style={{gridTemplateColumns:"repeat(4,1fr)",marginBottom:20}}>
-          {[
-            ["Total Leads",   leads.length,                                    ""],
-            ["Upcoming",      leads.filter(l=>l.status==="pending").length,    "warn"],
-            ["Completed",     leads.filter(l=>l.status==="completed").length,  "accent"],
-            ["Converted",     leads.filter(l=>l.status==="converted").length,  "ok"],
-          ].map(([lbl,n,type])=>(
-            <div key={lbl} className={`a-kpi${type?" "+type:""}`}>
-              <p className="a-kpi-lbl">{lbl}</p>
-              <div className="a-kpi-n">{n}</div>
-            </div>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+          {["all","pending","completed","converted"].map(f=>(
+            <button key={f} className={"btn btn-sm"+(filter===f?" btn-p":" btn-ghost")} onClick={()=>setFilter(f)}>
+              {f==="all"?"All":f==="pending"?"Pending":f==="completed"?"Completed":"Converted"}
+              {f!=="all"&&<span style={{marginLeft:5,fontSize:"0.7rem",opacity:0.7}}>{leads.filter(l=>l.status===f).length}</span>}
+            </button>
           ))}
         </div>
-
-        {/* Filter tabs */}
-        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-          {[["all","All"],["pending","Upcoming"],["completed","Completed"],["converted","Converted"]].map(([id,lbl])=>(
-            <button
-              key={id}
-              onClick={()=>setFilter(id)}
-              style={{
-                padding:"7px 14px",borderRadius:"var(--r2)",border:`1px solid ${filter===id?"var(--b1)":"var(--b0)"}`,
-                background:filter===id?"var(--acc-0)":"none",color:filter===id?"var(--txt-0)":"var(--txt-1)",
-                fontFamily:"var(--fh)",fontSize:"0.66rem",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",cursor:"pointer",transition:"all 0.17s",
-              }}
-            >{lbl}</button>
-          ))}
-        </div>
-
-        {/* Lead list */}
-        <div className="a-panel">
-          <div className="a-panel-hd">
-            <span className="a-panel-title">
-              {filter==="all"?"All Leads":filter.charAt(0).toUpperCase()+filter.slice(1)} — {filtered.length}
-            </span>
-          </div>
-          {filtered.length === 0 && (
-            <div className="empty-state" style={{padding:"36px 20px"}}>
+        {filtered.length===0 ? (
+          <div className="a-panel">
+            <div className="empty-state" style={{padding:"56px 20px"}}>
               <span className="empty-ic">◎</span>
-              <p className="empty-txt">No {filter} consultations.</p>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>
+                {filter==="all"?"No consultation requests yet":`No ${filter} consultations`}
+              </p>
+              <p className="empty-txt">{filter==="all"?"Consultation requests submitted through the website will appear here.":`No ${filter} consultations to show.`}</p>
             </div>
-          )}
-          {filtered.map(l=>(
-            <div className="lead-card" key={l.id} onClick={()=>openLead(l.id)}>
-              <div className="lead-card-head">
-                <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                  <div className="c-av">{l.init}</div>
-                  <div>
-                    <p className="lead-name">{l.name}</p>
-                    <p className="lead-meta">{l.date} · {l.time} · {l.type}</p>
-                  </div>
+          </div>
+        ) : filtered.map(lead=>(
+          <div className="a-panel" key={lead.id} style={{marginBottom:8,cursor:"pointer"}} onClick={()=>openLead(lead.id)}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                <div className="c-av">{lead.init}</div>
+                <div>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{lead.name}</p>
+                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{lead.goal} · {lead.level}</p>
+                  <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:1}}>{lead.date}{lead.time!=="—"?` · ${lead.time}`:""}</p>
                 </div>
-                <ATag type={statusColor(l.status)}>{statusLabel(l.status)}</ATag>
               </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
-                {[l.goal, l.level, l.frequency].filter(Boolean).map(v=>(
-                  <span key={v} style={{padding:"3px 9px",borderRadius:100,background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",fontSize:"0.63rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.06em"}}>{v}</span>
-                ))}
-                {l.recommended && (
-                  <span style={{padding:"3px 9px",borderRadius:100,background:"rgba(42,122,75,0.12)",border:"1px solid rgba(42,122,75,0.2)",fontSize:"0.63rem",color:"rgba(140,210,155,0.85)",fontFamily:"var(--fc)",letterSpacing:"0.06em"}}>→ {l.recommended}</span>
-                )}
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                {lead.parqAnyYes&&<ATag type="warn">PAR-Q</ATag>}
+                <ATag type={sc(lead.status)}>{sl(lead.status)}</ATag>
+                <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>→</span>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ── ADMIN NAV + SHELL ───────────────────────────────────────────────────── */
-const ADMIN_NAV = [
-  {id:"dashboard",    ic:"⊞",lbl:"Dashboard"},
-  {id:"consultations",ic:"◎",lbl:"Consultations", badge:1},
-  {id:"clients",      ic:"◉",lbl:"Clients",  badge:2},
-  {id:"programs",     ic:"▦",lbl:"Programs"},
-  {id:"schedule",     ic:"◷",lbl:"Schedule"},
-  {id:"feedback",     ic:"◈",lbl:"Feedback", badge:2},
-  {id:"packages",     ic:"⬡",lbl:"Packages", badge:1},
-  {id:"messages",     ic:"✉",lbl:"Messages", badge:3},
-  {id:"analytics",    ic:"△",lbl:"Analytics"},
-  {id:"settings",     ic:"⊙",lbl:"Settings"},
-];
 
 function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
 
-  // ── Load real client list from Supabase ───────────────────────────────────
+  // ── Real client list ──────────────────────────────────────────────────────
   const [dbClients, setDbClients] = useState([]);
-  useEffect(() => {
+
+  // ── Real notification counts (all start at 0, updated from Supabase) ─────
+  const [notifCounts, setNotifCounts] = useState({
+    consultations: 0,
+    messages:      0,
+    clients:       0,
+    feedback:      0,
+    packages:      0,
+  });
+
+  const loadClients = () => {
     listClients().then(rows => {
-      setDbClients(rows.map(r => {
+      const mapped = rows.map(r => {
         const cp = r.client_profiles;
         return {
           id:            r.id,
@@ -7382,22 +7409,56 @@ function AdminShell({ onLogout, session }) {
           lastFeedback:  "—",
           age:           cp?.age               || "—",
         };
-      }));
+      });
+      setDbClients(mapped);
+      // Packages badge: clients with 0 or ≤2 sessions need attention
+      const pkgAlert = mapped.filter(c => c.sessLeft <= 2).length;
+      setNotifCounts(p => ({ ...p, packages: pkgAlert }));
     });
-  }, []);
+  };
+
+  const loadNotifCounts = () => {
+    // Load consultation request count (pending/unreviewed)
+    getConsultationRequests().then(rows => {
+      const pending = rows.filter(r => r.status === "pending").length;
+      setNotifCounts(p => ({ ...p, consultations: pending }));
+    }).catch(() => {});
+
+    // Load unread message count
+    getUnreadMessageCount(session?.id).then(count => {
+      setNotifCounts(p => ({ ...p, messages: count }));
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadClients();
+    loadNotifCounts();
+    // Refresh notification counts every 60s
+    const interval = setInterval(loadNotifCounts, 60000);
+    return () => clearInterval(interval);
+  }, [session?.id]);
+
+  // Clear badge when navigating to that section
+  const navigate = (id) => {
+    setView(id);
+    if (notifCounts[id] > 0) {
+      setNotifCounts(p => ({ ...p, [id]: 0 }));
+    }
+  };
 
   const views = {
-    dashboard:    <AdminDashboard setView={setView} setFocusClient={setFocusClient} dbClients={dbClients} />,
-    consultations:<AdminConsultations setView={setView} />,
-    clients:      <AdminClients   setView={setView} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
-    programs:     <AdminPrograms session={session} />,
-    schedule:     <AdminSchedule />,
+    dashboard:    <AdminDashboard setView={navigate} setFocusClient={setFocusClient} dbClients={dbClients} />,
+    consultations:<AdminConsultations setView={navigate} session={session} onReviewed={loadNotifCounts} />,
+    clients:      <AdminClients   setView={navigate} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
+    programs:     <AdminPrograms  session={session} />,
+    schedule:     <AdminSchedule  session={session} />,
     feedback:     <AdminFeedback />,
-    packages:     <AdminPackages dbClients={dbClients} />,
-    messages:     <AdminMessages dbClients={dbClients} />,
+    packages:     <AdminPackages  dbClients={dbClients} />,
+    messages:     <AdminMessages  dbClients={dbClients} session={session} onRead={loadNotifCounts} />,
     analytics:    <AdminAnalytics dbClients={dbClients} />,
     settings:     <AdminSettings />,
   };
+
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
@@ -7406,13 +7467,16 @@ function AdminShell({ onLogout, session }) {
           <div className="admin-role-badge">⊛ Coach Admin</div>
         </div>
         <p className="admin-sec">Control</p>
-        {ADMIN_NAV.map(item=>(
-          <div key={item.id} className={`a-item${view===item.id?" on":""}`} onClick={()=>setView(item.id)}>
-            <span className="ic">{item.ic}</span>
-            <span>{item.lbl}</span>
-            {item.badge&&<span className="a-badge">{item.badge}</span>}
-          </div>
-        ))}
+        {ADMIN_NAV.map(item => {
+          const count = notifCounts[item.id] || 0;
+          return (
+            <div key={item.id} className={`a-item${view===item.id?" on":""}`} onClick={()=>navigate(item.id)}>
+              <span className="ic">{item.ic}</span>
+              <span>{item.lbl}</span>
+              {count > 0 && <span className="a-badge">{count}</span>}
+            </div>
+          );
+        })}
         <div className="admin-user">
           <div className="admin-av">{session?.init||"MB"}</div>
           <div style={{overflow:"hidden"}}>
