@@ -4867,36 +4867,49 @@ function AdminPrograms({ session }) {
                     </p>
 
                     {/* Column headers */}
-                    <div style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 44px 80px 44px 32px "+wkGrid+" 100px 100px 100px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-                      {["§","↕","Exercise","Sets","Reps","Rest","RIR",...weekCols,"Client Note","Coach Note","Video"].map(h=>(
-                        <div key={h} style={{fontSize:"0.48rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",overflow:"hidden",whiteSpace:"nowrap"}}>{h}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"50px 34px minmax(160px,2fr) 44px 80px 44px 34px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                      {["§","↕","Exercise Name","Sets","Reps","Rest","RIR",...weekCols,"Client Note","Coach Note",""].map((h,hi)=>(
+                        <div key={hi} style={{fontSize:"0.48rem",letterSpacing:"0.1em",textTransform:"uppercase",color:"var(--txt-2)",overflow:"hidden",whiteSpace:"nowrap"}}>{h}</div>
                       ))}
                     </div>
 
                     {exs.map(ex=>{
                       const absIdx = (curDay.exercises||[]).indexOf(ex);
                       return (
-                        <div key={ex.id} style={{display:"grid",gridTemplateColumns:"52px 32px 1fr 44px 80px 44px 32px "+wkGrid+" 100px 100px 100px",gap:4,marginBottom:4,alignItems:"center"}}>
+                        <div key={ex.id} style={{display:"grid",gridTemplateColumns:"50px 34px minmax(160px,2fr) 44px 80px 44px 34px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:4,alignItems:"center"}}>
+                          {/* Section label */}
                           <select value={ex.section||"A1"} onChange={e=>updEx(ex.id,"section",e.target.value)}
                             style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--acc-1)",padding:"4px 3px",borderRadius:"var(--r1)",fontSize:"0.64rem",fontFamily:"var(--fc)",cursor:"pointer",outline:"none"}}>
                             {SECTION_LABELS.map(s=><option key={s} value={s}>{s}</option>)}
                           </select>
+                          {/* Move up/down */}
                           <div style={{display:"flex",flexDirection:"column",gap:2}}>
                             <button onClick={()=>moveEx(ex.id,-1)} disabled={absIdx===0}
                               style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===0?0.2:1,lineHeight:1}}>↑</button>
                             <button onClick={()=>moveEx(ex.id,1)} disabled={absIdx===(curDay.exercises.length-1)}
                               style={{background:"none",border:"1px solid var(--b0)",borderRadius:"var(--r1)",color:"var(--txt-2)",fontSize:"0.5rem",cursor:"pointer",padding:"2px 4px",opacity:absIdx===(curDay.exercises.length-1)?0.2:1,lineHeight:1}}>↓</button>
                           </div>
-                          <input className="set-inp" value={ex.name} placeholder="Exercise name"
-                            style={{fontWeight:500}} onChange={e=>updEx(ex.id,"name",e.target.value)} />
+                          {/* Exercise Name — primary editable field */}
+                          <input
+                            className="set-inp"
+                            value={ex.name||""}
+                            placeholder="e.g. Trap Bar Deadlift"
+                            style={{fontWeight:500,fontSize:"0.78rem",minWidth:0,width:"100%"}}
+                            onChange={e=>updEx(ex.id,"name",e.target.value)}
+                          />
+                          {/* Sets */}
                           <input className="set-inp" type="number" min="1" value={ex.sets}
                             onChange={e=>updEx(ex.id,"sets",+e.target.value||1)} />
+                          {/* Reps */}
                           <input className="set-inp" value={ex.reps} placeholder="8-10"
                             onChange={e=>updEx(ex.id,"reps",e.target.value)} />
+                          {/* Rest */}
                           <input className="set-inp" value={ex.rest} placeholder="90s"
                             onChange={e=>updEx(ex.id,"rest",e.target.value)} />
-                          <input className="set-inp" value={ex.rir} placeholder="2"
+                          {/* RIR */}
+                          <input className="set-inp" value={ex.rir||""} placeholder="2"
                             onChange={e=>updEx(ex.id,"rir",e.target.value)} />
+                          {/* Weekly load cells */}
                           {Array.from({length:totalWeeks},(_,wi)=>{
                             const key = "w"+(wi+1);
                             return (
@@ -4907,16 +4920,15 @@ function AdminPrograms({ session }) {
                                 onChange={e=>updEx(ex.id,key,e.target.value)} />
                             );
                           })}
+                          {/* Client note */}
                           <input className="set-inp" value={ex.clientNote||""} placeholder="Client note"
                             onChange={e=>updEx(ex.id,"clientNote",e.target.value)} />
+                          {/* Coach note */}
                           <input className="set-inp" value={ex.coachNote||""} placeholder="Coach note"
                             onChange={e=>updEx(ex.id,"coachNote",e.target.value)} />
-                          <div style={{display:"flex",gap:3,alignItems:"center"}}>
-                            <input className="set-inp" value={ex.videoUrl||""} placeholder="https://…"
-                              style={{flex:1,minWidth:0}} onChange={e=>updEx(ex.id,"videoUrl",e.target.value)} />
-                            <button onClick={()=>removeExercise(ex.id)}
-                              style={{flexShrink:0,width:18,height:18,borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.3)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.5rem",cursor:"pointer",lineHeight:1}}>✕</button>
-                          </div>
+                          {/* Remove */}
+                          <button onClick={()=>removeExercise(ex.id)}
+                            style={{width:22,height:22,borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.3)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.52rem",cursor:"pointer",lineHeight:1,flexShrink:0}}>✕</button>
                         </div>
                       );
                     })}
