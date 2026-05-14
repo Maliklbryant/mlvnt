@@ -247,3 +247,80 @@ export async function hasCompletedOnboarding(userId) {
   if (error || !data) return false;
   return data.onboarding_done === true;
 }
+
+// ─────────────────────────────────────────────────────────────
+// CONSULTATION REQUESTS
+// ─────────────────────────────────────────────────────────────
+
+export async function saveConsultationRequest(data) {
+  const payload = {
+    first_name:       data.firstName        || null,
+    last_name:        data.lastName         || null,
+    email:            data.email            || null,
+    phone:            data.phone            || null,
+    age:              data.age ? parseInt(data.age) : null,
+    goals:            data.goals            || [],
+    custom_goal:      data.customGoal       || null,
+    experience_level: data.level            || null,
+    had_coach:        data.hadCoach         || null,
+    train_frequency:  data.trainFreq        || null,
+    gym_access:       data.gymAccess        || null,
+    location:         data.location         || null,
+    injuries:         data.injuries         || null,
+    surgeries:        data.surgeries        || null,
+    conditions:       data.conditions       || null,
+    medications:      data.medications      || null,
+    restrictions:     data.restrictions     || null,
+    parq_answers:     data.parqAnswers      || {},
+    parq_any_yes:     data.anyParqYes       || false,
+    agreed_risk:      data.agreedRisk       || false,
+    agreed_medical:   data.agreedMed        || false,
+    agreed_comms:     data.agreedComms      || false,
+    requested_date:   data.selDate          || null,
+    requested_time:   data.selTime          || null,
+    status:           "pending",
+    created_at:       new Date().toISOString(),
+  };
+  const { data: row, error } = await supabase
+    .from("consultation_requests").insert(payload).select().single();
+  if (error) { console.error("saveConsultationRequest:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, request: row };
+}
+
+export async function getConsultationRequests() {
+  const { data, error } = await supabase
+    .from("consultation_requests").select("*").order("created_at", { ascending: false });
+  if (error) { console.error("getConsultationRequests:", error.message); return []; }
+  return data || [];
+}
+
+export async function updateConsultationStatus(id, status, coachNotes) {
+  const { error } = await supabase.from("consultation_requests")
+    .update({ status, coach_notes: coachNotes || null, updated_at: new Date().toISOString() }).eq("id", id);
+  if (error) { console.error("updateConsultationStatus:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────
+// COACH AVAILABILITY
+// ─────────────────────────────────────────────────────────────
+
+export async function saveCoachAvailability(coachId, weeklySchedule, blockedWindows) {
+  const payload = {
+    coach_id:        coachId,
+    weekly_schedule: weeklySchedule,
+    blocked_windows: blockedWindows || [],
+    updated_at:      new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("coach_availability").upsert(payload, { onConflict: "coach_id" });
+  if (error) { console.error("saveCoachAvailability:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true };
+}
+
+export async function getCoachAvailability(coachId) {
+  const { data, error } = await supabase
+    .from("coach_availability").select("*").eq("coach_id", coachId).maybeSingle();
+  if (error) { console.error("getCoachAvailability:", error.message); return null; }
+  return data;
+}
