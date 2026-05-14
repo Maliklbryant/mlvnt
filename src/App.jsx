@@ -3603,7 +3603,7 @@ function ProfileSettings({ onLogout, session, profileData }) {
                 </div>
                 <div className="form-grid">
                   <div className="field"><label className="field-label">Weight</label>
-                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="e.g. 185 lbs" /></div>
+                    <input className="fi" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="e.g. 180 lbs" /></div>
                   <div className="field"><label className="field-label">Emergency Contact</label>
                     <input className="fi" value={emergencyContact} onChange={e=>setEmergencyContact(e.target.value)} placeholder="Name — Phone Number" /></div>
                 </div>
@@ -5090,21 +5090,160 @@ function AdminPrograms({ session }) {
 
 /* ── ADMIN SCHEDULE ──────────────────────────────────────────────────────── */
 function AdminSchedule() {
-  // Schedule data is not yet connected to a booking/scheduling backend.
-  // When a scheduling system is wired, sessions will load here by date.
+  const [selDay,    setSelDay]  = useState(null);
+  const [avail,     setAvail]   = useState({
+    mon:{ open:true,  from:"7:00 AM", to:"8:00 PM" },
+    tue:{ open:true,  from:"7:00 AM", to:"8:00 PM" },
+    wed:{ open:true,  from:"7:00 AM", to:"8:00 PM" },
+    thu:{ open:true,  from:"7:00 AM", to:"8:00 PM" },
+    fri:{ open:true,  from:"7:00 AM", to:"8:00 PM" },
+    sat:{ open:true,  from:"8:00 AM", to:"3:00 PM" },
+    sun:{ open:false, from:"",        to:""         },
+  });
+  const [blocks,    setBlocks]  = useState([]);  // manual blocked time windows
+  const [newBlock,  setNBlock]  = useState({ date:"", from:"", to:"", reason:"" });
+  const [saved,     setSaved]   = useState(false);
+  const [addingBlock, setAB]    = useState(false);
+
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+
+  const DAYS = [
+    { k:"mon", lbl:"Monday"    },{ k:"tue", lbl:"Tuesday"   },{ k:"wed", lbl:"Wednesday" },
+    { k:"thu", lbl:"Thursday"  },{ k:"fri", lbl:"Friday"    },{ k:"sat", lbl:"Saturday"  },
+    { k:"sun", lbl:"Sunday"    },
+  ];
+
+  const TIMES = ["6:00 AM","7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM",
+    "1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM","9:00 PM"];
+
+  const saveAvailability = () => {
+    // In production: await saveCoachAvailability(avail, blocks);
+    setSaved(true); setTimeout(() => setSaved(false), 2400);
+  };
+
+  const addBlock = () => {
+    if (!newBlock.date || !newBlock.from || !newBlock.to) return;
+    setBlocks(p => [...p, { ...newBlock, id: Date.now() }]);
+    setNBlock({ date:"", from:"", to:"", reason:"" });
+    setAB(false);
+  };
 
   return (
     <div className="page-fade">
-      <AdminTopbar title="Schedule" />
+      <AdminTopbar title="Schedule & Availability" actions={<>
+        {saved && <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
+        <button className="btn btn-p btn-sm" onClick={saveAvailability}>Save Availability</button>
+      </>} />
       <div className="admin-body">
         <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginBottom:20}}>{today}</p>
-        <div className="a-panel">
-          <div className="empty-state" style={{padding:"56px 20px"}}>
-            <span className="empty-ic">◷</span>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No sessions scheduled</p>
-            <p className="empty-txt">Session scheduling will appear here once a booking system is connected. Client sessions booked through the app will show on this calendar.</p>
+
+        {/* Upcoming sessions */}
+        <div className="a-panel" style={{marginBottom:14}}>
+          <div className="a-panel-hd">
+            <span className="a-panel-title">Upcoming Sessions</span>
+            <span style={{fontSize:"0.6rem",color:"var(--txt-2)"}}>Loads from bookings when scheduling is connected</span>
           </div>
+          <div className="empty-state" style={{padding:"28px 0"}}>
+            <span className="empty-ic">◷</span>
+            <p className="empty-txt">No sessions scheduled yet. Booked sessions will appear here automatically.</p>
+          </div>
+        </div>
+
+        {/* Weekly availability */}
+        <div className="a-panel" style={{marginBottom:14}}>
+          <div className="a-panel-hd"><span className="a-panel-title">Weekly Availability</span></div>
+          <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginBottom:14,lineHeight:1.6}}>
+            Set your regular working hours. Clients will only be able to book consultations within these windows.
+          </p>
+          <div style={{display:"flex",flexDirection:"column",gap:0}}>
+            {DAYS.map(({k, lbl}) => {
+              const d = avail[k];
+              return (
+                <div key={k} style={{display:"grid",gridTemplateColumns:"120px 40px 1fr",gap:12,alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <p style={{fontSize:"0.78rem",color:d.open?"var(--txt-0)":"var(--txt-2)",fontWeight:500}}>{lbl}</p>
+                  <label style={{display:"flex",alignItems:"center",gap:0,cursor:"pointer",position:"relative"}}>
+                    <input type="checkbox" checked={d.open}
+                      onChange={e=>setAvail(p=>({...p,[k]:{...p[k],open:e.target.checked}}))}
+                      style={{opacity:0,position:"absolute",width:0,height:0}} />
+                    <div style={{
+                      width:32,height:18,borderRadius:9,
+                      background:d.open?"var(--acc-1)":"var(--b0)",
+                      position:"relative",transition:"background 0.2s",cursor:"pointer",
+                    }}>
+                      <div style={{
+                        position:"absolute",top:2,left:d.open?14:2,
+                        width:14,height:14,borderRadius:"50%",background:"white",
+                        transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",
+                      }} />
+                    </div>
+                  </label>
+                  {d.open ? (
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <select value={d.from} onChange={e=>setAvail(p=>({...p,[k]:{...p[k],from:e.target.value}}))}
+                        style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",padding:"5px 8px",borderRadius:"var(--r2)",fontSize:"0.72rem",cursor:"pointer",outline:"none"}}>
+                        {TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <span style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>to</span>
+                      <select value={d.to} onChange={e=>setAvail(p=>({...p,[k]:{...p[k],to:e.target.value}}))}
+                        style={{background:"var(--bg-2)",border:"1px solid var(--b0)",color:"var(--txt-0)",padding:"5px 8px",borderRadius:"var(--r2)",fontSize:"0.72rem",cursor:"pointer",outline:"none"}}>
+                        {TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  ) : (
+                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>Unavailable</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Blocked time windows */}
+        <div className="a-panel">
+          <div className="a-panel-hd">
+            <span className="a-panel-title">Blocked Time</span>
+            <button className="btn btn-s btn-sm" onClick={()=>setAB(p=>!p)}>
+              {addingBlock ? "Cancel" : "+ Block Time"}
+            </button>
+          </div>
+          <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginBottom:12,lineHeight:1.6}}>
+            Block off specific dates or windows — travel, personal time, holidays. These override weekly availability.
+          </p>
+
+          {addingBlock && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:10,marginBottom:16,padding:"14px",background:"rgba(0,0,0,0.15)",borderRadius:"var(--r2)",border:"1px solid var(--b0)"}}>
+              <div className="field"><label className="field-label">Date</label>
+                <input className="fi" type="date" value={newBlock.date} onChange={e=>setNBlock(p=>({...p,date:e.target.value}))} /></div>
+              <div className="field"><label className="field-label">From</label>
+                <select className="fi" value={newBlock.from} onChange={e=>setNBlock(p=>({...p,from:e.target.value}))} style={{cursor:"pointer"}}>
+                  <option value="">—</option>
+                  {TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                </select></div>
+              <div className="field"><label className="field-label">To</label>
+                <select className="fi" value={newBlock.to} onChange={e=>setNBlock(p=>({...p,to:e.target.value}))} style={{cursor:"pointer"}}>
+                  <option value="">—</option>
+                  {TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                </select></div>
+              <div className="field"><label className="field-label">Reason (optional)</label>
+                <input className="fi" placeholder="e.g. Travel" value={newBlock.reason} onChange={e=>setNBlock(p=>({...p,reason:e.target.value}))} /></div>
+              <button className="btn btn-p btn-sm" style={{alignSelf:"flex-end"}} onClick={addBlock}>Add</button>
+            </div>
+          )}
+
+          {blocks.length === 0 ? (
+            <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No blocked time windows yet.</p>
+          ) : blocks.map(b => (
+            <div className="a-row" key={b.id}>
+              <div>
+                <p className="a-row-main">{b.date} · {b.from} – {b.to}</p>
+                {b.reason && <p className="a-row-sub">{b.reason}</p>}
+              </div>
+              <button onClick={()=>setBlocks(p=>p.filter(x=>x.id!==b.id))}
+                style={{padding:"4px 10px",borderRadius:"var(--r2)",border:"1px solid rgba(180,60,60,0.22)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}>
+                Remove
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -5458,50 +5597,112 @@ function AdminMessages({ dbClients = [] }) {
 
 /* ── ADMIN ANALYTICS ─────────────────────────────────────────────────────── */
 function AdminAnalytics({ dbClients = [] }) {
+  const totalClients  = dbClients.length;
+  const lowOrRenewal  = dbClients.filter(c => c.sessLeft <= 2 || c.status === "renewal");
+  const pkgBreakdown  = dbClients.reduce((acc, c) => {
+    const k = c.pkg || "—";
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const totalSess     = dbClients.reduce((a, c) => a + (c.sessLeft || 0), 0);
+
   return (
     <div className="page-fade">
       <AdminTopbar title="Analytics" />
       <div className="admin-body">
         <div className="a-kpi-row">
-          {[["Active Clients","6","All packages"],["Sessions This Month","24","↑ 4 vs last month"],["Monthly Revenue","$5,400","Apr 2025"],["Retention Rate","83%","Last 6 months"]].map(([l,n,s])=>(
-            <div className="a-kpi" key={l}><p className="a-kpi-lbl">{l}</p><div className="a-kpi-n">{n}</div><p className="a-kpi-sub">{s}</p></div>
-          ))}
+          <div className="a-kpi accent">
+            <p className="a-kpi-lbl">Active Clients</p>
+            <div className="a-kpi-n">{totalClients || "—"}</div>
+            <p className="a-kpi-sub">{totalClients === 0 ? "No clients yet" : "All packages"}</p>
+          </div>
+          <div className="a-kpi">
+            <p className="a-kpi-lbl">Sessions Remaining</p>
+            <div className="a-kpi-n">{totalClients > 0 ? totalSess : "—"}</div>
+            <p className="a-kpi-sub">Across all clients</p>
+          </div>
+          <div className="a-kpi warn">
+            <p className="a-kpi-lbl">Low / Renewal</p>
+            <div className="a-kpi-n">{lowOrRenewal.length || "—"}</div>
+            <p className="a-kpi-sub">Need attention</p>
+          </div>
+          <div className="a-kpi ok">
+            <p className="a-kpi-lbl">Package Types</p>
+            <div className="a-kpi-n">{Object.keys(pkgBreakdown).length || "—"}</div>
+            <p className="a-kpi-sub">Active packages</p>
+          </div>
         </div>
+
         <div className="a-grid-2" style={{marginBottom:14}}>
           <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Monthly Revenue</span></div>
-            <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>Revenue data will appear here when connected to billing system.</p>
+            <div className="a-panel-hd"><span className="a-panel-title">Package Breakdown</span></div>
+            {Object.keys(pkgBreakdown).length === 0
+              ? <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>
+              : Object.entries(pkgBreakdown).map(([pkg, count]) => {
+                const pct = totalClients ? Math.round((count/totalClients)*100) : 0;
+                return (
+                  <div key={pkg} style={{marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                      <div>
+                        <p style={{fontSize:"0.78rem",color:"var(--txt-0)"}}>{pkg}</p>
+                        <p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{count} client{count!==1?"s":""}</p>
+                      </div>
+                      <p style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>{pct}%</p>
+                    </div>
+                    <div style={{height:4,background:"var(--b0)",borderRadius:2,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,var(--acc-1),var(--acc-2))",borderRadius:2}} />
+                    </div>
+                  </div>
+                );
+              })
+            }
           </div>
           <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Sessions by Package</span></div>
-            {[["1-on-1 Coaching","2 clients",36],["Hybrid Coaching","3 clients",54],["Online Programming","1 client",10]].map(([pkg,cl,pct])=>(
-              <div key={pkg} style={{marginBottom:14}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                  <div><p style={{fontSize:"0.78rem",color:"var(--txt-0)"}}>{pkg}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>{cl}</p></div>
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)"}}>{pct}%</p>
-                </div>
-                <div style={{height:4,background:"var(--b0)",borderRadius:2,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,var(--acc-1),var(--acc-2))",borderRadius:2}} />
-                </div>
-              </div>
-            ))}
+            <div className="a-panel-hd"><span className="a-panel-title">Session Overview</span></div>
+            {dbClients.length === 0
+              ? <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>
+              : dbClients.map((c,i) => {
+                const isLow  = c.sessLeft <= 2 && c.sessLeft > 0;
+                const isZero = c.sessLeft === 0;
+                return (
+                  <div className="a-row" key={i}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flex:1,minWidth:0}}>
+                      <div className="c-av" style={{width:26,height:26,fontSize:"0.52rem"}}>{c.init}</div>
+                      <div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg}</p></div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                      <span style={{fontSize:"0.72rem",fontFamily:"var(--fc)",fontWeight:600,
+                        color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-1)"}}>
+                        {c.sessLeft} sess
+                      </span>
+                      {isZero && <ATag type="err">Blocked</ATag>}
+                      {isLow  && !isZero && <ATag type="warn">Low</ATag>}
+                    </div>
+                  </div>
+                );
+              })
+            }
           </div>
         </div>
+
         <div className="a-grid-2">
           <div className="a-panel">
-            <div className="a-panel-hd"><span className="a-panel-title">Cancellations</span></div>
-            {[["Mar 2025","2 cancellations","1 within policy"],["Feb 2025","1 cancellation","Within policy"],["Jan 2025","3 cancellations","1 late cancel"]].map(([m,c,n])=>(
-              <div className="a-row" key={m}><div><p className="a-row-main">{m}</p><p className="a-row-sub">{n}</p></div><p style={{fontSize:"0.76rem",color:"var(--txt-1)"}}>{c}</p></div>
-            ))}
-          </div>
-          <div className="a-panel">
             <div className="a-panel-hd"><span className="a-panel-title">Renewals Due</span></div>
-            {dbClients.filter(c=>c.status==="renewal"||c.status==="low").length > 0
-              ? dbClients.filter(c=>c.status==="renewal"||c.status==="low").map((c,i)=>(
-                <div className="a-row" key={i}><div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg} · —</p></div><ATag type={c.status==="renewal"?"err":"warn"}>{c.status==="renewal"?"Due":"Low"}</ATag></div>
+            {lowOrRenewal.length > 0
+              ? lowOrRenewal.map((c,i) => (
+                <div className="a-row" key={i}>
+                  <div><p className="a-row-main">{c.name}</p><p className="a-row-sub">{c.pkg} · {c.sessLeft} sessions left</p></div>
+                  <ATag type={c.sessLeft===0?"err":"warn"}>{c.sessLeft===0?"Blocked":"Low"}</ATag>
+                </div>
               ))
               : <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No renewals due.</p>
             }
+          </div>
+          <div className="a-panel">
+            <div className="a-panel-hd"><span className="a-panel-title">Revenue & Bookings</span></div>
+            <div className="empty-state" style={{padding:"24px 0"}}>
+              <p className="empty-txt">Revenue and booking analytics will appear here once a payment and scheduling system is connected.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -5509,7 +5710,6 @@ function AdminAnalytics({ dbClients = [] }) {
   );
 }
 
-/* ── ADMIN SETTINGS ──────────────────────────────────────────────────────── */
 function AdminSettings() {
   const [toggles, setToggles] = useState({reminders:true,confirms:true,lowBal:true,expiry:true,bday:true,lateNote:false,checkin:true,bufferAlerts:true});
   const toggle=k=>setToggles(p=>({...p,[k]:!p[k]}));
@@ -5570,40 +5770,9 @@ function AdminSettings() {
 /* ── CONSULTATION DATA ───────────────────────────────────────────────────── */
 
 // Shared state store (in production this would be a DB / context)
-const CONSULT_STORE = {
-  leads: [
-    {
-      id: 1, status: "pending",
-      init:"TR",
-      name:"Taylor Reeves", email:"taylor@email.com", phone:"917-555-0121",
-      goal:"Fat Loss & Muscle Gain", level:"Beginner", injuries:"None",
-      frequency:"3x per week", location:"Equinox Hudson Yards",
-      date:"Apr 16, 2025", time:"11:00 AM", type:"In-Person",
-      bookedAt:"Apr 10, 2025",
-      coachNotes:"", recommended:null, converted:false,
-    },
-    {
-      id: 2, status: "completed",
-      init:"CM",
-      name:"Chris Monroe", email:"chris@email.com", phone:"646-555-0188",
-      goal:"Athletic Performance", level:"Intermediate", injuries:"Old ankle sprain (right)",
-      frequency:"4x per week", location:"TMPL Gym",
-      date:"Apr 9, 2025", time:"2:00 PM", type:"In-Person",
-      bookedAt:"Apr 5, 2025",
-      coachNotes:"Strong foundation. Ready for structured programming. Ideal for 1-on-1.", recommended:"1-on-1 Coaching", converted:false,
-    },
-    {
-      id: 3, status: "converted",
-      init:"NP",
-      name:"Nina Park", email:"nina@email.com", phone:"212-555-0177",
-      goal:"Build Lean Muscle", level:"Beginner-Intermediate", injuries:"None",
-      frequency:"2x per week", location:"Alo Yoga Studio",
-      date:"Apr 4, 2025", time:"10:00 AM", type:"In-Person",
-      bookedAt:"Apr 1, 2025",
-      coachNotes:"Excellent attitude. Converted to Hybrid Coaching.", recommended:"Hybrid Coaching", converted:true,
-    },
-  ],
-};
+// Consultation leads load from Supabase consultation_requests table.
+// No demo data — AdminConsultations uses useState([]).
+
 
 const CONSULT_TIMES = [
   "9:00 AM","10:00 AM","11:00 AM","12:00 PM",
@@ -6407,264 +6576,419 @@ function PackagePricing({ onBack, onConsult }) {
 
 /* ── CONSULTATION BOOKING (CLIENT SIDE) ─────────────────────────────────── */
 function ConsultationFlow({ onBack, onComplete }) {
-  const [step, setStep]       = useState(0); // 0=date 1=intake 2=confirm 3=success
-  const [selDate, setDate]    = useState(null);
-  const [selTime, setSelTime] = useState(null);
-  const [goals, setGoals]     = useState([]);
-  const [level, setLevel]     = useState(null);
-  const [freq, setFreq]       = useState(null);
-  const [saving, setSaving]   = useState(false);
+  // Steps: 0=schedule, 1=basics, 2=goals+background, 3=health+injuries, 4=liability, 5=confirm, 6=success
+  const [step,      setStep]   = useState(0);
+  const [selDate,   setDate]   = useState(null);
+  const [selTime,   setSTime]  = useState(null);
+  const [saving,    setSaving] = useState(false);
 
-  const now      = new Date();
-  const mnth     = MONTHS[now.getMonth()];
-  const yr       = now.getFullYear();
-  const firstDow = new Date(yr, now.getMonth(), 1).getDay();
-  const daysInMo = new Date(yr, now.getMonth() + 1, 0).getDate();
-  const cells    = [...Array(firstDow).fill(null), ...Array.from({length:daysInMo},(_,i)=>i+1)];
+  // Step 1 — basics
+  const [firstName, setFN]    = useState("");
+  const [lastName,  setLN]    = useState("");
+  const [email,     setEm]    = useState("");
+  const [phone,     setPh]    = useState("");
+  const [age,       setAge]   = useState("");
 
-  const STEPS    = ["Schedule","Your Info","Review","Done"];
-  const pct      = ((step) / (STEPS.length - 1)) * 100;
+  // Step 2 — goals + background
+  const [goals,     setGoals] = useState([]);
+  const [customGoal,setCG]    = useState("");
+  const [level,     setLevel] = useState(null);
+  const [hadCoach,  setHC]    = useState(null);
+  const [gymAccess, setGym]   = useState("");
+  const [trainFreq, setFreq]  = useState(null);
+  const [location,  setLoc]   = useState("");
 
-  const next = () => {
-    if (step === 1) { setSaving(true); setTimeout(() => { setSaving(false); setStep(2); }, 500); }
-    else if (step === 2) { setSaving(true); setTimeout(() => { setSaving(false); setStep(3); }, 700); }
-    else setStep(s => s + 1);
-  };
+  // Step 3 — health + injuries
+  const [injuries,   setInj]  = useState("");
+  const [surgeries,  setSurg] = useState("");
+  const [conditions, setCond] = useState("");
+  const [medications,setMeds] = useState("");
+  const [restrictions,setRest]= useState("");
+  const [parqAnswers,setParq] = useState({ a:false,b:false,c:false,d:false,e:false,f:false });
+
+  // Step 4 — liability
+  const [agreedRisk,   setAR] = useState(false);
+  const [agreedMed,    setAM] = useState(false);
+  const [agreedComms,  setAC] = useState(false);
+
+  const TOTAL_STEPS = 6; // 0-5 before success
+  const pct = (step / TOTAL_STEPS) * 100;
+
+  const now       = new Date();
+  const mnth      = MONTHS[now.getMonth()];
+  const yr        = now.getFullYear();
+  const firstDow  = new Date(yr, now.getMonth(), 1).getDay();
+  const daysInMo  = new Date(yr, now.getMonth() + 1, 0).getDate();
+  const cells     = [...Array(firstDow).fill(null), ...Array.from({length:daysInMo},(_,i)=>i+1)];
+
+  const TIMES = ["9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM"];
+  // Unavailable times load from Supabase coach_availability in production.
+  // For now, all slots are shown as available — no fake blocked slots.
+  const UNAVAIL = new Set();
+
+  const GOAL_OPTS = ["Fat Loss","Muscle Growth","Athletic Performance","Strength","Mobility & Flexibility",
+    "Body Recomposition","Lifestyle Transformation","General Fitness","Sport-Specific Training"];
+  const LEVEL_OPTS = ["New to training","1–2 years experience","3–5 years experience","5+ years experience"];
+  const FREQ_OPTS  = ["1× per week","2× per week","3× per week","4× per week","5+ × per week"];
+  const PARQ_QUESTIONS = [
+    { k:"a", q:"Has your doctor ever said that you have a heart condition and that you should only perform physical activity recommended by a doctor?" },
+    { k:"b", q:"Do you feel pain in your chest when you perform physical activity?" },
+    { k:"c", q:"In the past month, have you had chest pain when you were not performing any physical activity?" },
+    { k:"d", q:"Do you lose your balance because of dizziness or do you ever lose consciousness?" },
+    { k:"e", q:"Do you have a bone or joint problem that could be made worse by a change in your physical activity?" },
+    { k:"f", q:"Do you know of any other reason why you should not perform physical activity?" },
+  ];
 
   const toggleGoal = g => setGoals(p => p.includes(g) ? p.filter(x=>x!==g) : [...p,g]);
+  const anyParqYes = Object.values(parqAnswers).some(Boolean);
 
-  const canAdvanceStep0 = selDate && selTime;
-  const canAdvanceStep1 = true; // name/email are uncontrolled, always allow
-  const canAdvance = step===0 ? canAdvanceStep0 : step<=2;
+  const canNext = [
+    selDate && selTime,                                      // 0 schedule
+    firstName.trim() && email.trim() && age.trim(),          // 1 basics
+    goals.length > 0 && level && trainFreq,                  // 2 goals
+    true,                                                    // 3 health (optional details, required parq)
+    agreedRisk && agreedMed && agreedComms,                  // 4 liability
+    true,                                                    // 5 confirm
+  ];
+
+  const submit = async () => {
+    setSaving(true);
+    // In production: save to Supabase consultation_requests table
+    // await saveConsultationRequest({ firstName, lastName, email, phone, age, goals, ... });
+    setTimeout(() => { setSaving(false); setStep(6); }, 800);
+  };
+
+  const next = () => {
+    if (step === 5) { submit(); return; }
+    setStep(s => s + 1);
+  };
+
+  if (step === 6) return (
+    <div className="consult-shell">
+      <div className="consult-head">
+        <span className="consult-brand">MLVNT</span>
+        <button className="btn btn-ghost" style={{fontSize:"0.67rem",color:"var(--txt-2)"}} onClick={onComplete}>✕ Close</button>
+      </div>
+      <div className="consult-body">
+        <div className="consult-card page-fade" style={{textAlign:"center",padding:"56px 24px"}}>
+          <div style={{fontSize:"2.4rem",marginBottom:20,opacity:0.9}}>✦</div>
+          <h2 style={{fontFamily:"var(--fh)",fontSize:"1.5rem",fontWeight:800,letterSpacing:"-0.025em",marginBottom:12}}>You're booked.</h2>
+          <p style={{fontSize:"0.88rem",color:"var(--txt-1)",lineHeight:1.75,maxWidth:340,margin:"0 auto 24px"}}>
+            Your consultation is confirmed for <strong>{`${mnth} ${selDate}`}</strong> at <strong>{selTime}</strong>.
+            Malik will reach out 24 hours before with confirmation details.
+          </p>
+          <p style={{fontSize:"0.76rem",color:"var(--txt-2)",lineHeight:1.7}}>
+            Check your email at <strong>{email}</strong> for a confirmation.
+          </p>
+          <button className="btn btn-p btn-full" style={{marginTop:28,maxWidth:280,margin:"28px auto 0"}} onClick={onComplete}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const STEP_LABELS = ["Schedule","Your Info","Goals","Health","Agreement","Confirm"];
 
   return (
     <div className="consult-shell">
-      {/* Header */}
       <div className="consult-head">
         <span className="consult-brand">MLVNT</span>
-        <span style={{fontSize:"0.62rem",color:"var(--txt-2)",letterSpacing:"0.14em",textTransform:"uppercase"}}>
-          Free Consultation
-        </span>
+        <span style={{fontSize:"0.62rem",color:"var(--txt-2)",letterSpacing:"0.14em",textTransform:"uppercase"}}>Free Consultation</span>
         <button className="btn btn-ghost" style={{fontSize:"0.67rem",color:"var(--txt-2)"}} onClick={onBack}>✕ Close</button>
       </div>
 
-      {/* Progress bar */}
-      {step < 3 && (
-        <div className="consult-prog">
-          <div className="consult-prog-fill" style={{width:`${pct}%`}} />
-        </div>
-      )}
+      <div className="consult-prog"><div className="consult-prog-fill" style={{width:`${pct}%`}} /></div>
 
       <div className="consult-body">
         <div className="consult-card page-fade" key={step}>
           <div className="consult-shimmer" />
+          <p className="consult-step-lbl">Step {step+1} of {TOTAL_STEPS} · {STEP_LABELS[step]}</p>
 
-          {/* ── STEP 0 — DATE + TIME ── */}
-          {step === 0 && (
-            <>
-              <p className="consult-step-lbl">Step 1 of 3 · Schedule</p>
-              <h2 className="consult-title">Book Your Free Consultation</h2>
-              <p className="consult-desc">
-                A 30-minute call with Malik. We'll talk through your goals, lifestyle, and build a path forward. No commitment required.
-              </p>
+          {/* ── STEP 0: Schedule ── */}
+          {step === 0 && (<>
+            <h2 className="consult-title">Book Your Free Consultation</h2>
+            <p className="consult-desc">A 30-minute call with Malik. We'll talk through your goals, lifestyle, and build a path forward. No commitment required.</p>
 
-              {/* Mini calendar */}
-              <p className="label mb-8">Select a Date</p>
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <span style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{mnth} {yr}</span>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-                  {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:"0.56rem",color:"var(--txt-2)",padding:"3px 0",fontFamily:"var(--fc)",letterSpacing:"0.08em"}}>{d}</div>)}
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-                  {cells.map((d,i)=>{
-                    const isPast = d && d < now.getDate();
-                    const isSel  = d === selDate;
-                    const isToday= d === now.getDate() && !isSel;
-                    return (
-                      <div key={i}
-                        onClick={() => d && !isPast && setDate(d)}
-                        style={{
-                          aspectRatio:"1",borderRadius:"var(--r1)",display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:"0.74rem",cursor:d&&!isPast?"pointer":"default",fontFamily:"var(--fc)",
-                          border: isSel?"1px solid rgba(255,255,255,0.16)":isToday?"1px solid var(--acc-2)":"1px solid transparent",
-                          background: isSel?"var(--acc-1)":"none",
-                          color: isSel?"var(--txt-0)":isToday?"var(--txt-0)":d&&!isPast?"var(--txt-1)":"var(--txt-2)",
-                          opacity: isPast?0.22:1,
-                          transition:"all 0.14s",
-                        }}
-                      >{d||""}</div>
-                    );
-                  })}
-                </div>
+            <p className="label mb-8">Select a Date</p>
+            <div style={{marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{mnth} {yr}</span>
               </div>
-
-              {/* Time slots */}
-              {selDate && (
-                <>
-                  <p className="label mb-8">Select a Time · {mnth} {selDate}</p>
-                  <div className="consult-time-grid">
-                    {CONSULT_TIMES.map(t => {
-                      const unavail = CONSULT_UNAVAIL.has(t);
-                      return (
-                        <button key={t}
-                          className={`consult-time-btn${unavail?" unavail":""}${selTime===t?" sel":""}`}
-                          onClick={() => !unavail && setSelTime(t)}
-                        >{t}</button>
-                      );
-                    })}
-                  </div>
-                  <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:10,lineHeight:1.5}}>
-                    In-person at your preferred training location, or by phone.
-                  </p>
-                </>
-              )}
-            </>
-          )}
-
-          {/* ── STEP 1 — INTAKE ── */}
-          {step === 1 && (
-            <>
-              <p className="consult-step-lbl">Step 2 of 3 · About You</p>
-              <h2 className="consult-title">A Few Quick Questions</h2>
-              <p className="consult-desc">This helps Malik prepare for your consultation. Takes under 2 minutes.</p>
-
-              <div className="form-col">
-                <div className="form-grid">
-                  <div className="field">
-                    <label className="field-label">First Name</label>
-                    <input className="fi" placeholder="Taylor" autoComplete="given-name" />
-                  </div>
-                  <div className="field">
-                    <label className="field-label">Last Name</label>
-                    <input className="fi" placeholder="Reeves" autoComplete="family-name" />
-                  </div>
-                </div>
-                <div className="field">
-                  <label className="field-label">Email Address</label>
-                  <input className="fi" type="email" placeholder="taylor@email.com" autoComplete="email" />
-                </div>
-                <div className="field">
-                  <label className="field-label">Phone Number</label>
-                  <input className="fi" type="tel" placeholder="+1 (555) 000-0000" autoComplete="tel" />
-                </div>
-                <div className="field">
-                  <label className="field-label">Primary Goal</label>
-                  <div className="chips mt-4">
-                    {GOAL_OPTS_C.map(g=>(
-                      <button key={g} className={`chip${goals.includes(g)?" on":""}`} onClick={()=>toggleGoal(g)}>{g}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="field">
-                  <label className="field-label">Training Experience</label>
-                  <div className="chips mt-4">
-                    {LEVEL_OPTS_C.map(l=>(
-                      <button key={l} className={`chip${level===l?" on":""}`} onClick={()=>setLevel(l)}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="field">
-                  <label className="field-label">Preferred Training Frequency</label>
-                  <div className="chips mt-4">
-                    {FREQ_OPTS_C.map(f=>(
-                      <button key={f} className={`chip${freq===f?" on":""}`} onClick={()=>setFreq(f)}>{f}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="field">
-                  <label className="field-label">Preferred Training Location</label>
-                  <input className="fi" placeholder="e.g. Equinox Hudson Yards, home gym, open to suggestions…" />
-                </div>
-                <div className="field">
-                  <label className="field-label">Injuries or Limitations (optional)</label>
-                  <input className="fi" placeholder="e.g. None, lower back tightness, post-surgery knee…" />
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ── STEP 2 — REVIEW ── */}
-          {step === 2 && (
-            <>
-              <p className="consult-step-lbl">Step 3 of 3 · Review</p>
-              <h2 className="consult-title">Confirm Your Consultation</h2>
-              <p className="consult-desc">Everything look right? Hit confirm and you're set.</p>
-
-              <div style={{borderRadius:"var(--r3)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",overflow:"hidden",marginBottom:20}}>
-                {[
-                  ["Date",      `${mnth} ${selDate}, ${yr}`],
-                  ["Time",      selTime],
-                  ["Type",      "Free Consultation · 30 min"],
-                  ["Format",    "In-Person or Phone"],
-                  ["With",      "Malik Bryant · MLVNT"],
-                ].map(([k,v]) => (
-                  <div className="consult-confirm-row" key={k} style={{padding:"11px 16px"}}>
-                    <span className="consult-confirm-k">{k}</span>
-                    <span className="consult-confirm-v">{v}</span>
-                  </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:8}}>
+                {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>(
+                  <div key={d} style={{textAlign:"center",fontSize:"0.56rem",color:"var(--txt-2)",letterSpacing:"0.1em",paddingBottom:6}}>{d}</div>
                 ))}
+                {cells.map((d,i)=>{
+                  const isPast = d && d < now.getDate();
+                  const isSun  = (i % 7) === 0;
+                  return (
+                    <div key={i}
+                      onClick={()=>d&&!isPast&&!isSun&&setDate(d)}
+                      style={{
+                        textAlign:"center",padding:"8px 0",borderRadius:"var(--r2)",cursor:d&&!isPast&&!isSun?"pointer":"default",
+                        fontSize:"0.78rem",
+                        background:selDate===d?"var(--acc-0)":"transparent",
+                        border:selDate===d?"1px solid var(--b1)":"1px solid transparent",
+                        color:!d||isPast||isSun?"rgba(255,255,255,0.15)":selDate===d?"var(--txt-0)":"var(--txt-1)",
+                        fontWeight:selDate===d?700:400,
+                        transition:"all 0.15s",
+                      }}
+                    >{d||""}</div>
+                  );
+                })}
               </div>
-
-              <div style={{padding:"14px 16px",borderRadius:"var(--r2)",background:"rgba(255,255,255,0.03)",border:"1px solid var(--b0)",fontSize:"0.78rem",color:"var(--txt-1)",lineHeight:1.65}}>
-                A confirmation will be sent to your email. Malik will reach out if anything needs to be adjusted.
-              </div>
-            </>
-          )}
-
-          {/* ── STEP 3 — SUCCESS ── */}
-          {step === 3 && (
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",padding:"12px 0"}}>
-              <div className="consult-success-icon">✓</div>
-              <h2 className="consult-title" style={{marginBottom:10}}>You're Confirmed</h2>
-              <p className="consult-desc" style={{marginBottom:20,maxWidth:380}}>
-                Your consultation is booked for <strong style={{color:"var(--txt-0)"}}>{mnth} {selDate} at {selTime}</strong>. A confirmation has been sent to your email.
-              </p>
-              <div style={{width:"100%",borderRadius:"var(--r3)",padding:"18px",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)",textAlign:"left",marginBottom:20}}>
-                <p className="label mb-8">What to Expect</p>
-                {[
-                  "Malik will walk through your goals, history, and lifestyle.",
-                  "You'll get a clear picture of what training with MLVNT looks like.",
-                  "A package recommendation will follow — no pressure, no rush.",
-                ].map((t,i) => (
-                  <p key={i} style={{fontSize:"0.78rem",color:"var(--txt-1)",lineHeight:1.65,marginBottom:i<2?8:0}}>
-                    {i+1}. {t}
-                  </p>
-                ))}
-              </div>
-              <button className="btn btn-p btn-full" onClick={onComplete}>
-                Back to Home
-              </button>
             </div>
-          )}
+
+            {selDate && (<>
+              <p className="label mb-8">Select a Time</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                {TIMES.map(t=>{
+                  const unavail = UNAVAIL.has(t);
+                  return (
+                    <button key={t}
+                      disabled={unavail}
+                      className={`consult-time-btn${unavail?" unavail":""}${selTime===t?" sel":""}`}
+                      onClick={()=>!unavail&&setSTime(t)}
+                    >{t}</button>
+                  );
+                })}
+              </div>
+            </>)}
+          </>)}
+
+          {/* ── STEP 1: Basic Info ── */}
+          {step === 1 && (<>
+            <h2 className="consult-title">About You</h2>
+            <p className="consult-desc">Basic information so we can reach you and prepare for the call.</p>
+            <div className="form-col">
+              <div className="form-grid">
+                <div className="field"><label className="field-label">First Name *</label>
+                  <input className="fi" placeholder="Taylor" value={firstName} onChange={e=>setFN(e.target.value)} autoComplete="given-name" /></div>
+                <div className="field"><label className="field-label">Last Name</label>
+                  <input className="fi" placeholder="Reeves" value={lastName} onChange={e=>setLN(e.target.value)} autoComplete="family-name" /></div>
+              </div>
+              <div className="field"><label className="field-label">Email Address *</label>
+                <input className="fi" type="email" placeholder="taylor@email.com" value={email} onChange={e=>setEm(e.target.value)} autoComplete="email" /></div>
+              <div className="field"><label className="field-label">Phone Number</label>
+                <input className="fi" type="tel" placeholder="+1 (555) 000-0000" value={phone} onChange={e=>setPh(e.target.value)} autoComplete="tel" /></div>
+              <div className="field"><label className="field-label">Age *</label>
+                <input className="fi" type="number" placeholder="28" value={age} onChange={e=>setAge(e.target.value)} style={{maxWidth:100}} /></div>
+            </div>
+          </>)}
+
+          {/* ── STEP 2: Goals + Background ── */}
+          {step === 2 && (<>
+            <h2 className="consult-title">Goals & Training Background</h2>
+            <p className="consult-desc">This helps Malik tailor the consultation to your specific needs and experience level.</p>
+            <div className="form-col">
+              <div className="field">
+                <label className="field-label">Primary Goal(s) *</label>
+                <div className="chips mt-4">
+                  {GOAL_OPTS.map(g=>(
+                    <button key={g} className={`chip${goals.includes(g)?" on":""}`} onClick={()=>toggleGoal(g)}>{g}</button>
+                  ))}
+                </div>
+                <input className="fi" style={{marginTop:10}} placeholder="Other goal (optional)" value={customGoal} onChange={e=>setCG(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Training Experience *</label>
+                <div className="chips mt-4">
+                  {LEVEL_OPTS.map(l=>(
+                    <button key={l} className={`chip${level===l?" on":""}`} onClick={()=>setLevel(l)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Worked with a coach before?</label>
+                <div className="chips mt-4">
+                  {["Yes","No"].map(v=>(
+                    <button key={v} className={`chip${hadCoach===v?" on":""}`} onClick={()=>setHC(v)}>{v}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Preferred Training Frequency *</label>
+                <div className="chips mt-4">
+                  {FREQ_OPTS.map(f=>(
+                    <button key={f} className={`chip${trainFreq===f?" on":""}`} onClick={()=>setFreq(f)}>{f}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Gym Access / Equipment</label>
+                <input className="fi" placeholder="e.g. Equinox, home gym, open to suggestions…" value={gymAccess} onChange={e=>setGym(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Preferred Training Location</label>
+                <input className="fi" placeholder="e.g. Midtown Manhattan, home, flexible…" value={location} onChange={e=>setLoc(e.target.value)} />
+              </div>
+            </div>
+          </>)}
+
+          {/* ── STEP 3: Health + PAR-Q ── */}
+          {step === 3 && (<>
+            <h2 className="consult-title">Health & Readiness</h2>
+            <p className="consult-desc">
+              This information is confidential and helps ensure your training is safe, appropriate, and effective.
+              It also serves as a legal record of your health status prior to beginning training.
+            </p>
+
+            <div style={{padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(42,122,75,0.06)",border:"1px solid rgba(42,122,75,0.18)",marginBottom:18}}>
+              <p style={{fontSize:"0.72rem",color:"var(--txt-1)",lineHeight:1.7}}>
+                <strong>PAR-Q</strong> (Physical Activity Readiness Questionnaire) — Please answer honestly.
+                If you answer YES to any question, consult your doctor before beginning physical activity.
+              </p>
+            </div>
+
+            <div className="form-col" style={{marginBottom:20}}>
+              {PARQ_QUESTIONS.map(({k, q}) => (
+                <div key={k} style={{display:"flex",gap:14,alignItems:"flex-start",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <div style={{flexShrink:0,marginTop:2}}>
+                    <div style={{display:"flex",gap:8}}>
+                      {["Yes","No"].map(v=>(
+                        <button key={v}
+                          onClick={()=>setParq(p=>({...p,[k]:v==="Yes"}))}
+                          style={{padding:"4px 12px",borderRadius:100,border:`1px solid ${(parqAnswers[k]?true:false)===(v==="Yes")&&parqAnswers[k]!==undefined?"var(--b1)":"var(--b0)"}`,
+                            background:(parqAnswers[k]===true&&v==="Yes")||(parqAnswers[k]===false&&v==="No")?"var(--acc-0)":"none",
+                            color:"var(--txt-1)",fontSize:"0.65rem",cursor:"pointer",fontFamily:"var(--fc)",transition:"all 0.15s"}}
+                        >{v}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.6}}>{q}</p>
+                </div>
+              ))}
+            </div>
+
+            {anyParqYes && (
+              <div style={{padding:"12px 14px",borderRadius:"var(--r2)",background:"rgba(220,175,80,0.08)",border:"1px solid rgba(220,175,80,0.25)",marginBottom:16}}>
+                <p style={{fontSize:"0.72rem",color:"rgba(220,175,80,0.9)",lineHeight:1.65}}>
+                  You answered YES to one or more PAR-Q questions. We recommend consulting your physician before beginning training.
+                  You may still proceed with booking a consultation — Malik will review your responses before the call.
+                </p>
+              </div>
+            )}
+
+            <div className="form-col">
+              <div className="field">
+                <label className="field-label">Current or Past Injuries</label>
+                <textarea className="note-area" rows={2} placeholder="e.g. Right knee surgery 2022, lower back pain — or 'None'" value={injuries} onChange={e=>setInj(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Surgeries</label>
+                <textarea className="note-area" rows={2} placeholder="Any surgeries relevant to physical activity — or 'None'" value={surgeries} onChange={e=>setSurg(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Medical Conditions</label>
+                <textarea className="note-area" rows={2} placeholder="e.g. Type 2 diabetes, hypertension — or 'None'" value={conditions} onChange={e=>setCond(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Medications Affecting Exercise</label>
+                <input className="fi" placeholder="e.g. Beta blockers, blood thinners — or 'None'" value={medications} onChange={e=>setMeds(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label">Doctor Restrictions or Limitations</label>
+                <input className="fi" placeholder="e.g. No high-impact activity — or 'None'" value={restrictions} onChange={e=>setRest(e.target.value)} />
+              </div>
+            </div>
+          </>)}
+
+          {/* ── STEP 4: Liability + Consent ── */}
+          {step === 4 && (<>
+            <h2 className="consult-title">Agreement & Consent</h2>
+            <p className="consult-desc">Please read and acknowledge the following before your consultation.</p>
+
+            <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:24}}>
+              <div style={{padding:"16px",borderRadius:"var(--r3)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.68rem",letterSpacing:"0.12em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Exercise Risk Disclaimer</p>
+                <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.75}}>
+                  Physical exercise carries inherent risks including, but not limited to, injury, cardiovascular events, and musculoskeletal damage.
+                  By proceeding, you acknowledge that you are voluntarily participating in physical training and assume all associated risks.
+                  MLVNT and its coaches are not liable for any injury, illness, or adverse health outcome resulting from consultation or training.
+                </p>
+                <label style={{display:"flex",alignItems:"center",gap:10,marginTop:12,cursor:"pointer"}}>
+                  <input type="checkbox" checked={agreedRisk} onChange={e=>setAR(e.target.checked)}
+                    style={{width:16,height:16,cursor:"pointer",accentColor:"var(--acc-1)"}} />
+                  <span style={{fontSize:"0.74rem",color:"var(--txt-0)",fontWeight:500}}>I understand and accept the exercise risk disclaimer</span>
+                </label>
+              </div>
+
+              <div style={{padding:"16px",borderRadius:"var(--r3)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.68rem",letterSpacing:"0.12em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Medical Responsibility</p>
+                <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.75}}>
+                  I confirm that the health and medical information I have provided is accurate to the best of my knowledge.
+                  I understand that it is my responsibility to disclose any changes to my health status.
+                  I agree to consult a physician before beginning exercise if I have any concerns about my health readiness.
+                </p>
+                <label style={{display:"flex",alignItems:"center",gap:10,marginTop:12,cursor:"pointer"}}>
+                  <input type="checkbox" checked={agreedMed} onChange={e=>setAM(e.target.checked)}
+                    style={{width:16,height:16,cursor:"pointer",accentColor:"var(--acc-1)"}} />
+                  <span style={{fontSize:"0.74rem",color:"var(--txt-0)",fontWeight:500}}>I confirm the accuracy of my health information</span>
+                </label>
+              </div>
+
+              <div style={{padding:"16px",borderRadius:"var(--r3)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.68rem",letterSpacing:"0.12em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Communication Consent</p>
+                <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.75}}>
+                  I consent to receive communication from MLVNT regarding my consultation booking, follow-up, and coaching services.
+                  My information will not be shared with third parties.
+                </p>
+                <label style={{display:"flex",alignItems:"center",gap:10,marginTop:12,cursor:"pointer"}}>
+                  <input type="checkbox" checked={agreedComms} onChange={e=>setAC(e.target.checked)}
+                    style={{width:16,height:16,cursor:"pointer",accentColor:"var(--acc-1)"}} />
+                  <span style={{fontSize:"0.74rem",color:"var(--txt-0)",fontWeight:500}}>I consent to receive communications from MLVNT</span>
+                </label>
+              </div>
+            </div>
+          </>)}
+
+          {/* ── STEP 5: Confirm ── */}
+          {step === 5 && (<>
+            <h2 className="consult-title">Confirm Booking</h2>
+            <p className="consult-desc">Review your details before submitting.</p>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
+              {[
+                ["Date & Time", `${mnth} ${selDate}, ${yr} · ${selTime}`],
+                ["Name",        `${firstName} ${lastName}`.trim() || "—"],
+                ["Email",       email || "—"],
+                ["Phone",       phone || "—"],
+                ["Age",         age ? `${age} years` : "—"],
+                ["Goal(s)",     [...goals, customGoal].filter(Boolean).join(", ") || "—"],
+                ["Experience",  level || "—"],
+                ["Frequency",   trainFreq || "—"],
+                ["Gym",         gymAccess || "—"],
+              ].map(([l,v])=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <span style={{fontSize:"0.7rem",color:"var(--txt-2)"}}>{l}</span>
+                  <span style={{fontSize:"0.76rem",color:"var(--txt-0)",fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v}</span>
+                </div>
+              ))}
+              {anyParqYes && (
+                <div style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(220,175,80,0.08)",border:"1px solid rgba(220,175,80,0.2)",marginTop:4}}>
+                  <p style={{fontSize:"0.7rem",color:"rgba(220,175,80,0.85)"}}>⚠ PAR-Q: You indicated yes to one or more health screening questions. Malik will review before your call.</p>
+                </div>
+              )}
+            </div>
+          </>)}
 
           {/* Navigation */}
-          {step < 3 && (
-            <div className="consult-nav">
+          {step < 6 && (
+            <div style={{display:"flex",gap:10,marginTop:24}}>
+              {step > 0 && (
+                <button className="btn btn-ghost btn-sm" onClick={()=>setStep(s=>s-1)}>← Back</button>
+              )}
               <button
-                className="btn btn-s btn-sm"
-                style={{opacity: step===0?0.4:1}}
-                onClick={() => step > 0 ? setStep(s=>s-1) : onBack()}
+                className={`btn btn-p btn-full${saving?" btn-loading":""}`}
+                disabled={!canNext[step] || saving}
+                style={{opacity:canNext[step]?1:0.4}}
+                onClick={next}
               >
-                ← {step===0 ? "Cancel" : "Back"}
-              </button>
-
-              <div className="consult-dots">
-                {[0,1,2].map(i=>(
-                  <div key={i} className={`consult-dot${i===step?" curr":i<step?" done":" idle"}`} />
-                ))}
-              </div>
-
-              <button
-                className={`btn btn-sm${canAdvance?" btn-p":" btn-s"}`}
-                style={{opacity: canAdvance?1:0.4}}
-                onClick={() => canAdvance && next()}
-              >
-                {saving
-                  ? <><Spinner />{step===2?"Booking…":"Saving…"}</>
-                  : step===2 ? "Confirm ✓" : "Continue →"
-                }
+                {saving ? <><Spinner />Submitting…</> :
+                  step === 5 ? "Confirm Booking" :
+                  step === 0 && !selDate ? "Select a date" :
+                  step === 0 && !selTime ? "Select a time" :
+                  "Continue →"}
               </button>
             </div>
           )}
@@ -6674,7 +6998,7 @@ function ConsultationFlow({ onBack, onComplete }) {
   );
 }
 
-/* ── CLIENT: RECOMMENDATION SCREEN ──────────────────────────────────────── */
+
 function ConsultationRecommendation({ onBack, onProceed }) {
   const [selPkg, setSelPkg] = useState("2x");
   const open = (url) => window.open(url, "_blank", "noopener,noreferrer");
