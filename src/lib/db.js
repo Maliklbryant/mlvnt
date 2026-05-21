@@ -186,7 +186,70 @@ export async function deleteProgram(programId) {
   if (error) { console.error("deleteProgram:", error.message); return { ok: false, error: error.message }; }
   return { ok: true };
 }
+export async function assignProgramTemplate(templateId, clientId, coachId) {
+  if (!templateId || !clientId) {
+    return { ok: false, error: "Template and client are required." };
+  }
 
+  const { data: template, error: fetchError } = await supabase
+    .from("programs")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (fetchError || !template) {
+    console.error("assignProgramTemplate:", fetchError?.message);
+    return {
+      ok: false,
+      error: fetchError?.message || "Template not found.",
+    };
+  }
+
+  await supabase
+    .from("programs")
+    .update({
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("client_id", clientId)
+    .eq("status", "active");
+
+  const assignedProgram = {
+    client_id: clientId,
+    coach_id: coachId || template.coach_id || null,
+    template_id: template.id,
+    assigned_by: coachId || null,
+    assigned_at: new Date().toISOString(),
+
+    is_template: false,
+    status: "active",
+
+    name: template.name || "Assigned Program",
+    block: template.block || "",
+    phase: template.phase || "",
+    start_date: template.start_date || null,
+    end_date: template.end_date || null,
+    week: template.week ?? 1,
+    total_weeks: template.total_weeks ?? 8,
+    coach_note: template.coach_note || "",
+    days: Array.isArray(template.days)
+      ? JSON.parse(JSON.stringify(template.days))
+      : [],
+  };
+
+  const { data, error } = await supabase
+    .from("programs")
+    .insert(assignedProgram)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("assignProgramTemplate:", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, program: data };
+}
 // ─────────────────────────────────────────────────────────────
 // WORKOUT LOG
 // ─────────────────────────────────────────────────────────────
