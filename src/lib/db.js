@@ -91,49 +91,7 @@ export async function getAllPrograms() {
   if (error) { console.error("getAllPrograms:", error.message); return []; }
   return data || [];
 }
-// ─────────────────────────────────────────────────────────────
-// PROGRAM LIBRARY
-// ─────────────────────────────────────────────────────────────
 
-/** Unassigned reusable templates */
-export async function getProgramLibrary() {
-  const { data, error } = await supabase
-    .from("programs")
-    .select("*")
-    .eq("is_template", true)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    console.error("getProgramLibrary:", error.message);
-    return [];
-  }
-
-  return data || [];
-}
-
-/** Programs currently assigned to clients */
-export async function getAssignedPrograms() {
-  const { data, error } = await supabase
-    .from("programs")
-    .select(`
-      *,
-      profiles!programs_client_id_fkey (
-        id,
-        name,
-        email
-      )
-    `)
-    .eq("is_template", false)
-    .not("client_id", "is", null)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    console.error("getAssignedPrograms:", error.message);
-    return [];
-  }
-
-  return data || [];
-}
 /**
  * Create a new program draft.
  * clientId = null creates an unassigned template (no client required).
@@ -439,4 +397,92 @@ export function subscribeToMessages(userId, callback) {
       filter: `receiver_id=eq.${userId}`,
     }, payload => callback(payload.new))
     .subscribe();
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROGRAM LIBRARY — Template-first flow
+// ─────────────────────────────────────────────────────────────
+
+/** All unassigned templates (client_id IS NULL). */
+export async function getProgramLibrary() {
+  const { data, error } = await supabase
+    .from("programs")
+    .select("*")
+    .is("client_id", null)
+    .order("updated_at", { ascending: false });
+  if (error) { console.error("getProgramLibrary:", error.message); return []; }
+  return data || [];
+}
+
+/** All programs assigned to clients (client_id NOT NULL). */
+export async function getAssignedPrograms() {
+  const { data, error } = await supabase
+    .from("programs")
+    .select(`*, profiles!programs_client_id_fkey (name, email)`)
+    .not("client_id", "is", null)
+    .order("updated_at", { ascending: false });
+  if (error) { console.error("getAssignedPrograms:", error.message); return []; }
+  return data || [];
+}
+
+/**
+ * Assign a template to a client by creating a client-specific copy.
+ * The original template (client_id=null) is preserved unchanged.
+ *
+ * Steps:
+ * 1. Fetch the template.
+ * 2. Archive any existing active program for the client.
+ * 3. Insert a new program row with client_id=clientId, status=active,
+ *    template_id=templateId, assigned_by=coachId, assigned_at=now.
+ *
+ * @param {string} templateId  — ID of the template (client_id=null row).
+ * @param {string} clientId    — Target client's user ID.
+ * @param {string} coachId     — Coach/admin's user ID.
+ */
+export async function assignProgramTemplate(templateId, clientId, coachId) {
+  if (!templateId || !clientId) {
+    return { ok: false, error: "templateId and clientId are required." };
+  }
+
+  // 1. Fetch the template
+  const { data: tmpl, error: fetchErr } = await supabase
+    .from("programs").select("*").eq("id", templateId).single();
+  if (fetchErr || !tmpl) {
+    console.error("assignProgramTemplate fetch:", fetchErr?.message);
+    return { ok: false, error: fetchErr?.message || "Template not found." };
+  }
+
+  // 2. Archive existing active program for this client
+  await supabase.from("programs")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("client_id", clientId).eq("status", "active");
+
+  // 3. Create the client copy
+  const copy = {
+    client_id:   clientId,
+    coach_id:    coachId || null,
+    template_id: templateId,
+    assigned_by: coachId || null,
+    assigned_at: new Date().toISOString(),
+    name:        tmpl.name,
+    block:       tmpl.block,
+    phase:       tmpl.phase        || "",
+    weekly_focus:tmpl.weekly_focus || "",
+    status:      "active",
+    start_date:  tmpl.start_date   || null,
+    end_date:    tmpl.end_date     || null,
+    week:        1,
+    total_weeks: tmpl.total_weeks  || 8,
+    coach_note:  tmpl.coach_note   || "",
+    days:        JSON.parse(JSON.stringify(tmpl.days || [])),
+    is_template: false,
+  };
+
+  const { data, error } = await supabase
+    .from("programs").insert(copy).select().single();
+  if (error) {
+    console.error("assignProgramTemplate insert:", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, program: data };
 }
