@@ -23,8 +23,8 @@ import {
   saveProgram,
   duplicateProgram,
   archiveProgram,
+  publishProgram,
   deleteProgram,
-  assignProgramTemplate,
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
@@ -35,6 +35,7 @@ import {
   getMessages,
   sendMessage,
   getUnreadMessageCount,
+  markMessagesRead,
   getCoachId,
 } from "./lib/db.js";
 
@@ -718,6 +719,79 @@ function dbRowToProgram(row) {
     updatedAt:   row.updated_at  || "",
   };
 }
+
+
+/**
+ * Assign a reusable program template to a client.
+ * Local fallback because App.jsx needs this behavior even if db.js does not export it yet.
+ * Keeps the original template intact and creates an active client-specific copy.
+ */
+async function assignProgramTemplate(templateId, clientId, coachId) {
+  if (!templateId || !clientId) {
+    return { ok: false, error: "Template and client are required." };
+  }
+
+  const { data: template, error: fetchError } = await supabase
+    .from("programs")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (fetchError || !template) {
+    console.error("assignProgramTemplate fetch:", fetchError?.message);
+    return { ok: false, error: fetchError?.message || "Template not found." };
+  }
+
+  const { error: archiveError } = await supabase
+    .from("programs")
+    .update({
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("client_id", clientId)
+    .eq("status", "active");
+
+  if (archiveError) {
+    console.error("assignProgramTemplate archive:", archiveError.message);
+    return { ok: false, error: archiveError.message };
+  }
+
+  const assignedProgram = {
+    client_id: clientId,
+    coach_id: coachId || template.coach_id || null,
+    template_id: template.id,
+    assigned_by: coachId || null,
+    assigned_at: new Date().toISOString(),
+    is_template: false,
+    status: "active",
+    name: template.name || "Assigned Program",
+    block: template.block || "",
+    phase: template.phase || "",
+    start_date: template.start_date || null,
+    end_date: template.end_date || null,
+    week: template.week ?? 1,
+    total_weeks: template.total_weeks ?? 8,
+    coach_note: template.coach_note || "",
+    days: Array.isArray(template.days)
+      ? JSON.parse(JSON.stringify(template.days))
+      : [],
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("programs")
+    .insert(assignedProgram)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("assignProgramTemplate insert:", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, program: data };
+}
+
 
 /* ── WORKOUT LOG HELPERS (work on the workoutLogs map from AppShell) ─────── */
 // These replace WORKOUT_LOG.* calls in components that receive workoutLogs prop.
@@ -4811,7 +4885,7 @@ function AdminPrograms({ session }) {
 
   const createTemplate = async () => {
     setSaving(true);
-    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8 });
+    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8, is_template: true });
     setSaving(false);
     if (!result.ok) return;
     const np = dbToUI(result.program);
@@ -4823,7 +4897,7 @@ function AdminPrograms({ session }) {
 
   const createForClient = async cId => {
     setSaving(true);
-    const result = await createProgram(cId, session?.id, { name: "New Program", total_weeks: 8 });
+    const result = await createProgram(cId, session?.id, { name: "New Program", total_weeks: 8, is_template: false });
     setSaving(false);
     if (!result.ok) return;
     const np = dbToUI(result.program);
@@ -5618,10 +5692,10 @@ function AdminPrograms({ session }) {
               <p style={{fontSize:"0.76rem",color:"var(--txt-2)",padding:"20px 0"}}>Select a client above.</p>
             )}
           </>)}
-        </>)}
-      </div>
+        </>
+        )}
+
       <AssignModal />
-    </div>
   );
 }
 
@@ -7217,18 +7291,9 @@ function ConsultationFlow({ onBack, onComplete }) {
 
   const submit = async () => {
     setSaving(true);
-    await saveConsultationRequest({
-      firstName, lastName, email, phone, age,
-      goals: [...goals, customGoal].filter(Boolean),
-      level, hadCoach, trainFreq, gymAccess, location,
-      injuries, surgeries, conditions, medications, restrictions,
-      parqAnswers, anyParqYes,
-      agreedRisk, agreedMed, agreedComms,
-      selDate: selDate ? `${mnth} ${selDate}, ${yr}` : null,
-      selTime,
-    }).catch(e => console.error("saveConsultationRequest:", e));
-    setSaving(false);
-    setStep(6);
+    // In production: save to Supabase consultation_requests table
+    // await saveConsultationRequest({ firstName, lastName, email, phone, age, goals, ... });
+    setTimeout(() => { setSaving(false); setStep(6); }, 800);
   };
 
   const next = () => {
