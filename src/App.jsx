@@ -23,8 +23,8 @@ import {
   saveProgram,
   duplicateProgram,
   archiveProgram,
-  publishProgram,
   deleteProgram,
+  assignProgramTemplate,
   saveOnboarding,
   saveWorkoutLog,
   getWorkoutLog,
@@ -35,7 +35,6 @@ import {
   getMessages,
   sendMessage,
   getUnreadMessageCount,
-  markMessagesRead,
   getCoachId,
 } from "./lib/db.js";
 
@@ -719,79 +718,6 @@ function dbRowToProgram(row) {
     updatedAt:   row.updated_at  || "",
   };
 }
-
-
-/**
- * Assign a reusable program template to a client.
- * Local fallback because App.jsx needs this behavior even if db.js does not export it yet.
- * Keeps the original template intact and creates an active client-specific copy.
- */
-async function assignProgramTemplate(templateId, clientId, coachId) {
-  if (!templateId || !clientId) {
-    return { ok: false, error: "Template and client are required." };
-  }
-
-  const { data: template, error: fetchError } = await supabase
-    .from("programs")
-    .select("*")
-    .eq("id", templateId)
-    .single();
-
-  if (fetchError || !template) {
-    console.error("assignProgramTemplate fetch:", fetchError?.message);
-    return { ok: false, error: fetchError?.message || "Template not found." };
-  }
-
-  const { error: archiveError } = await supabase
-    .from("programs")
-    .update({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("client_id", clientId)
-    .eq("status", "active");
-
-  if (archiveError) {
-    console.error("assignProgramTemplate archive:", archiveError.message);
-    return { ok: false, error: archiveError.message };
-  }
-
-  const assignedProgram = {
-    client_id: clientId,
-    coach_id: coachId || template.coach_id || null,
-    template_id: template.id,
-    assigned_by: coachId || null,
-    assigned_at: new Date().toISOString(),
-    is_template: false,
-    status: "active",
-    name: template.name || "Assigned Program",
-    block: template.block || "",
-    phase: template.phase || "",
-    start_date: template.start_date || null,
-    end_date: template.end_date || null,
-    week: template.week ?? 1,
-    total_weeks: template.total_weeks ?? 8,
-    coach_note: template.coach_note || "",
-    days: Array.isArray(template.days)
-      ? JSON.parse(JSON.stringify(template.days))
-      : [],
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data, error } = await supabase
-    .from("programs")
-    .insert(assignedProgram)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("assignProgramTemplate insert:", error.message);
-    return { ok: false, error: error.message };
-  }
-
-  return { ok: true, program: data };
-}
-
 
 /* ── WORKOUT LOG HELPERS (work on the workoutLogs map from AppShell) ─────── */
 // These replace WORKOUT_LOG.* calls in components that receive workoutLogs prop.
@@ -4885,7 +4811,7 @@ function AdminPrograms({ session }) {
 
   const createTemplate = async () => {
     setSaving(true);
-    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8, is_template: true });
+    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8 });
     setSaving(false);
     if (!result.ok) return;
     const np = dbToUI(result.program);
@@ -4897,7 +4823,7 @@ function AdminPrograms({ session }) {
 
   const createForClient = async cId => {
     setSaving(true);
-    const result = await createProgram(cId, session?.id, { name: "New Program", total_weeks: 8, is_template: false });
+    const result = await createProgram(cId, session?.id, { name: "New Program", total_weeks: 8 });
     setSaving(false);
     if (!result.ok) return;
     const np = dbToUI(result.program);
@@ -5520,184 +5446,7 @@ function AdminPrograms({ session }) {
   );
 }
 
-        {tab==="library" && (<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <p className="label">Templates (Unassigned)</p>
-            <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={createTemplate}>
-              {saving?<><Spinner />Creating…</>:"+ New Template"}
-            </button>
-          </div>
-          {templates.length===0 ? (
-            <div className="a-panel">
-              <div className="empty-state" style={{padding:"56px 20px"}}>
-                <span className="empty-ic">▦</span>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No program templates yet</p>
-                <p className="empty-txt">Build programs before clients exist. Templates can be assigned later.</p>
-                <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} style={{marginTop:16}} onClick={createTemplate}>
-                  {saving?<><Spinner />Creating…</>:"+ Create First Template"}
-                </button>
-              </div>
-            </div>
-          ) : templates.map(p=>(
-            <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
-                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
-                  {p.block}{p.phase?" · "+p.phase:""} · {p.totalWeeks}w · {(p.days||[]).length} days
-                </p>
-              </div>
-              <div style={{display:"flex",gap:6,flexShrink:0}}>
-                <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
-                <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
-                {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Assign →</button>}
-                <button onClick={()=>deleteProg(p.id)}
-                  style={{padding:"6px 10px",borderRadius:"var(--r2)",border:"1px solid rgba(180,60,60,0.22)",background:"none",color:"rgba(200,100,100,0.65)",fontSize:"0.6rem",cursor:"pointer",fontFamily:"var(--fc)"}}>Delete</button>
-              </div>
-            </div>
-          ))}
 
-          {allProgs.filter(p=>p.clientId && p.status==="draft").length>0 && (<>
-            <p className="label mt-20 mb-10">Client Drafts</p>
-            {allProgs.filter(p=>p.clientId && p.status==="draft").map(p=>(
-              <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
-                <div>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
-                  <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{"→ "+(p.clientName||"—")+" · "+p.block}</p>
-                </div>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  <span className="prog-status-pill draft">Draft</span>
-                  <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
-                  <button className="btn btn-p btn-xs" onClick={()=>openAssign(p.id)}>Publish</button>
-                </div>
-              </div>
-            ))}
-          </>)}
-        </>)}
-
-        {tab==="assigned" && (<>
-          {clients.length===0 ? (
-            <div className="a-panel">
-              <div className="empty-state" style={{padding:"48px 20px"}}>
-                <span className="empty-ic">◉</span>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
-                <p className="empty-txt">Add clients first, then assign programs here.</p>
-              </div>
-            </div>
-          ) : (<>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
-              {clients.map(c=>(
-                <button key={c.id} onClick={()=>setSelClient(c.id)}
-                  style={{padding:"8px 14px",borderRadius:"var(--r2)",border:"1px solid "+(selClientId===c.id?"var(--b1)":"var(--b0)"),background:selClientId===c.id?"var(--acc-0)":"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.15s"}}>
-                  <div className="c-av" style={{width:22,height:22,fontSize:"0.5rem"}}>{c.init}</div>
-                  <span style={{fontSize:"0.76rem",color:selClientId===c.id?"var(--txt-0)":"var(--txt-1)",fontWeight:500}}>{c.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {selClient && (<>
-              <div className="a-panel" style={{marginBottom:14,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                <div className="c-av" style={{width:36,height:36,fontSize:"0.62rem"}}>{selClient.init}</div>
-                <div style={{flex:1}}>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>{selClient.name}</p>
-                  <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{selClient.goal+" · "+selClient.level}</p>
-                </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ New Program</button>
-                  {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template →</button>}
-                </div>
-              </div>
-
-              {clientProgs.filter(p=>p.status==="active").map(p=>(
-                <div key={p.id} style={{marginBottom:14}}>
-                  <p className="label mb-10">Active Program</p>
-                  <div className="a-panel" style={{borderColor:"rgba(42,122,75,0.22)"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,flexWrap:"wrap",gap:8}}>
-                      <div>
-                        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700}}>{p.name}</p>
-                        <p style={{fontSize:"0.7rem",color:"var(--txt-2)",marginTop:3}}>{p.block+(p.phase?" · "+p.phase:"")+" · Wk "+p.week+"/"+p.totalWeeks}</p>
-                        {(p.startDate||p.endDate) && <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:2}}>{p.startDate+" – "+p.endDate}</p>}
-                      </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button className="btn btn-p btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
-                        <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
-                        <button className="btn btn-s btn-sm" onClick={()=>archiveProg(p.id)}>Archive</button>
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                      {(p.days||[]).map(d=>(
-                        <div key={d.id} style={{padding:"7px 11px",borderRadius:"var(--r2)",background:"rgba(0,0,0,0.2)",border:"1px solid var(--b0)"}}>
-                          <p style={{fontFamily:"var(--fh)",fontSize:"0.68rem",fontWeight:700}}>{d.name}</p>
-                          {d.focus && <p style={{fontSize:"0.58rem",color:"var(--txt-2)",marginTop:1}}>{d.focus}</p>}
-                          <p style={{fontSize:"0.56rem",color:"var(--txt-2)",marginTop:1}}>{(d.exercises||[]).length+" ex"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {clientProgs.filter(p=>p.status==="draft").length>0 && (
-                <div style={{marginBottom:14}}>
-                  <p className="label mb-10">Drafts</p>
-                  {clientProgs.filter(p=>p.status==="draft").map(p=>(
-                    <div className="a-panel" key={p.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-                      <div>
-                        <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700}}>{p.name}</p>
-                        <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:2}}>{p.block+" · "+p.totalWeeks+"w"}</p>
-                      </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
-                        <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Publish →</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").length>0 && (
-                <div>
-                  <p className="label mb-10">History</p>
-                  {clientProgs.filter(p=>p.status!=="active"&&p.status!=="draft").map(p=>(
-                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--b0)"}}>
-                      <div>
-                        <p style={{fontFamily:"var(--fh)",fontSize:"0.82rem",fontWeight:700,color:"var(--txt-0)"}}>{p.name}</p>
-                        <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{p.block+(p.startDate?" · "+p.startDate+" – "+p.endDate:"")}</p>
-                      </div>
-                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <span className={"prog-status-pill "+p.status}>{p.status}</span>
-                        <button className="btn btn-s btn-xs" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>View</button>
-                        <button className="btn btn-s btn-xs" onClick={()=>dupProg(p.id)}>Duplicate</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {clientProgs.length===0 && (
-                <div className="a-panel" style={{marginTop:8}}>
-                  <div className="empty-state" style={{padding:"40px 20px"}}>
-                    <span className="empty-ic">▦</span>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>{"No programs for "+selClient.name}</p>
-                    <p className="empty-txt">No program assigned yet. Create one or assign a template from the Library.</p>
-                    <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"center"}}>
-                      <button className="btn btn-p btn-sm" onClick={()=>createForClient(selClientId)}>+ Create Program</button>
-                      {templates.length>0 && <button className="btn btn-s btn-sm" onClick={()=>setTab("library")}>Assign Template</button>}
-                    </div>
-                  </div>
-                </div>
-                     </>
-      )}
-
-      {!selClientId && (
-        <p style={{fontSize:"0.76rem", color:"var(--txt-2)", padding:"20px 0"}}>
-          Select a client to view assigned programs.
-        </p>
-      )}
-
-      <AssignModal />
-    </div>
-  );
-}
 /* ── ADMIN SCHEDULE ──────────────────────────────────────────────────────── */
 function AdminSchedule() {
   const [selDay,    setSelDay]  = useState(null);
@@ -7290,9 +7039,18 @@ function ConsultationFlow({ onBack, onComplete }) {
 
   const submit = async () => {
     setSaving(true);
-    // In production: save to Supabase consultation_requests table
-    // await saveConsultationRequest({ firstName, lastName, email, phone, age, goals, ... });
-    setTimeout(() => { setSaving(false); setStep(6); }, 800);
+    await saveConsultationRequest({
+      firstName, lastName, email, phone, age,
+      goals: [...goals, customGoal].filter(Boolean),
+      level, hadCoach, trainFreq, gymAccess, location,
+      injuries, surgeries, conditions, medications, restrictions,
+      parqAnswers, anyParqYes,
+      agreedRisk, agreedMed, agreedComms,
+      selDate: selDate ? `${mnth} ${selDate}, ${yr}` : null,
+      selTime,
+    }).catch(e => console.error("saveConsultationRequest:", e));
+    setSaving(false);
+    setStep(6);
   };
 
   const next = () => {
