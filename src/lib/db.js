@@ -97,9 +97,11 @@ export async function getAllPrograms() {
  * clientId = null creates an unassigned template (no client required).
  */
 export async function createProgram(clientId, coachId, overrides = {}) {
+  const isTemplate = !clientId;
   const program = {
     client_id:   clientId || null,
     coach_id:    coachId  || null,
+    is_template: isTemplate,
     name:        "New Program",
     block:       "Block 1",
     phase:       "",
@@ -117,7 +119,7 @@ export async function createProgram(clientId, coachId, overrides = {}) {
   return { ok: true, program: data };
 }
 
-/** Save full program (camelCase UI → snake_case DB). */
+/** Save full program (camelCase UI → snake_case DB). Preserves identity fields. */
 export async function saveProgram(program) {
   const { id, ...fields } = program;
   const payload = {
@@ -131,7 +133,12 @@ export async function saveProgram(program) {
     total_weeks: fields.totalWeeks  ?? 8,
     coach_note:  fields.coachNote   ?? "",
     days:        fields.days        ?? [],
+    weekly_focus:fields.weeklyFocus ?? "",
     updated_at:  new Date().toISOString(),
+    // Preserve identity/assignment fields — never strip them on save
+    client_id:   fields.clientId    ?? null,
+    coach_id:    fields.coachId     ?? null,
+    is_template: fields.clientId == null,
   };
   const { data, error } = await supabase.from("programs").update(payload).eq("id", id).select().single();
   if (error) { console.error("saveProgram:", error.message); return { ok: false, error: error.message }; }
@@ -401,12 +408,12 @@ export function subscribeToMessages(userId, callback) {
 // PROGRAM LIBRARY — Template-first flow
 // ─────────────────────────────────────────────────────────────
 
-/** All unassigned templates (client_id IS NULL). */
+/** All unassigned templates (client_id IS NULL, or is_template=true for older rows). */
 export async function getProgramLibrary() {
   const { data, error } = await supabase
     .from("programs")
     .select("*")
-    .is("client_id", null)
+    .or("client_id.is.null,is_template.eq.true")
     .order("updated_at", { ascending: false });
   if (error) { console.error("getProgramLibrary:", error.message); return []; }
   return data || [];
