@@ -169,11 +169,9 @@ export async function archiveProgram(programId) {
  */
 export async function publishProgram(programId, clientId) {
   if (!clientId) return { ok: false, error: "A client must be selected before publishing." };
-  // Archive existing active for this client
   await supabase.from("programs")
     .update({ status: "completed", updated_at: new Date().toISOString() })
     .eq("client_id", clientId).eq("status", "active");
-  // Assign + activate
   const { data, error } = await supabase.from("programs")
     .update({ client_id: clientId, status: "active", updated_at: new Date().toISOString() })
     .eq("id", programId).select().single();
@@ -186,70 +184,7 @@ export async function deleteProgram(programId) {
   if (error) { console.error("deleteProgram:", error.message); return { ok: false, error: error.message }; }
   return { ok: true };
 }
-export async function assignProgramTemplate(templateId, clientId, coachId) {
-  if (!templateId || !clientId) {
-    return { ok: false, error: "Template and client are required." };
-  }
 
-  const { data: template, error: fetchError } = await supabase
-    .from("programs")
-    .select("*")
-    .eq("id", templateId)
-    .single();
-
-  if (fetchError || !template) {
-    console.error("assignProgramTemplate:", fetchError?.message);
-    return {
-      ok: false,
-      error: fetchError?.message || "Template not found.",
-    };
-  }
-
-  await supabase
-    .from("programs")
-    .update({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("client_id", clientId)
-    .eq("status", "active");
-
-  const assignedProgram = {
-    client_id: clientId,
-    coach_id: coachId || template.coach_id || null,
-    template_id: template.id,
-    assigned_by: coachId || null,
-    assigned_at: new Date().toISOString(),
-
-    is_template: false,
-    status: "active",
-
-    name: template.name || "Assigned Program",
-    block: template.block || "",
-    phase: template.phase || "",
-    start_date: template.start_date || null,
-    end_date: template.end_date || null,
-    week: template.week ?? 1,
-    total_weeks: template.total_weeks ?? 8,
-    coach_note: template.coach_note || "",
-    days: Array.isArray(template.days)
-      ? JSON.parse(JSON.stringify(template.days))
-      : [],
-  };
-
-  const { data, error } = await supabase
-    .from("programs")
-    .insert(assignedProgram)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("assignProgramTemplate:", error.message);
-    return { ok: false, error: error.message };
-  }
-
-  return { ok: true, program: data };
-}
 // ─────────────────────────────────────────────────────────────
 // WORKOUT LOG
 // ─────────────────────────────────────────────────────────────
@@ -491,23 +426,12 @@ export async function getAssignedPrograms() {
 /**
  * Assign a template to a client by creating a client-specific copy.
  * The original template (client_id=null) is preserved unchanged.
- *
- * Steps:
- * 1. Fetch the template.
- * 2. Archive any existing active program for the client.
- * 3. Insert a new program row with client_id=clientId, status=active,
- *    template_id=templateId, assigned_by=coachId, assigned_at=now.
- *
- * @param {string} templateId  — ID of the template (client_id=null row).
- * @param {string} clientId    — Target client's user ID.
- * @param {string} coachId     — Coach/admin's user ID.
  */
 export async function assignProgramTemplate(templateId, clientId, coachId) {
   if (!templateId || !clientId) {
     return { ok: false, error: "templateId and clientId are required." };
   }
 
-  // 1. Fetch the template
   const { data: tmpl, error: fetchErr } = await supabase
     .from("programs").select("*").eq("id", templateId).single();
   if (fetchErr || !tmpl) {
@@ -515,12 +439,10 @@ export async function assignProgramTemplate(templateId, clientId, coachId) {
     return { ok: false, error: fetchErr?.message || "Template not found." };
   }
 
-  // 2. Archive existing active program for this client
   await supabase.from("programs")
     .update({ status: "completed", updated_at: new Date().toISOString() })
     .eq("client_id", clientId).eq("status", "active");
 
-  // 3. Create the client copy
   const copy = {
     client_id:   clientId,
     coach_id:    coachId || null,
