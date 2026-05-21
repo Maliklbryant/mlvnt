@@ -5685,21 +5685,19 @@ function AdminPrograms({ session }) {
                     </div>
                   </div>
                 </div>
-              )}
-            </>)}
+                     </>
+      )}
 
-            {!selClientId && (
-              <p style={{fontSize:"0.76rem",color:"var(--txt-2)",padding:"20px 0"}}>Select a client above.</p>
-            )}
-          </>)}
-        </>
-        )}
+      {!selClientId && (
+        <p style={{fontSize:"0.76rem", color:"var(--txt-2)", padding:"20px 0"}}>
+          Select a client to view assigned programs.
+        </p>
+      )}
 
       <AssignModal />
-      </div>
-    );
+    </div>
+  );
 }
-
 /* ── ADMIN SCHEDULE ──────────────────────────────────────────────────────── */
 function AdminSchedule() {
   const [selDay,    setSelDay]  = useState(null);
