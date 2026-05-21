@@ -5696,7 +5696,9 @@ function AdminPrograms({ session }) {
         )}
 
       <AssignModal />
-};
+      </div>
+    );
+}
 
 /* ── ADMIN SCHEDULE ──────────────────────────────────────────────────────── */
 function AdminSchedule() {
