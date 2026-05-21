@@ -4764,6 +4764,7 @@ function AdminPrograms({ session }) {
     return {
       id:          r.id,
       clientId:    r.client_id     || null,
+      coachId:     r.coach_id      || null,
       clientName:  r.profiles?.name || r.profiles?.email || null,
       name:        r.name          || "New Program",
       block:       r.block         || "Block 1",
@@ -4803,17 +4804,19 @@ function AdminPrograms({ session }) {
       setSaveErr(result.error || "Save failed — check your connection and try again.");
       return;
     }
-    // Update local state from the authoritative DB response
+    // Update local state immediately from DB response, then reload from Supabase
     setAllProgs(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
     setSaved(true);
     setTimeout(() => setSaved(false), 2400);
+    // Re-fetch all programs from Supabase to confirm persistence
+    getAllPrograms().then(rows => setAllProgs(rows.map(dbToUI)));
   };
 
   const createTemplate = async () => {
-    setSaving(true);
-    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8 });
+    setSaving(true); setSaveErr("");
+    const result = await createProgram(null, session?.id, { name: "New Program", total_weeks: 8, is_template: true });
     setSaving(false);
-    if (!result.ok) return;
+    if (!result.ok) { setSaveErr(result.error || "Failed to create program."); return; }
     const np = dbToUI(result.program);
     setAllProgs(p => [...p, np]);
     setEditProg(np.id);
@@ -4990,7 +4993,7 @@ function AdminPrograms({ session }) {
           }
           {saveErr && <span style={{fontSize:"0.65rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
           {saved   && <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
-          <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>{reload();setView("list");setDay(null);setEditProg(null);}}>← Back</button>
           <button className="btn btn-s btn-sm" onClick={()=>dupProg(editProg.id)}>Duplicate</button>
           {!editProg.clientId && <button className="btn btn-s btn-sm" onClick={()=>openAssign(editProg.id)}>Assign →</button>}
           {editProg.status==="active" && <button className="btn btn-s btn-sm" onClick={()=>{archiveProg(editProg.id);setView("list");}}>Archive</button>}
@@ -5200,7 +5203,7 @@ function AdminPrograms({ session }) {
           <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
             {saveErr && <span style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
             {saved   && <span style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
-            <button className="btn btn-ghost btn-sm" onClick={()=>{setView("list");setDay(null);setEditProg(null);}}>← Back</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{reload();setView("list");setDay(null);setEditProg(null);}}>← Back</button>
             <button className={"btn btn-p btn-sm"+(saving?" btn-loading":"")} onClick={saveAndPush}>
               {saving?<><Spinner />Saving…</>:saved?"✓ Saved":"Save Program"}
             </button>
