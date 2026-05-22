@@ -139,12 +139,32 @@ body::after{
 .mob-tab .ic{font-size:1.1rem;}
 .mob-tab .lbl{font-size:0.55rem;font-family:var(--fb);font-weight:500;letter-spacing:0.1em;text-transform:uppercase;}
 
+/* Mobile topbar — hidden on desktop */
+.mob-topbar{display:none;}
+.mob-back-btn{width:36px;height:36px;border-radius:50%;background:var(--gb);border:1px solid var(--b0);color:var(--txt-1);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;}
+.mob-back-btn:active{background:var(--gb2);}
+.mob-topbar-title{font-family:var(--fh);font-size:0.82rem;font-weight:700;letter-spacing:-0.01em;color:var(--txt-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
 @media(max-width:900px){
-  .app-shell{grid-template-columns:1fr;}
+  .app-shell{grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto;}
   .sidebar{display:none;}
   .mob-nav{display:block;}
-  .page-body{padding:20px 20px 80px;}
-  .topbar{padding:0 20px;}
+  .mob-topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:max(env(safe-area-inset-top,0px),8px) 16px 8px;
+    min-height:48px;
+    background:rgba(10,11,13,0.92);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--b0);
+    position:sticky;
+    top:0;
+    z-index:60;
+  }
+  .page-body{padding:20px 20px 100px;}
+  .topbar{display:none;}
 }
 
 /* ── BUTTONS ── */
@@ -1086,10 +1106,24 @@ const SLEEP_OPTS = ["Poor","Fair","Good","Great"];
 const STRESS_OPTS = ["Low","Moderate","High"];
 
 /* ── SMALL SHARED COMPONENTS ────────────────────────────────────────────── */
-function Topbar({ title, actions, onMenu }) {
+function Topbar({ title, actions, onBack, onMenu }) {
   return (
     <div className="topbar">
       <div className="flex items-center gap-12">
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              background:"none",border:"none",color:"var(--txt-1)",
+              cursor:"pointer",padding:"6px 8px 6px 0",
+              fontSize:"0.88rem",display:"flex",alignItems:"center",gap:4,
+              fontFamily:"var(--fb)",flexShrink:0,
+            }}
+            aria-label="Back"
+          >
+            <span style={{fontSize:"1rem",lineHeight:1}}>‹</span>
+          </button>
+        )}
         {onMenu && <button className="btn btn-icon" style={{display:"none"}} onClick={onMenu}>≡</button>}
         <span className="topbar-title">{title}</span>
       </div>
@@ -2527,7 +2561,7 @@ function Dashboard({ setView, activeProgram, workoutLogs, session, profileData }
 
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
 /* ── BOOKING ─────────────────────────────────────────────────────────────── */
-function Booking({ setView, profileData }) {
+function Booking({ setView, profileData, onBack }) {
   const now = new Date();
   const [selDate, setSel]         = useState(now.getDate());
   const [selTime, setTime]        = useState(null);
@@ -2583,7 +2617,7 @@ function Booking({ setView, profileData }) {
 
   return (
     <div className="page-fade">
-      <Topbar title="Book a Session" />
+      <Topbar title="Book a Session" onBack={onBack} />
       <div className="page-body">
 
         {/* ── INVENTORY LOCKED ─────────────────────────────────────────── */}
@@ -2839,7 +2873,7 @@ function Booking({ setView, profileData }) {
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
 /* ── PROGRAM ─────────────────────────────────────────────────────────────── */
-function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutComplete }) {
+function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutComplete, onBack }) {
   const [tab,       setTab]        = useState("current");
   const [activeDay, setActiveDay]  = useState(null);
   const [openEx,    setOpenEx]     = useState(null);
@@ -3125,7 +3159,7 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
   // ── PROGRAM OVERVIEW ────────────────────────────────────────────────────
   return (
     <div className="page-fade">
-      <Topbar title="My Program" actions={active ? <Tag type="blue">{active.block} · Wk {active.week}</Tag> : null} />
+      <Topbar title="My Program" onBack={onBack} actions={active ? <Tag type="blue">{active.block} · Wk {active.week}</Tag> : null} />
       <div className="page-body">
 
         {/* Tab bar */}
@@ -3280,7 +3314,7 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
 }
 
 /* ── PROGRESS ────────────────────────────────────────────────────────────── */
-function Progress({ session, workoutLogs, allPrograms }) {
+function Progress({ session, workoutLogs, allPrograms, onBack }) {
   const [weightInput,  setWeightInput]  = useState("");
   const [weightLog,    setWeightLog]    = useState([]);
   const [savingWeight, setSavingWeight] = useState(false);
@@ -3303,7 +3337,7 @@ function Progress({ session, workoutLogs, allPrograms }) {
 
   return (
     <div className="page-fade">
-      <Topbar title="Progress" />
+      <Topbar title="Progress" onBack={onBack} />
       <div className="page-body">
 
         <div className="progress-grid" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
@@ -3399,7 +3433,7 @@ function Progress({ session, workoutLogs, allPrograms }) {
 }
 
 /* ── FEEDBACK ────────────────────────────────────────────────────────────── */
-function Feedback() {
+function Feedback({ onBack }) {
   const [ratings, setRatings] = useState({});
   const [submitted, setDone]  = useState(false);
   const [loading, setLoad]    = useState(false);
@@ -3413,7 +3447,7 @@ function Feedback() {
 
   if (submitted) return (
     <div className="page-fade">
-      <Topbar title="Program Reflection" />
+      <Topbar title="Program Reflection" onBack={onBack} />
       <div className="page-body centered" style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"60vh"}}>
         <div className="empty-state">
           <span style={{fontSize:"2.5rem"}}>✓</span>
@@ -3426,7 +3460,7 @@ function Feedback() {
 
   return (
     <div className="page-fade">
-      <Topbar title="Program Reflection" />
+      <Topbar title="Program Reflection" onBack={onBack} />
       <div className="page-body" style={{maxWidth:640}}>
         <div className="card card-p mb-16">
           <p className="label mb-4">End of Block 1</p>
@@ -3478,7 +3512,7 @@ function Feedback() {
 }
 
 /* ── MESSAGES ────────────────────────────────────────────────────────────── */
-function Messages({ session, onRead }) {
+function Messages({ session, onRead, onBack }) {
   const [msgs,    setMsgs]  = useState([]);
   const [input,   setInput] = useState("");
   const [loading, setLoad]  = useState(true);
@@ -3517,7 +3551,7 @@ function Messages({ session, onRead }) {
 
   return (
     <div className="page-fade" style={{height:"calc(100vh - 0px)",display:"flex",flexDirection:"column"}}>
-      <Topbar title="Messages" />
+      <Topbar title="Messages" onBack={onBack} />
       <div style={{flex:1,overflow:"hidden"}}>
         <div className="msg-layout" style={{height:"100%"}}>
           {/* Thread list — single coach thread */}
@@ -3580,7 +3614,7 @@ function Messages({ session, onRead }) {
   );
 }
 
-function ProfileSettings({ onLogout, session, profileData }) {
+function ProfileSettings({ onLogout, session, profileData, onBack }) {
   const [tab, setTab]     = useState("profile");
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
@@ -3677,7 +3711,7 @@ function ProfileSettings({ onLogout, session, profileData }) {
 
   return (
     <div className="page-fade">
-      <Topbar title="Profile & Settings"
+      <Topbar title="Profile & Settings" onBack={onBack}
         actions={<div className="flex items-center gap-8">
           <SaveIndicator saving={saving} />
           {saved && <span className="body-sm" style={{color:"rgba(140,220,155,0.8)",fontSize:"0.7rem"}}>✓ Saved</span>}
@@ -3861,8 +3895,23 @@ function ProfileSettings({ onLogout, session, profileData }) {
 /* ── APP SHELL ───────────────────────────────────────────────────────────── */
 function AppShell({ onLogout, session }) {
   const [view, setView] = useState("home");
+  const [navStack, setNavStack] = useState([]); // history stack for back button
 
-  // ── Supabase: program + workout logs ─────────────────────────────────────
+  // Navigate forward — push current view to stack
+  const navigate = (id) => {
+    setNavStack(s => (id === "home") ? [] : [...s, view]);
+    setView(id);
+    if (id === "messages") setUnreadMsgs(0);
+  };
+
+  // Go back — pop from stack
+  const goBack = () => {
+    const prev = navStack[navStack.length - 1] ?? "home";
+    setNavStack(s => s.slice(0, -1));
+    setView(prev);
+  };
+
+  const canGoBack = navStack.length > 0;
   const [activeProgram, setActiveProgram] = useState(null);
   const [allPrograms,   setAllPrograms]   = useState([]);
   const [workoutLogs,   setWorkoutLogs]   = useState({});
@@ -3949,15 +3998,22 @@ function AppShell({ onLogout, session }) {
 
   const views = {
     home:           <Dashboard setView={navigate} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} unreadMsgs={unreadMsgs} />,
-    book:           <Booking setView={navigate} profileData={profileData} />,
-    program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
-    progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} />,
-    feedback:       <Feedback />,
-    messages:       <Messages session={session} onRead={reloadUnread} />,
-    profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} />,
-    packages:       <PackagePricing onBack={()=>navigate("home")} onConsult={()=>navigate("consultation")} />,
-    consultation:   <ConsultationFlow    onBack={()=>navigate("home")} onComplete={()=>navigate("home")} />,
-    recommendation: <ConsultationRecommendation onBack={()=>navigate("home")} onProceed={()=>navigate("home")} />,
+    book:           <Booking setView={navigate} profileData={profileData} onBack={goBack} />,
+    program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} onBack={goBack} />,
+    progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} onBack={goBack} />,
+    feedback:       <Feedback onBack={goBack} />,
+    messages:       <Messages session={session} onRead={reloadUnread} onBack={goBack} />,
+    profile:        <ProfileSettings onLogout={onLogout} session={session} profileData={profileData} onBack={goBack} />,
+    packages:       <PackagePricing onBack={goBack} onConsult={()=>navigate("consultation")} />,
+    consultation:   <ConsultationFlow    onBack={goBack} onComplete={()=>navigate("home")} />,
+    recommendation: <ConsultationRecommendation onBack={goBack} onProceed={()=>navigate("home")} />,
+  };
+
+  const VIEW_TITLES = {
+    home:"Home", book:"Book a Session", program:"My Program",
+    progress:"Progress", feedback:"Program Reflection", messages:"Messages",
+    profile:"Profile & Settings", packages:"Training Plans",
+    consultation:"Free Consultation", recommendation:"Your Plan",
   };
 
   return (
@@ -4003,6 +4059,21 @@ function AppShell({ onLogout, session }) {
           </div>
         </div>
       </aside>
+
+      {/* Mobile topbar — only shows on small screens, hidden by CSS on desktop */}
+      <div className="mob-topbar">
+        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+          {canGoBack ? (
+            <button className="mob-back-btn" onClick={goBack} aria-label="Back">
+              <span style={{fontSize:"1.2rem",lineHeight:1}}>‹</span>
+            </button>
+          ) : (
+            <div style={{width:36}} />
+          )}
+          <span className="mob-topbar-title">{VIEW_TITLES[view] || "MLVNT"}</span>
+        </div>
+        <span style={{fontFamily:"var(--fh)",fontSize:"0.8rem",fontWeight:800,letterSpacing:"0.1em",color:"var(--txt-0)",opacity:0.5}}>M</span>
+      </div>
 
       {/* Main content */}
       <div className="main-col">
