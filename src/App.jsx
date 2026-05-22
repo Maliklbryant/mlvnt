@@ -266,32 +266,76 @@ textarea.fi{resize:vertical;}
 @media(max-width:600px){.ob-card{padding:24px 18px;}}
 
 /* ── DASHBOARD ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
-.kpi{border-radius:var(--r3);padding:18px;background:var(--bg-1);border:1px solid var(--b0);}
-.kpi.hi{background:var(--acc-0);border-color:rgba(255,255,255,0.1);}
-.kpi-label{font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--txt-2);margin-bottom:6px;font-family:var(--fb);}
-.kpi-val{font-family:var(--fh);font-size:1.7rem;font-weight:700;color:var(--txt-0);line-height:1;}
-.kpi-sub{font-size:0.64rem;color:var(--txt-2);margin-top:4px;}
-.quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
-.qa-btn{border-radius:var(--r3);padding:16px 12px;background:var(--bg-1);border:1px solid var(--b0);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:all 0.2s;text-align:center;}
-.qa-btn:hover{background:var(--bg-2);border-color:var(--b1);transform:translateY(-2px);}
-.qa-ic{font-size:1.2rem;opacity:0.6;}
-.qa-lbl{font-family:var(--fh);font-size:0.6rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--txt-1);}
-.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-.panel-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
-.panel-title{font-family:var(--fh);font-size:0.75rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--txt-0);}
-.list-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--b0);}
-.list-row:last-child{border-bottom:none;}
-.list-main{font-size:0.8rem;font-weight:400;color:var(--txt-0);}
-.list-sub{font-size:0.68rem;color:var(--txt-2);margin-top:2px;}
-.coach-note-banner{padding:16px 20px;border-radius:var(--r3);background:var(--acc-0);border:1px solid rgba(255,255,255,0.08);margin-bottom:18px;display:flex;gap:14px;align-items:flex-start;}
-.notif-item{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--b0);}
-.notif-item:last-child{border-bottom:none;}
-.notif-dot{width:6px;height:6px;border-radius:50%;background:rgba(140,175,220,0.6);flex-shrink:0;margin-top:5px;}
-.notif-dot.read{background:var(--txt-2);}
-@media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr);}.quick-actions{grid-template-columns:repeat(4,1fr);}}
-@media(max-width:900px){.dash-grid{grid-template-columns:1fr;}.quick-actions{grid-template-columns:repeat(4,1fr);}}
-@media(max-width:600px){.quick-actions{grid-template-columns:repeat(4,1fr);}.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+/* Hero workout card */
+.dash-hero{border-radius:var(--r4);padding:22px 24px;background:var(--acc-0);border:1px solid var(--b1);position:relative;overflow:hidden;margin-bottom:16px;cursor:pointer;transition:border-color 0.2s,transform 0.2s;}
+.dash-hero:hover{border-color:var(--b2);transform:translateY(-1px);}
+.dash-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent);}
+.dash-hero-glow{position:absolute;top:-60%;right:-20%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(46,64,79,0.35) 0%,transparent 70%);pointer-events:none;}
+.dash-hero-eyebrow{font-size:0.52rem;letter-spacing:0.22em;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:8px;font-family:var(--fc);}
+.dash-hero-title{font-family:var(--fh);font-size:clamp(1.1rem,3vw,1.4rem);font-weight:700;letter-spacing:-0.015em;color:var(--txt-0);margin-bottom:4px;line-height:1.1;}
+.dash-hero-sub{font-size:0.72rem;color:rgba(255,255,255,0.5);line-height:1.5;}
+/* Stat strip */
+.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.dash-stat{border-radius:var(--r3);padding:16px 14px;background:var(--bg-1);border:1px solid var(--b0);position:relative;overflow:hidden;}
+.dash-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);}
+.dash-stat.accent{background:linear-gradient(135deg,var(--acc-0) 0%,rgba(30,43,58,0.6) 100%);border-color:var(--b1);}
+.dash-stat.ok{background:rgba(42,122,75,0.08);border-color:rgba(42,122,75,0.2);}
+.dash-stat.warn{background:rgba(107,74,26,0.12);border-color:rgba(180,120,40,0.2);}
+.dash-stat-n{font-family:var(--fh);font-size:1.6rem;font-weight:700;color:var(--txt-0);line-height:1;margin-bottom:4px;}
+.dash-stat-lbl{font-size:0.52rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--txt-2);font-family:var(--fb);}
+.dash-stat-sub{font-size:0.62rem;color:var(--txt-2);margin-top:3px;line-height:1.35;}
+/* Quick nav */
+.dash-nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;}
+.dash-nav-btn{border-radius:var(--r2);padding:14px 8px;background:var(--bg-1);border:1px solid var(--b0);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all 0.18s;-webkit-tap-highlight-color:transparent;}
+.dash-nav-btn:hover{background:var(--bg-2);border-color:var(--b1);}
+.dash-nav-btn:active{transform:scale(0.97);}
+.dash-nav-ic{font-size:0.95rem;opacity:0.55;line-height:1;}
+.dash-nav-lbl{font-family:var(--fh);font-size:0.54rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--txt-2);}
+/* Ring / ring progress */
+.dash-ring-wrap{display:flex;align-items:center;gap:16px;}
+.dash-ring{width:52px;height:52px;flex-shrink:0;}
+.dash-ring-track{fill:none;stroke:rgba(255,255,255,0.07);stroke-width:4;}
+.dash-ring-fill{fill:none;stroke-width:4;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset 0.8s ease;}
+/* Info card */
+.dash-card{border-radius:var(--r3);padding:18px 20px;background:var(--bg-1);border:1px solid var(--b0);margin-bottom:10px;}
+.dash-card-label{font-size:0.52rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--txt-2);margin-bottom:6px;font-family:var(--fb);}
+.dash-card-val{font-family:var(--fh);font-size:0.95rem;font-weight:700;color:var(--txt-0);line-height:1.2;}
+.dash-card-sub{font-size:0.66rem;color:var(--txt-2);margin-top:4px;line-height:1.5;}
+/* Coach note */
+.dash-note{padding:16px 18px;border-radius:var(--r3);background:var(--acc-0);border:1px solid rgba(255,255,255,0.08);margin-bottom:14px;position:relative;overflow:hidden;}
+.dash-note::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.14),transparent);}
+.dash-note-from{font-size:0.52rem;letter-spacing:0.16em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:5px;font-family:var(--fc);}
+.dash-note-body{font-size:0.82rem;color:var(--txt-1);line-height:1.7;font-weight:300;}
+/* Block progress bar */
+.dash-prog-bar{height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:8px;}
+.dash-prog-fill{height:100%;background:linear-gradient(90deg,rgba(60,100,160,0.7),rgba(80,140,220,0.5));border-radius:2px;transition:width 0.8s ease;}
+/* Streak chip */
+.dash-streak{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;background:rgba(220,160,60,0.12);border:1px solid rgba(220,160,60,0.2);font-family:var(--fc);font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(220,175,100,0.9);}
+/* Empty premium state */
+.dash-empty{border-radius:var(--r4);padding:32px 20px;background:var(--gb);border:1px solid var(--b0);text-align:center;margin-bottom:14px;}
+.dash-empty-title{font-family:var(--fh);font-size:0.94rem;font-weight:700;color:var(--txt-0);margin-bottom:6px;letter-spacing:-0.01em;}
+.dash-empty-sub{font-size:0.74rem;color:var(--txt-2);line-height:1.65;max-width:260px;margin:0 auto;}
+/* Coach dashboard */
+.coach-dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.coach-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+/* Client row in coach dash */
+.coach-client-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--b0);}
+.coach-client-row:last-child{border-bottom:none;}
+/* Panel hd */
+.panel-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+.panel-title{font-family:var(--fh);font-size:0.72rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--txt-0);}
+@media(max-width:900px){.coach-dash-grid{grid-template-columns:1fr;}.coach-stat-row{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:600px){
+  .dash-stats{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .dash-stat{padding:14px 12px;}
+  .dash-stat-n{font-size:1.35rem;}
+  .dash-nav{grid-template-columns:repeat(4,1fr);gap:6px;}
+  .dash-nav-btn{padding:12px 6px;}
+  .coach-stat-row{grid-template-columns:repeat(3,1fr);gap:8px;}
+  .coach-dash-grid{grid-template-columns:1fr;gap:10px;}
+  .dash-hero{padding:18px 16px;}
+  .dash-card{padding:14px 14px;}
+}
 
 /* ── SCHEDULING ── */
 .cal-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
@@ -2266,179 +2310,215 @@ function SessionAlert({ setView, profileData }) {
 
 /* ── DASHBOARD ───────────────────────────────────────────────────────────── */
 function Dashboard({ setView, activeProgram, workoutLogs, session, profileData }) {
-  // ── Real date string ────────────────────────────────────────────────────
-  const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  const today  = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  const hour   = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = (session?.name || "").split(" ")[0] || null;
 
-  // Greeting uses real name from Supabase profiles (via auth.js buildSession).
-  const firstName = (session?.name || "").split(" ")[0] || "Welcome";
-
-  // profileData comes from AppShell (loaded once via getClientProfile in db.js).
-  // Null while loading — all KPIs degrade gracefully to "—".
-
-  // active program comes from AppShell → getActiveProgram() in db.js
-  const prog = activeProgram; // null | { id, name, block, phase, week, totalWeeks, days, coachNote, updatedAt }
-
-  // Today's workout — only computed when a real program exists
-  const DOW_MAP  = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
+  const prog    = activeProgram;
+  const DOW_MAP = { 0:"sun",1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat" };
   const todayId  = DOW_MAP[new Date().getDay()];
   const todayDay = prog?.days?.find(d => d.id === todayId) || null;
-  const isDone      = todayDay ? wlIsDone(workoutLogs, prog.id, todayId) : false;
-  const totalSets   = todayDay ? wlTotalSets(todayDay.exercises) : 0;
-  const checked     = todayDay ? wlTotalChecked(workoutLogs, prog.id, todayId, todayDay.exercises) : 0;
-  const inProgress  = checked > 0 && !isDone;
+  const isDone   = todayDay ? wlIsDone(workoutLogs, prog.id, todayId)   : false;
+  const totalSets = todayDay ? wlTotalSets(todayDay.exercises) : 0;
+  const checked   = todayDay ? wlTotalChecked(workoutLogs, prog.id, todayId, todayDay.exercises) : 0;
+  const inProgress = checked > 0 && !isDone;
+
+  // Weekly completion
+  const summary = prog ? wlProgramSummary(workoutLogs, prog.id, prog.days) : null;
+  const weekPct  = summary ? summary.pct : 0;
+
+  // Sessions balance
+  const sessBalance = profileData?.sessions_balance ?? null;
+  const plan        = profileData?.package_plan || null;
+
+  // Ring circumference for SVG ring
+  const R = 20; const C = 2 * Math.PI * R;
+  const ringOffset = C - (weekPct / 100) * C;
+
+  const NAV_ITEMS = [
+    {ic:"◷", lbl:"Book",     v:"book"},
+    {ic:"▦", lbl:"Program",  v:"program"},
+    {ic:"◈", lbl:"Progress", v:"progress"},
+    {ic:"✉", lbl:"Messages", v:"messages"},
+  ];
 
   return (
     <div className="page-fade">
-      {/* FIX: title uses real firstName, not hardcoded "Jordan" */}
-      <Topbar title={firstName === "Welcome" ? "Welcome." : `Good morning, ${firstName}.`}
-        actions={<button className="btn btn-p btn-sm" onClick={()=>setView("book")}>+ Book Session</button>} />
+      <Topbar
+        title={firstName ? `${greeting}, ${firstName}.` : "Dashboard"}
+        actions={
+          <button className="btn btn-p btn-sm" style={{fontSize:"0.64rem",padding:"7px 14px"}} onClick={()=>setView("book")}>
+            + Book
+          </button>
+        }
+      />
+      <div className="page-body" style={{paddingBottom:80}}>
+        <p style={{fontSize:"0.6rem",color:"var(--txt-2)",marginBottom:18,letterSpacing:"0.08em"}}>{today}</p>
 
-      <div className="page-body">
-        <p className="body-sm mb-20" style={{color:"var(--txt-2)"}}>{today}</p>
+        {/* ── HERO: Today's Workout ── */}
+        {prog && todayDay ? (
+          <div className={`dash-hero${isDone ? " dash-hero-done" : ""}`}
+            style={isDone ? {background:"rgba(42,122,75,0.12)",borderColor:"rgba(42,122,75,0.25)"} : {}}
+            onClick={()=>setView("program")}>
+            <div className="dash-hero-glow" />
+            <div style={{position:"relative",zIndex:1}}>
+              <p className="dash-hero-eyebrow">
+                {isDone ? "Completed ✓" : inProgress ? "In Progress" : "Today's Workout"}
+              </p>
+              <p className="dash-hero-title">{todayDay.name}</p>
+              <p className="dash-hero-sub">
+                {todayDay.focus && `${todayDay.focus} · `}{todayDay.exercises.length} exercises
+                {inProgress ? ` · ${checked}/${totalSets} sets done` : ""}
+              </p>
+              <div style={{marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {[{l:"Block",v:prog.block},{l:"Phase",v:prog.phase||"—"},{l:`Wk ${prog.week}/${prog.totalWeeks}`,v:null}].map(({l,v})=>(
+                    <div key={l} style={{padding:"4px 10px",borderRadius:100,background:"rgba(0,0,0,0.25)",border:"1px solid rgba(255,255,255,0.08)",display:"flex",gap:5,alignItems:"center"}}>
+                      <span style={{fontSize:"0.55rem",color:"rgba(255,255,255,0.35)",letterSpacing:"0.1em",textTransform:"uppercase",fontFamily:"var(--fc)"}}>{l}</span>
+                      {v && <span style={{fontSize:"0.62rem",color:"rgba(255,255,255,0.65)",fontFamily:"var(--fc)"}}>{v}</span>}
+                    </div>
+                  ))}
+                </div>
+                {!isDone && (
+                  <button
+                    className="btn btn-p btn-sm"
+                    style={{flexShrink:0,fontSize:"0.64rem",padding:"8px 16px"}}
+                    onClick={e=>{e.stopPropagation();setView("program");}}
+                  >
+                    {inProgress ? "Continue →" : "Start →"}
+                  </button>
+                )}
+                {isDone && (
+                  <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.85)",fontFamily:"var(--fc)",letterSpacing:"0.08em"}}>Done ✓</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : prog ? (
+          /* Has program but no workout today */
+          <div className="dash-hero" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
+            <div className="dash-hero-glow" />
+            <div style={{position:"relative",zIndex:1}}>
+              <p className="dash-hero-eyebrow">Active Program</p>
+              <p className="dash-hero-title">{prog.name}</p>
+              <p className="dash-hero-sub">{prog.block}{prog.phase ? ` · ${prog.phase}` : ""} · Week {prog.week} of {prog.totalWeeks}</p>
+              <div className="dash-prog-bar" style={{marginTop:12}}>
+                <div className="dash-prog-fill" style={{width:`${Math.round((prog.week/prog.totalWeeks)*100)}%`}} />
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                <span style={{fontSize:"0.6rem",color:"rgba(255,255,255,0.35)",fontFamily:"var(--fc)"}}>Week {prog.week}</span>
+                <span style={{fontSize:"0.6rem",color:"rgba(255,255,255,0.35)",fontFamily:"var(--fc)"}}>{prog.totalWeeks} weeks total</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* No program */
+          <div className="dash-empty" style={{marginBottom:16}}>
+            <p className="dash-empty-title">No program assigned yet</p>
+            <p className="dash-empty-sub">Your coach is preparing your training plan. It will appear here when ready.</p>
+          </div>
+        )}
 
-        {/* KPIs
-            FIX: "Next Session" — removed hardcoded "Fri 6 PM". Shows "—"
-                 until real scheduling data is wired.
-            FIX: Sessions Available — reads from profileData (Supabase
-                 client_profiles.sessions_balance), not SESSION_INVENTORY.
-            FIX: Current Block — reads from real activeProgram prop.
-            FIX: Birthday Reward — removed hardcoded "Expires Apr 30".
-        */}
-        <div className="kpi-grid">
-          <div className="kpi">
-            <p className="kpi-label">Next Session</p>
-            {/* REMOVED: hardcoded "Fri 6 PM" — no fake scheduling data */}
-            <div className="kpi-val" style={{fontSize:"1.1rem",marginTop:4}}>—</div>
-            <p className="kpi-sub">Book a session below</p>
-          </div>
-          <div className="kpi hi">
-            <p className="kpi-label">Sessions Available</p>
-            <div className="kpi-val">{profileData?.sessions_balance ?? "—"}</div>
-            <p className="kpi-sub">{profileData?.package_plan || "—"}</p>
-          </div>
-          <div className="kpi">
-            <p className="kpi-label">Current Block</p>
-            {/* FIX: real block from Supabase programs table via activeProgram prop */}
-            <div className="kpi-val" style={{fontSize:"1rem",marginTop:4}}>
-              {prog?.block || "—"}
+        {/* ── STAT STRIP ── */}
+        <div className="dash-stats">
+          {/* Weekly completion ring + pct */}
+          <div className="dash-stat" style={{display:"flex",alignItems:"center",gap:12,gridColumn:"span 1"}}>
+            <svg className="dash-ring" viewBox="0 0 48 48">
+              <circle className="dash-ring-track" cx="24" cy="24" r={R}/>
+              <circle className="dash-ring-fill"
+                cx="24" cy="24" r={R}
+                stroke={weekPct===0?"rgba(255,255,255,0.1)":weekPct===100?"rgba(42,122,75,0.7)":"rgba(80,130,200,0.65)"}
+                strokeDasharray={C}
+                strokeDashoffset={ringOffset}/>
+            </svg>
+            <div>
+              <p className="dash-stat-lbl">This Week</p>
+              <p className="dash-stat-n" style={{fontSize:"1.3rem"}}>{weekPct}<span style={{fontSize:"0.7rem",fontFamily:"var(--fb)",opacity:0.5}}>%</span></p>
+              <p className="dash-stat-sub">{summary ? `${summary.completed}/${summary.total} days` : "No program"}</p>
             </div>
-            <p className="kpi-sub">
-              {prog ? `${prog.phase} · Wk ${prog.week}` : "No active program"}
-            </p>
           </div>
-          <div className="kpi">
-            <p className="kpi-label">{
-              (session?.role === "admin" || session?.role === "owner" || session?.isOwner)
-                ? "Coach Portal" : "Member"
-            }</p>
-            <div className="kpi-val" style={{fontSize:"0.78rem",marginTop:4,color:"var(--txt-1)"}}>
-              {session?.email?.split("@")[0] || "—"}
-            </div>
-            <p className="kpi-sub">{
-              (session?.role === "admin" || session?.role === "owner" || session?.isOwner)
-                ? "Admin account" : "Active client"
-            }</p>
+
+          {/* Sessions balance */}
+          <div className={`dash-stat${sessBalance === 0 ? " warn" : sessBalance !== null && sessBalance <= 2 ? " warn" : ""}`}>
+            <p className="dash-stat-lbl">Sessions</p>
+            <p className="dash-stat-n">{sessBalance ?? "—"}</p>
+            <p className="dash-stat-sub">{plan || "Available"}</p>
+          </div>
+
+          {/* Current phase */}
+          <div className="dash-stat">
+            <p className="dash-stat-lbl">Phase</p>
+            <p className="dash-stat-n" style={{fontSize:"0.9rem",marginTop:3}}>{prog?.phase || "—"}</p>
+            <p className="dash-stat-sub">{prog?.block || "No block"}</p>
+          </div>
+
+          {/* Streak placeholder — will light up once adherence data exists */}
+          <div className="dash-stat">
+            <p className="dash-stat-lbl">Streak</p>
+            <p className="dash-stat-n">—</p>
+            <p className="dash-stat-sub">Log workouts</p>
           </div>
         </div>
 
-        {/* Quick actions — layout unchanged */}
-        <div className="quick-actions">
-          {[["◷","Book","book"],["▦","Program","program"],["◈","Progress","progress"],["✉","Messages","messages"]].map(([ic,lbl,v])=>(
-            <div className="qa-btn" key={v} onClick={()=>setView(v)}>
-              <span className="qa-ic">{ic}</span>
-              <span className="qa-lbl">{lbl}</span>
-            </div>
+        {/* ── QUICK NAV ── */}
+        <div className="dash-nav" style={{marginBottom:16}}>
+          {NAV_ITEMS.map(({ic,lbl,v})=>(
+            <button key={v} className="dash-nav-btn" onClick={()=>setView(v)}>
+              <span className="dash-nav-ic">{ic}</span>
+              <span className="dash-nav-lbl">{lbl}</span>
+            </button>
           ))}
         </div>
 
-        {/* Coach note — only rendered when real program has a coach_note */}
+        {/* ── COACH NOTE ── */}
         {prog?.coachNote && (
-          <div className="coach-note-banner">
-            <div style={{width:6,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.3)",flexShrink:0,marginTop:4}} />
-            <div style={{flex:1}}>
-              <p className="label mb-6">Latest Coach Note</p>
-              <p className="body">{prog.coachNote}</p>
-              <p className="body-sm mt-8" style={{color:"var(--txt-2)"}}>From Malik · Updated {prog.updatedAt ? new Date(prog.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "recently"}</p>
+          <div className="dash-note" style={{marginBottom:14}}>
+            <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--fh)",fontSize:"0.55rem",fontWeight:700,color:"rgba(255,255,255,0.5)",flexShrink:0,marginTop:1}}>MB</div>
+              <div style={{flex:1}}>
+                <p className="dash-note-from">Coach Note · {prog.updatedAt ? new Date(prog.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "Recent"}</p>
+                <p className="dash-note-body">{prog.coachNote}</p>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Session balance alert */}
+        {/* ── SESSION ALERT (low balance) ── */}
         <SessionAlert setView={setView} profileData={profileData} />
 
-        {/* Held inventory panel removed — will be re-wired when booking/package system is connected to Supabase */}
-
-        {/* Notifications — real notification system is a future feature.
-            Panel is preserved for layout; shows empty state until wired. */}
-        <div className="mb-16">
-          <div className="card card-p mb-16">
-            <div className="panel-hd">
-              <span className="panel-title">Notifications</span>
-            </div>
-            <div className="empty-state" style={{padding:"24px 0"}}>
-              <span className="empty-ic">◎</span>
-              <p className="empty-txt">No notifications yet.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Today's workout card — only shown when a real active program exists
-            AND that program has a day matching today's day-of-week ID.
-            If prog is null (no Supabase row) this block is skipped entirely. */}
-        {prog && todayDay && (
-          <div style={{borderRadius:"var(--r3)",padding:"16px 18px",marginBottom:16,background:isDone?"rgba(42,122,75,0.08)":"var(--gb2)",border:`1px solid ${isDone?"rgba(42,122,75,0.2)":"var(--b1)"}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}} onClick={()=>setView("program")}>
-            <div>
-              <p className="label mb-3">Today's Workout</p>
-              <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,color:"var(--txt-0)"}}>{todayDay.name} — {todayDay.focus}</p>
-              <p style={{fontSize:"0.7rem",color:"var(--txt-1)",marginTop:3}}>{todayDay.exercises.length} exercises{inProgress?` · ${checked}/${totalSets} sets done`:""}</p>
-            </div>
-            {isDone
-              ? <span className="wk-done-badge">✓ Complete</span>
-              : <button className="btn btn-p btn-sm" onClick={e=>{e.stopPropagation();setView("program");}}>
-                  {inProgress?"Continue →":"Start Workout →"}
-                </button>
-            }
-          </div>
-        )}
-
-        {/* Active program card — only rendered when getActiveProgram() returned
-            a real row with status="active" from the Supabase programs table. */}
+        {/* ── PROGRAM OVERVIEW (if prog, secondary info) ── */}
         {prog && (
-          <div className="prog-dash-card" onClick={()=>setView("program")} style={{cursor:"pointer"}}>
+          <div className="dash-card" style={{cursor:"pointer",marginBottom:10}} onClick={()=>setView("program")}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
-                <p className="label mb-3">Active Program</p>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)"}}>{prog.name}</p>
-                <p style={{fontSize:"0.72rem",color:"var(--txt-1)",marginTop:3}}>{prog.block} · {prog.phase}</p>
+                <p className="dash-card-label">Training Days</p>
+                <p className="dash-card-val">{prog.name}</p>
               </div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                <span className="prog-status-pill active">Active</span>
-                <p style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>Wk {prog.week}/{prog.totalWeeks}</p>
-              </div>
+              <span style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)"}}>View →</span>
             </div>
-            <div className="prog-week-bar"><div className="prog-week-fill" style={{width:`${Math.round((prog.week/prog.totalWeeks)*100)}%`}} /></div>
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>{prog.days.length} training days · {prog.days.reduce((s,d)=>s+d.exercises.length,0)} exercises</p>
-              <p style={{fontSize:"0.63rem",color:"var(--txt-2)"}}>View program →</p>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {(prog.days||[]).map(d => {
+                const done = wlIsDone(workoutLogs, prog.id, d.id);
+                const isToday = d.id === todayId;
+                return (
+                  <span key={d.id} style={{
+                    padding:"4px 10px",
+                    borderRadius:100,
+                    fontSize:"0.6rem",
+                    fontFamily:"var(--fc)",
+                    letterSpacing:"0.06em",
+                    background:done?"rgba(42,122,75,0.12)":isToday?"var(--acc-0)":"rgba(255,255,255,0.04)",
+                    border:`1px solid ${done?"rgba(42,122,75,0.25)":isToday?"var(--b1)":"var(--b0)"}`,
+                    color:done?"rgba(140,210,155,0.85)":isToday?"var(--txt-0)":"var(--txt-2)",
+                  }}>
+                    {done ? "✓ " : ""}{d.name}
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}
-
-        {/* EMPTY STATE — shown when getActiveProgram() returns null
-            (no row in Supabase programs table with status="active" for this client).
-            FIX: replaced vague "No active program assigned yet." with the required
-            two-line empty state message. */}
-        {!prog && (
-          <div style={{borderRadius:"var(--r3)",padding:"28px 20px",marginBottom:16,background:"var(--gb2)",border:"1px solid var(--b1)",textAlign:"center"}}>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.96rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>
-              No program assigned yet
-            </p>
-            <p style={{fontSize:"0.78rem",color:"var(--txt-2)",lineHeight:1.65}}>
-              Your coach is preparing your training plan
-            </p>
-          </div>
-        )}
-
       </div>
     </div>
   );
@@ -3868,7 +3948,7 @@ function AppShell({ onLogout, session }) {
   };
 
   const views = {
-    home:           <Dashboard setView={navigate} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} />,
+    home:           <Dashboard setView={navigate} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} unreadMsgs={unreadMsgs} />,
     book:           <Booking setView={navigate} profileData={profileData} />,
     program:        <Program session={session} activeProgram={activeProgram} allPrograms={allPrograms} workoutLogs={workoutLogs} onWorkoutComplete={reloadProgramData} />,
     progress:       <Progress session={session} workoutLogs={workoutLogs} allPrograms={allPrograms} />,
@@ -4387,179 +4467,170 @@ function OpenDirBtn({ location }) {
 }
 
 /* ── ADMIN DASHBOARD ─────────────────────────────────────────────────────── */
-function AdminDashboard({ setView, setFocusClient, dbClients }) {
-  const clients    = dbClients || [];
-  const lowSess    = clients.filter(c => c.sessLeft <= 2 && c.status !== "renewal");
-  const renewalDue = clients.filter(c => c.status === "renewal");
-  const zeroSess   = clients.filter(c => c.sessLeft === 0);
-  const birthdays  = clients.filter(c => c.birthdayReward);
-  const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
-
-  const attentionItems = [
-    ...zeroSess.map(c=>({name:c.name,msg:"0 sessions remaining — booking blocked",type:"err",id:c.id,tag:"Blocked"})),
-    ...lowSess.filter(c=>c.sessLeft>0&&c.sessLeft<=1).map(c=>({name:c.name,msg:"1 session remaining — renewal needed",type:"err",id:c.id,tag:"Critical"})),
-    ...lowSess.filter(c=>c.sessLeft>1).map(c=>({name:c.name,msg:`${c.sessLeft} sessions remaining`,type:"warn",id:c.id,tag:"Low"})),
-    ...renewalDue.map(c=>({name:c.name,msg:"Package renewal pending",type:"err",id:c.id,tag:"Renewal"})),
-  ];
+function AdminDashboard({ setView, setFocusClient, dbClients, notifCounts }) {
+  const clients     = dbClients || [];
+  const alerts      = notifCounts || {};
+  const lowSess     = clients.filter(c => c.sessLeft <= 2 && c.sessLeft > 0);
+  const blockedSess = clients.filter(c => c.sessLeft === 0);
+  const attention   = [...blockedSess, ...lowSess].slice(0, 6);
+  const today       = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  const hour        = new Date().getHours();
+  const greeting    = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const QUICK = [
-    {ic:"▦", lbl:"Programs", v:"programs"},
-    {ic:"◉", lbl:"Clients",  v:"clients"},
-    {ic:"◷", lbl:"Schedule", v:"schedule"},
-    {ic:"✉", lbl:"Messages", v:"messages"},
+    {ic:"▦", lbl:"Programs",     v:"programs"},
+    {ic:"◉", lbl:"Clients",      v:"clients"},
+    {ic:"◷", lbl:"Schedule",     v:"schedule"},
+    {ic:"✉", lbl:"Messages",     v:"messages", badge: alerts.messages},
+    {ic:"◎", lbl:"Consults",     v:"consultations", badge: alerts.consultations},
+    {ic:"⬡", lbl:"Packages",     v:"packages"},
   ];
 
   return (
     <div className="page-fade">
       <AdminTopbar
-        title="Dashboard"
+        title="Overview"
         actions={
-          <button
-            className="btn btn-p btn-sm"
-            style={{fontSize:"0.66rem",padding:"6px 12px",letterSpacing:"0.04em"}}
-            onClick={()=>setView("schedule")}
-          >Schedule</button>
+          <button className="btn btn-p btn-sm" style={{fontSize:"0.64rem",padding:"7px 14px"}} onClick={()=>setView("schedule")}>
+            Schedule
+          </button>
         }
       />
       <div className="admin-body">
+        <p style={{fontSize:"0.6rem",color:"var(--txt-2)",marginBottom:16,letterSpacing:"0.08em"}}>{today}</p>
 
-        {/* Date */}
-        <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginBottom:14,letterSpacing:"0.04em"}}>{today}</p>
+        {/* ── LIVE STAT STRIP ── */}
+        <div className="coach-stat-row" style={{marginBottom:14}}>
+          <div className="dash-stat accent">
+            <p className="dash-stat-lbl">Active Clients</p>
+            <p className="dash-stat-n">{clients.length || "—"}</p>
+            <p className="dash-stat-sub">{clients.length ? "All packages" : "No clients yet"}</p>
+          </div>
+          <div className={`dash-stat${(alerts.consultations > 0) ? " warn" : ""}`}>
+            <p className="dash-stat-lbl">Consultations</p>
+            <p className="dash-stat-n">{alerts.consultations > 0 ? alerts.consultations : "—"}</p>
+            <p className="dash-stat-sub">{alerts.consultations > 0 ? "Pending review" : "None pending"}</p>
+          </div>
+          <div className={`dash-stat${(alerts.messages > 0) ? " accent" : ""}`}>
+            <p className="dash-stat-lbl">Messages</p>
+            <p className="dash-stat-n">{alerts.messages > 0 ? alerts.messages : "—"}</p>
+            <p className="dash-stat-sub">{alerts.messages > 0 ? "Unread" : "All read"}</p>
+          </div>
+        </div>
 
-        {/* Quick Actions — always rendered, CSS controls layout by breakpoint */}
-        <div className="admin-quick-actions" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
-          {QUICK.map(({ic,lbl,v})=>(
-            <button
-              key={v}
-              className="admin-quick-btn"
+        {/* ── QUICK NAV ── 6-button grid */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8,marginBottom:16}}
+          className="admin-quick-actions">
+          {QUICK.map(({ic,lbl,v,badge})=>(
+            <button key={v}
+              className="admin-quick-btn dash-nav-btn"
               onClick={()=>setView(v)}
-              style={{
-                padding:"12px 8px",
-                borderRadius:"var(--r2)",
-                border:"1px solid var(--b0)",
-                background:"var(--bg-1)",
-                cursor:"pointer",
-                display:"flex",
-                flexDirection:"column",
-                alignItems:"center",
-                gap:6,
-                transition:"border-color 0.17s,background 0.17s",
-              }}
-            >
-              <span className="admin-quick-btn-ic" style={{fontSize:"1rem",opacity:0.65,lineHeight:1}}>{ic}</span>
-              <span className="admin-quick-btn-lbl" style={{fontSize:"0.58rem",color:"var(--txt-1)",fontFamily:"var(--fc)",letterSpacing:"0.08em",textTransform:"uppercase"}}>{lbl}</span>
+              style={{padding:"12px 6px",borderRadius:"var(--r2)",border:"1px solid var(--b0)",background:"var(--bg-1)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5,position:"relative",transition:"all 0.17s"}}>
+              <span style={{fontSize:"0.9rem",opacity:0.55,lineHeight:1}}>{ic}</span>
+              <span style={{fontSize:"0.52rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase"}}>{lbl}</span>
+              {badge > 0 && (
+                <span style={{position:"absolute",top:5,right:5,width:14,height:14,borderRadius:"50%",background:"rgba(200,80,80,0.85)",color:"white",fontSize:"0.45rem",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--fc)",fontWeight:700}}>{badge}</span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* KPI row */}
-        <div className="a-kpi-row">
-          <div className="a-kpi accent">
-            <p className="a-kpi-lbl">Active Clients</p>
-            <div className="a-kpi-n">{clients.length || "—"}</div>
-            <p className="a-kpi-sub">{clients.length ? "All packages" : "No clients yet"}</p>
-          </div>
-          <div className="a-kpi">
-            <p className="a-kpi-lbl">Sessions Today</p>
-            <div className="a-kpi-n">—</div>
-            <p className="a-kpi-sub">Connect scheduling</p>
-          </div>
-          <div className="a-kpi warn">
-            <p className="a-kpi-lbl">Low / Renewal</p>
-            <div className="a-kpi-n">{lowSess.length + renewalDue.length || "—"}</div>
-            <p className="a-kpi-sub">
-              {lowSess.length + renewalDue.length ? "Need attention" : "All good"}
-            </p>
-          </div>
-          <div className="a-kpi ok">
-            <p className="a-kpi-lbl">Programs</p>
-            <div className="a-kpi-n">—</div>
-            <p className="a-kpi-sub">Via Programs tab</p>
-          </div>
-        </div>
+        {/* ── MAIN GRID ── */}
+        <div className="coach-dash-grid">
 
-        {/* Attention + secondary panels */}
-        <div className="a-grid-2" style={{marginBottom:14}}>
+          {/* Needs Attention */}
           <div className="a-panel">
             <div className="a-panel-hd">
               <span className="a-panel-title">Needs Attention</span>
-              {attentionItems.length > 0 && (
-                <span style={{fontSize:"0.6rem",color:"rgba(220,120,80,0.8)",fontFamily:"var(--fc)"}}>
-                  {attentionItems.length}
-                </span>
+              {attention.length > 0 && (
+                <span style={{fontSize:"0.6rem",background:"rgba(200,80,80,0.15)",color:"rgba(220,120,120,0.85)",border:"1px solid rgba(200,80,80,0.2)",padding:"2px 8px",borderRadius:100,fontFamily:"var(--fc)",letterSpacing:"0.08em"}}>{attention.length}</span>
               )}
             </div>
-            {attentionItems.length ? attentionItems.map((a,i)=>(
-              <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(a.id);setView("clients");}}>
-                <div>
-                  <p className="a-row-main">{a.name}</p>
-                  <p className="a-row-sub">{a.msg}</p>
+            {attention.length ? attention.map((c,i)=>{
+              const isBlocked = c.sessLeft === 0;
+              return (
+                <div key={i} className="coach-client-row" style={{cursor:"pointer"}} onClick={()=>{setFocusClient(c.id);setView("clients");}}>
+                  <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
+                    <div className="c-av">{c.init}</div>
+                    <div style={{minWidth:0}}>
+                      <p style={{fontSize:"0.78rem",fontWeight:500,color:"var(--txt-0)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</p>
+                      <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:1}}>
+                        {isBlocked ? "Booking blocked — 0 sessions" : `${c.sessLeft} session${c.sessLeft!==1?"s":""} remaining`}
+                      </p>
+                    </div>
+                  </div>
+                  <ATag type={isBlocked?"err":"warn"}>{isBlocked?"Blocked":"Low"}</ATag>
                 </div>
-                <ATag type={a.type}>{a.tag}</ATag>
+              );
+            }) : (
+              <div style={{padding:"16px 0",textAlign:"center"}}>
+                <p style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.7)",fontFamily:"var(--fc)",letterSpacing:"0.1em"}}>ALL CLIENTS ACTIVE ✓</p>
               </div>
-            )) : (
-              <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No urgent items.</p>
             )}
           </div>
 
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <div className="a-panel">
-              <div className="a-panel-hd"><span className="a-panel-title">Birthday Rewards</span></div>
-              {birthdays.length ? birthdays.map((c,i)=>(
-                <div className="a-row" key={i}>
-                  <div>
-                    <p className="a-row-main">{c.name}</p>
-                    <p className="a-row-sub">Birthday {c.birthday} · Active</p>
-                  </div>
-                  <ATag type="ok">Active</ATag>
-                </div>
-              )) : (
-                <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No active rewards.</p>
-              )}
+          {/* Client Overview */}
+          <div className="a-panel">
+            <div className="a-panel-hd">
+              <span className="a-panel-title">Clients</span>
+              <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("clients")}>View all →</button>
             </div>
-            <div className="a-panel">
-              <div className="a-panel-hd">
-                <span className="a-panel-title">Recent Feedback</span>
-                <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("feedback")}>View all →</button>
+            {clients.length ? clients.slice(0,5).map((c,i)=>{
+              const isZero = c.sessLeft === 0;
+              const isLow  = c.sessLeft <= 2 && !isZero;
+              return (
+                <div key={i} className="coach-client-row" style={{cursor:"pointer"}} onClick={()=>{setFocusClient(c.id);setView("clients");}}>
+                  <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
+                    <div className="c-av">{c.init}</div>
+                    <div style={{minWidth:0}}>
+                      <p style={{fontSize:"0.78rem",fontWeight:500,color:"var(--txt-0)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</p>
+                      <p style={{fontSize:"0.63rem",color:"var(--txt-2)",marginTop:1}}>{c.pkg || "—"}</p>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+                    <span style={{fontSize:"0.7rem",fontFamily:"var(--fc)",fontWeight:600,color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-2)"}}>{c.sessLeft}</span>
+                    {isZero && <ATag type="err">0</ATag>}
+                    {isLow && !isZero && <ATag type="warn">Low</ATag>}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="dash-empty" style={{padding:"24px 0",background:"none",border:"none"}}>
+                <p className="dash-empty-title" style={{fontSize:"0.8rem"}}>No clients yet</p>
+                <p className="dash-empty-sub" style={{fontSize:"0.68rem"}}>Clients appear here once they sign up and are assigned packages.</p>
               </div>
-              <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet.</p>
+            )}
+            {clients.length > 5 && (
+              <button className="btn btn-ghost" style={{fontSize:"0.64rem",marginTop:8,width:"100%",textAlign:"center"}} onClick={()=>setView("clients")}>
+                +{clients.length - 5} more →
+              </button>
+            )}
+          </div>
+
+        </div>
+
+        {/* ── SECONDARY ROW: Feedback + Recent ── */}
+        <div className="coach-dash-grid">
+          <div className="a-panel">
+            <div className="a-panel-hd">
+              <span className="a-panel-title">Program Activity</span>
+              <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("programs")}>Manage →</button>
+            </div>
+            <div style={{padding:"12px 0",textAlign:"center"}}>
+              <p style={{fontSize:"0.7rem",color:"var(--txt-2)",lineHeight:1.65}}>Client workout completions appear here. Assign programs to clients to start tracking.</p>
+            </div>
+          </div>
+          <div className="a-panel">
+            <div className="a-panel-hd">
+              <span className="a-panel-title">Feedback</span>
+              <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("feedback")}>View →</button>
+            </div>
+            <div style={{padding:"12px 0",textAlign:"center"}}>
+              <p style={{fontSize:"0.7rem",color:"var(--txt-2)",lineHeight:1.65}}>Client reflections appear here after they submit end-of-block feedback.</p>
             </div>
           </div>
         </div>
 
-        {/* Package overview */}
-        <div className="a-panel">
-          <div className="a-panel-hd">
-            <span className="a-panel-title">Package Overview</span>
-            <button className="btn btn-ghost" style={{fontSize:"0.62rem"}} onClick={()=>setView("packages")}>Manage →</button>
-          </div>
-          {clients.length ? clients.map((c,i)=>{
-            const isZero = c.sessLeft === 0;
-            const isLow  = c.sessLeft <= 2 && !isZero;
-            return (
-              <div className="a-row" key={i} style={{cursor:"pointer"}} onClick={()=>{setFocusClient(c.id);setView("clients");}}>
-                <div style={{display:"flex",gap:9,alignItems:"center",flex:1,minWidth:0}}>
-                  <div className="c-av">{c.init}</div>
-                  <div>
-                    <p className="a-row-main">{c.name}</p>
-                    <p className="a-row-sub">{c.pkg}</p>
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                  <span style={{
-                    fontSize:"0.7rem",
-                    color: isZero ? "rgba(220,120,120,0.9)" : isLow ? "rgba(220,175,100,0.9)" : "var(--txt-1)",
-                    fontFamily:"var(--fc)",fontWeight:600,
-                  }}>{c.sessLeft}</span>
-                  {isZero && <ATag type="err">Blocked</ATag>}
-                  {isLow  && !isZero && <ATag type="warn">Low</ATag>}
-                </div>
-              </div>
-            );
-          }) : (
-            <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No clients yet.</p>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -7896,7 +7967,7 @@ function AdminShell({ onLogout, session }) {
   };
 
   const views = {
-    dashboard:    <AdminDashboard setView={navigate} setFocusClient={setFocusClient} dbClients={dbClients} />,
+    dashboard:    <AdminDashboard setView={navigate} setFocusClient={setFocusClient} dbClients={dbClients} notifCounts={notifCounts} />,
     consultations:<AdminConsultations setView={navigate} session={session} onReviewed={loadNotifCounts} />,
     clients:      <AdminClients   setView={navigate} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
     programs:     <AdminPrograms  session={session} />,
