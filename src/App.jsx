@@ -36,6 +36,7 @@ import {
   sendMessage,
   getUnreadMessageCount,
   getCoachId,
+  createClientInvite,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -4252,10 +4253,41 @@ const ADMIN_CSS = `
 .pb-ex-table{display:block;}
 .pb-ex-card-mob{display:none;flex-direction:column;gap:0;}
 .pb-save-bar{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+/* ── Admin mobile topbar ── (hidden on desktop) */
+.admin-mob-topbar{display:none;}
+.admin-mob-back{width:36px;height:36px;border-radius:50%;background:var(--gb);border:1px solid var(--b0);color:var(--txt-1);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;}
+.admin-mob-back:active{background:var(--gb2);}
+.admin-mob-topbar-title{font-family:var(--fh);font-size:0.82rem;font-weight:700;letter-spacing:-0.01em;color:var(--txt-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Client list — mobile cards hidden by default, desktop table hidden on mobile */
+.client-cards-mob{display:none;}
+.client-table-wrap{display:block;}
+/* Admin button row — wraps on mobile */
+.admin-btn-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+/* Program card action buttons */
+.prog-card-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+
 @media(max-width:960px){
-  .admin-shell{grid-template-columns:1fr;}
+  .admin-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr auto;}
   .admin-sidebar{display:none;}
   .admin-mob-nav{display:flex;}
+  /* Mobile topbar */
+  .admin-mob-topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:max(env(safe-area-inset-top,0px),8px) 16px 8px;
+    min-height:52px;
+    background:rgba(10,11,13,0.94);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--b0);
+    position:sticky;
+    top:0;
+    z-index:60;
+    grid-column:1;
+  }
+  /* Hide desktop topbar on mobile — admin-mob-topbar replaces it */
+  .admin-topbar{display:none;}
   .a-kpi-row{grid-template-columns:repeat(2,1fr);gap:10px;}
   .a-grid-2{grid-template-columns:1fr;}
   .cp-layout{grid-template-columns:1fr;}
@@ -4263,10 +4295,22 @@ const ADMIN_CSS = `
   .pe-layout{grid-template-columns:1fr;}
   .pe-days{border-right:none;border-bottom:1px solid var(--b0);display:flex;gap:5px;overflow-x:auto;padding:8px;}
   .pe-day-tab{flex-shrink:0;}
-  .admin-topbar{padding:0 16px;height:50px;}
-  .admin-body{padding:16px 16px 32px;}
-  .admin-topbar-title{font-size:0.82rem;}
-  .admin-quick-actions{display:grid;}
+  .admin-body{padding:16px 16px 100px;}
+  /* Client list — show cards, hide table */
+  .client-cards-mob{display:block;}
+  .client-table-wrap{display:none;}
+  /* Button rows wrap */
+  .admin-btn-row{flex-wrap:wrap;gap:6px;}
+  .admin-btn-row .btn{font-size:0.62rem;padding:6px 10px;}
+  /* Program tabs — horizontal scroll */
+  .prog-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .prog-tabs::-webkit-scrollbar{display:none;}
+  .prog-tab{flex-shrink:0;}
+  /* Program card actions — wrap */
+  .prog-card-actions{gap:5px;}
+  .prog-card-actions .btn{font-size:0.6rem;padding:6px 9px;}
+  /* Quick actions 2-col */
+  .admin-quick-actions{display:grid;grid-template-columns:repeat(2,1fr);}
 }
 @media(max-width:768px){
   /* KPI grid — 2 clean columns */
@@ -4476,11 +4520,16 @@ const ADMIN_CSS = `
 @media(max-width:560px){.consult-card{padding:24px 18px;}.consult-time-grid{grid-template-columns:repeat(3,1fr);}}
 `;
 /* ── ADMIN SHARED COMPONENTS ─────────────────────────────────────────────── */
-function AdminTopbar({ title, actions }) {
+function AdminTopbar({ title, actions, onBack }) {
   return (
     <div className="admin-topbar">
-      <span className="admin-topbar-title">{title}</span>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>{actions}</div>
+      <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}>
+        {onBack && (
+          <button onClick={onBack} style={{background:"none",border:"none",color:"var(--txt-1)",cursor:"pointer",padding:"6px 8px 6px 0",fontSize:"1rem",lineHeight:1,flexShrink:0}} aria-label="Back">‹</button>
+        )}
+        <span className="admin-topbar-title" style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</span>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>{actions}</div>
     </div>
   );
 }
@@ -4778,80 +4827,216 @@ function AdminClientWorkoutHistory({ clientId }) {
   );
 }
 
-function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
+function AdminClients({ setView, focusClient, setFocusClient, dbClients, session, onReload }) {
   const clients = dbClients || [];
-  const [selected, setSelected] = useState(focusClient||null);
-  const [cpTab, setCpTab]       = useState("overview");
-  const [noteText, setNoteText] = useState("");
-  const client = selected ? clients.find(c=>c.id===selected) : null;
-  const tabs=["overview","program","notes","history","feedback"];
+  const [selected,  setSelected]  = useState(focusClient || null);
+  const [cpTab,     setCpTab]     = useState("overview");
+  const [noteText,  setNoteText]  = useState("");
 
+  // ── New Client modal state ────────────────────────────────────────────
+  const [showNewClient, setShowNew]    = useState(false);
+  const [ncFirst,  setNcFirst]  = useState("");
+  const [ncLast,   setNcLast]   = useState("");
+  const [ncEmail,  setNcEmail]  = useState("");
+  const [ncPhone,  setNcPhone]  = useState("");
+  const [ncPkg,    setNcPkg]    = useState("");
+  const [ncNotes,  setNcNotes]  = useState("");
+  const [ncSaving, setNcSaving] = useState(false);
+  const [ncErr,    setNcErr]    = useState("");
+  const [ncDone,   setNcDone]   = useState(false);
+
+  const resetNewClient = () => {
+    setNcFirst(""); setNcLast(""); setNcEmail(""); setNcPhone("");
+    setNcPkg(""); setNcNotes(""); setNcErr(""); setNcDone(false); setNcSaving(false);
+  };
+
+  const openNewClient = () => { resetNewClient(); setShowNew(true); };
+  const closeNewClient = () => { setShowNew(false); };
+
+  const submitNewClient = async () => {
+    if (!ncEmail.trim()) { setNcErr("Email is required."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ncEmail.trim())) {
+      setNcErr("Please enter a valid email address."); return;
+    }
+    setNcSaving(true); setNcErr("");
+    const result = await createClientInvite({
+      firstName:   ncFirst,
+      lastName:    ncLast,
+      email:       ncEmail,
+      phone:       ncPhone,
+      packagePlan: ncPkg,
+      notes:       ncNotes,
+      coachId:     session?.id,
+    });
+    setNcSaving(false);
+    if (!result.ok) { setNcErr(result.error || "Failed to create invite."); return; }
+    setNcDone(true);
+    if (onReload) setTimeout(onReload, 300);
+  };
+
+  const client = selected ? clients.find(c => c.id === selected) : null;
+  const tabs = ["overview","program","notes","history","feedback"];
+
+  // ── New Client Modal ─────────────────────────────────────────────────
+  const NewClientModal = () => !showNewClient ? null : (
+    <div style={{position:"fixed",inset:0,background:"rgba(5,6,8,0.9)",backdropFilter:"blur(16px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}
+      onClick={closeNewClient}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:480,borderRadius:"var(--r5)",padding:28,background:"var(--gb2)",border:"1px solid var(--b1)",backdropFilter:"blur(32px)",boxShadow:"0 32px 80px rgba(0,0,0,0.8)",position:"relative",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)"}} />
+
+        {ncDone ? (
+          <div style={{textAlign:"center",padding:"16px 0"}}>
+            <div style={{fontSize:"2rem",marginBottom:12}}>✓</div>
+            <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>Invite Created</p>
+            <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65,marginBottom:20}}>
+              An invite record has been created for <strong style={{color:"var(--txt-0)"}}>{ncEmail}</strong>. Share the app link with them to complete sign-up.
+            </p>
+            <button className="btn btn-p btn-sm" onClick={closeNewClient}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div>
+                <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)"}}>New Client</p>
+                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:3}}>Create an invite record for a new client.</p>
+              </div>
+              <button onClick={closeNewClient} style={{width:28,height:28,borderRadius:"50%",background:"var(--gb)",border:"1px solid var(--b0)",color:"var(--txt-1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",flexShrink:0}}>✕</button>
+            </div>
+
+            {ncErr && (
+              <div style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(107,26,26,0.2)",border:"1px solid rgba(180,60,60,0.3)",fontSize:"0.74rem",color:"rgba(220,120,120,0.9)",marginBottom:14}}>
+                {ncErr}
+              </div>
+            )}
+
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div className="field">
+                  <label className="field-label">First Name</label>
+                  <input className="fi" value={ncFirst} onChange={e=>setNcFirst(e.target.value)} placeholder="Jordan" autoComplete="given-name" />
+                </div>
+                <div className="field">
+                  <label className="field-label">Last Name</label>
+                  <input className="fi" value={ncLast} onChange={e=>setNcLast(e.target.value)} placeholder="Thomas" autoComplete="family-name" />
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Email Address *</label>
+                <input className="fi" type="email" value={ncEmail} onChange={e=>{setNcEmail(e.target.value);setNcErr("");}} placeholder="client@email.com" autoComplete="email" />
+              </div>
+              <div className="field">
+                <label className="field-label">Phone <span style={{opacity:0.5}}>optional</span></label>
+                <input className="fi" type="tel" value={ncPhone} onChange={e=>setNcPhone(e.target.value)} placeholder="+1 (555) 000-0000" autoComplete="tel" />
+              </div>
+              <div className="field">
+                <label className="field-label">Package <span style={{opacity:0.5}}>optional</span></label>
+                <select className="fi" value={ncPkg} onChange={e=>setNcPkg(e.target.value)} style={{cursor:"pointer"}}>
+                  <option value="">— No package yet —</option>
+                  <option value="1x Per Week">1x Per Week</option>
+                  <option value="2x Per Week">2x Per Week</option>
+                  <option value="3x Per Week">3x Per Week</option>
+                  <option value="Online Programming">Online Programming</option>
+                  <option value="Single Session">Single Session</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field-label">Notes <span style={{opacity:0.5}}>optional</span></label>
+                <textarea className="note-area" rows={3} value={ncNotes} onChange={e=>setNcNotes(e.target.value)} placeholder="Initial context, referral source, goals mentioned…" />
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:8,marginTop:20}}>
+              <button className="btn btn-s btn-sm" onClick={closeNewClient}>Cancel</button>
+              <button
+                className={"btn btn-p btn-sm" + (ncSaving ? " btn-loading" : "")}
+                style={{flex:1,justifyContent:"center",opacity:ncEmail.trim()?1:0.45}}
+                disabled={!ncEmail.trim() || ncSaving}
+                onClick={submitNewClient}
+              >
+                {ncSaving ? <><Spinner />Creating…</> : "Create Invite"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── CLIENT DETAIL VIEW ───────────────────────────────────────────────
   if (client) return (
     <div className="page-fade">
-      <AdminTopbar title={client.name} actions={<><button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(null);setFocusClient(null);}}>← All Clients</button><button className="btn btn-s btn-sm" onClick={()=>setView("messages")}>Message</button></>} />
+      <AdminTopbar title={client.name} actions={
+        <div className="admin-btn-row">
+          <button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(null);setFocusClient(null);}}>← Clients</button>
+          <button className="btn btn-s btn-sm" onClick={()=>setView("messages")}>Message</button>
+        </div>
+      } />
       <div className="admin-body">
         <div className="a-panel">
           <div className="cp-layout">
             <div className="cp-sidebar">
               <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:16}}>
                 <div className="c-av" style={{width:44,height:44,fontSize:"0.8rem"}}>{client.init}</div>
-                <div><p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client.name}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{client.pkg}</p></div>
+                <div>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700}}>{client.name}</p>
+                  <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>{client.pkg}</p>
+                </div>
               </div>
               <div className="cp-stat-row">
-                <div className="cp-stat"><div className="cp-stat-n">{client.sessLeft}</div><p className="cp-stat-l">Sessions Left</p></div>
-                <div className="cp-stat"><div className="cp-stat-n">{client.age}</div><p className="cp-stat-l">Age</p></div>
+                <div className="cp-stat"><div className="cp-stat-n">{client.sessLeft}</div><p className="cp-stat-l">Sessions</p></div>
+                <div className="cp-stat"><div className="cp-stat-n">{client.age || "—"}</div><p className="cp-stat-l">Age</p></div>
               </div>
-              {[["Package",client.pkg],["Expires",client.expires],["Next Session",client.nextSess],["Location",client.location],["Goal",client.goal],["Level",client.level],["Birthday",client.birthday]].map(([k,v])=>(
+              {[["Package",client.pkg],["Location",client.location],["Goal",client.goal],["Level",client.level],["Birthday",client.birthday]].map(([k,v])=>(
                 <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--b0)",fontSize:"0.76rem"}}>
                   <span style={{color:"var(--txt-2)"}}>{k}</span>
-                  <span style={{color:"var(--txt-0)",textAlign:"right",maxWidth:"55%"}}>{v}</span>
+                  <span style={{color:"var(--txt-0)",textAlign:"right",maxWidth:"60%"}}>{v || "—"}</span>
                 </div>
               ))}
               <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:5}}>
-                {client.birthdayReward&&<ATag type="ok">Birthday Reward Active</ATag>}
-                {client.starterUsed&&<ATag type="pend">Starter Used</ATag>}
-                {client.status==="low"&&<ATag type="warn">Low Sessions</ATag>}
-                {client.status==="renewal"&&<ATag type="err">Renewal Due</ATag>}
+                {client.birthdayReward && <ATag type="ok">Birthday Reward Active</ATag>}
+                {client.sessLeft === 0 && <ATag type="err">Booking Blocked</ATag>}
+                {client.sessLeft > 0 && client.sessLeft <= 2 && <ATag type="warn">Low Sessions</ATag>}
               </div>
-              <div style={{marginTop:14}}><OpenDirBtn location={client.location} /></div>
+              {client.location && client.location !== "—" && (
+                <div style={{marginTop:14}}><OpenDirBtn location={client.location} /></div>
+              )}
             </div>
             <div className="cp-main">
-              <div className="cp-tabs">{tabs.map(t=><button key={t} className={`cp-tab${cpTab===t?" on":""}`} onClick={()=>setCpTab(t)}>{t}</button>)}</div>
-              {cpTab==="overview"&&(
+              <div className="cp-tabs">
+                {tabs.map(t=>(
+                  <button key={t} className={`cp-tab${cpTab===t?" on":""}`} onClick={()=>setCpTab(t)}>{t}</button>
+                ))}
+              </div>
+
+              {cpTab==="overview" && (
                 <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                  {[["Goals",client.goal],["Injuries / Limitations",client.injuries],["Experience Level",client.level],["Training Location",client.location],["Last Feedback",client.lastFeedback]].map(([l,v])=>(
+                  {[["Goals",client.goal],["Experience Level",client.level],["Training Location",client.location],["Injuries / Limitations",client.injuries]].map(([l,v])=>(
                     <div className="info-block" key={l}>
                       <p className="info-block-title">{l}</p>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <p className="info-val">{v}</p>
-                        {l==="Training Location"&&<OpenDirBtn location={v} />}
+                        <p className="info-val">{v || "—"}</p>
+                        {l==="Training Location" && v && v!=="—" && <OpenDirBtn location={v} />}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-              {cpTab==="program"&&(
+
+              {cpTab==="program" && (
                 <div>
-                  {(() => {
-                    // Programs are managed in the Programs tab.
-                    // This panel shows a quick summary and links to the Programs tab.
-                    return (<>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-                        <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65}}>
-                          Manage this client's programs in the Programs tab. Programs are organized by template, draft, and active status.
-                        </p>
-                        <button className="btn btn-p btn-sm" onClick={()=>setView("programs")}>
-                          Open Programs →
-                        </button>
-                      </div>
-                    </>);
-                  })()}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+                    <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65}}>
+                      Manage this client's programs in the Programs tab.
+                    </p>
+                    <button className="btn btn-p btn-sm" onClick={()=>setView("programs")}>Open Programs →</button>
+                  </div>
                 </div>
               )}
-              {cpTab==="notes"&&(
+
+              {cpTab==="notes" && (
                 <div style={{display:"flex",flexDirection:"column",gap:14}}>
                   <div>
-                    <p className="info-block-title" style={{marginBottom:8}}>Coach Notes (visible to client)</p>
+                    <p className="info-block-title" style={{marginBottom:8}}>Coach Notes</p>
                     <textarea className="note-area" rows={5} value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Notes for this client…" />
                     <button className="btn btn-p btn-sm" style={{marginTop:10}}>Save Note</button>
                   </div>
@@ -4862,13 +5047,11 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
                   </div>
                 </div>
               )}
-              {cpTab==="history"&&(
-                <AdminClientWorkoutHistory clientId={client.id} />
-              )}
-              {cpTab==="feedback"&&(
-                <div>
-                  <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet for this client.</p>
-                </div>
+
+              {cpTab==="history" && <AdminClientWorkoutHistory clientId={client.id} />}
+
+              {cpTab==="feedback" && (
+                <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No feedback submissions yet.</p>
               )}
             </div>
           </div>
@@ -4877,33 +5060,102 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients }) {
     </div>
   );
 
+  // ── CLIENT LIST VIEW ─────────────────────────────────────────────────
   return (
     <div className="page-fade">
-      <AdminTopbar title="Clients" actions={<button className="btn btn-p btn-sm">+ New Client</button>} />
+      <AdminTopbar title="Clients" actions={
+        <button className="btn btn-p btn-sm" onClick={openNewClient}>+ New Client</button>
+      } />
       <div className="admin-body">
-        <div className="a-panel">
-          <div className="a-panel-hd"><span className="a-panel-title">All Clients — {clients.length}</span></div>
-          <table className="client-table">
-            <thead><tr><th>Client</th><th>Package</th><th>Sessions</th><th>Location</th><th>Next Session</th><th>Status</th></tr></thead>
-            <tbody>
-              {clients.map(c=>(
-                <tr key={c.id} onClick={()=>setSelected(c.id)}>
-                  <td><div style={{display:"flex",gap:10,alignItems:"center"}}><div className="c-av">{c.init}</div><div><p className="c-name">{c.name}</p><p className="c-detail">{c.goal}</p></div></div></td>
-                  <td><p style={{fontSize:"0.78rem"}}>{c.pkg}</p><p style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Exp {c.expires}</p></td>
-                  <td><p style={{fontSize:"0.78rem",color:c.sessLeft<=2?"rgba(220,130,100,0.85)":"var(--txt-0)"}}>{c.sessLeft} left</p><div className="sess-bar" style={{width:56,marginTop:5}}><div className={`sess-bar-fill${c.sessLeft<=2?" low":""}`} style={{width:`${c.sessTotal?Math.round(c.sessLeft/c.sessTotal*100):0}%`}} /></div></td>
-                  <td><p style={{fontSize:"0.76rem"}}>{c.location}</p></td>
-                  <td><p style={{fontSize:"0.76rem"}}>{c.nextSess}</p></td>
-                  <td><ATag type={c.status==="active"?"ok":c.status==="low"?"warn":"err"}>{c.status}</ATag></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {clients.length === 0 ? (
+          <div className="a-panel">
+            <div className="empty-state" style={{padding:"56px 20px"}}>
+              <span className="empty-ic">◉</span>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
+              <p className="empty-txt">Invite your first client to get started.</p>
+              <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={openNewClient}>+ New Client</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Mobile: stacked cards */}
+            <div className="client-cards-mob">
+              {clients.map(c => {
+                const isLow  = c.sessLeft <= 2 && c.sessLeft > 0;
+                const isZero = c.sessLeft === 0;
+                return (
+                  <div key={c.id} className="a-panel" style={{marginBottom:8,cursor:"pointer"}} onClick={()=>setSelected(c.id)}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                      <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+                        <div className="c-av">{c.init}</div>
+                        <div style={{minWidth:0}}>
+                          <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</p>
+                          <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:1}}>{c.pkg || "—"}</p>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                        <span style={{fontSize:"0.72rem",fontFamily:"var(--fc)",fontWeight:600,color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-2)"}}>{c.sessLeft}</span>
+                        {isZero && <ATag type="err">Blocked</ATag>}
+                        {isLow && !isZero && <ATag type="warn">Low</ATag>}
+                        <span style={{fontSize:"0.7rem",color:"var(--txt-2)"}}>→</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="client-table-wrap">
+              <div className="a-panel">
+                <div className="a-panel-hd">
+                  <span className="a-panel-title">All Clients — {clients.length}</span>
+                </div>
+                <table className="client-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th><th>Package</th><th>Sessions</th>
+                      <th>Location</th><th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.map(c => {
+                      const isLow  = c.sessLeft <= 2 && c.sessLeft > 0;
+                      const isZero = c.sessLeft === 0;
+                      return (
+                        <tr key={c.id} onClick={()=>setSelected(c.id)}>
+                          <td>
+                            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                              <div className="c-av">{c.init}</div>
+                              <div>
+                                <p className="c-name">{c.name}</p>
+                                <p className="c-detail">{c.goal || "—"}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td><p style={{fontSize:"0.78rem"}}>{c.pkg || "—"}</p></td>
+                          <td>
+                            <p style={{fontSize:"0.78rem",color:isZero?"rgba(220,120,120,0.9)":isLow?"rgba(220,175,100,0.9)":"var(--txt-0)"}}>{c.sessLeft}</p>
+                            <div className="sess-bar" style={{width:56,marginTop:5}}>
+                              <div className={`sess-bar-fill${isLow||isZero?" low":""}`} style={{width:`${c.sessTotal?Math.round(c.sessLeft/c.sessTotal*100):0}%`}} />
+                            </div>
+                          </td>
+                          <td><p style={{fontSize:"0.76rem"}}>{c.location || "—"}</p></td>
+                          <td><ATag type={isZero?"err":isLow?"warn":"ok"}>{isZero?"Blocked":isLow?"Low":"Active"}</ATag></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+      <NewClientModal />
     </div>
   );
 }
-
 /* ── ADMIN PROGRAMS ──────────────────────────────────────────────────────── */
 /* ── ADMIN PROGRAMS ─────────────────────────────────────────────────────── */
 function AdminPrograms({ session }) {
@@ -5550,7 +5802,7 @@ function AdminPrograms({ session }) {
                     {p.updatedAt&&<span> · Updated {new Date(p.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>}
                   </p>
                 </div>
-                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <div className="prog-card-actions" style={{flexShrink:0}}>
                   <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
                   <button className="btn btn-s btn-sm" onClick={()=>dupProg(p.id)}>Duplicate</button>
                   {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Assign →</button>}
@@ -5681,7 +5933,7 @@ function AdminPrograms({ session }) {
                   {p.clientName&&<span> · → {p.clientName}</span>}
                 </p>
               </div>
-              <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <div className="prog-card-actions" style={{flexShrink:0}}>
                 <button className="btn btn-s btn-sm" onClick={()=>{setEditProg(p.id);setDay(p.days?.[0]?.id||null);setView("edit");}}>Edit</button>
                 {clients.length>0 && <button className="btn btn-p btn-sm" onClick={()=>openAssign(p.id)}>Publish →</button>}
               </div>
@@ -7960,6 +8212,7 @@ const ADMIN_NAV = [
 function AdminShell({ onLogout, session }) {
   const [view, setView]               = useState("dashboard");
   const [focusClient, setFocusClient] = useState(null);
+  const [navStack, setNavStack]       = useState([]);
 
   // ── Real client list ──────────────────────────────────────────────────────
   const [dbClients, setDbClients] = useState([]);
@@ -8039,18 +8292,33 @@ function AdminShell({ onLogout, session }) {
     };
   }, [session?.id]);
 
-  // Clear badge when navigating to that section
+  // Clear badge when navigating; maintain history stack for mobile back button
   const navigate = (id) => {
+    setNavStack(s => (id === "dashboard") ? [] : [...s, view]);
     setView(id);
     if (notifCounts[id] > 0) {
       setNotifCounts(p => ({ ...p, [id]: 0 }));
     }
   };
 
+  const goBack = () => {
+    const prev = navStack[navStack.length - 1] ?? "dashboard";
+    setNavStack(s => s.slice(0, -1));
+    setView(prev);
+  };
+
+  const canGoBack = navStack.length > 0;
+
+  const VIEW_TITLES = {
+    dashboard:"Dashboard", clients:"Clients", programs:"Programs",
+    schedule:"Schedule", messages:"Messages", consultations:"Consultations",
+    feedback:"Feedback", packages:"Packages", analytics:"Analytics", settings:"Settings",
+  };
+
   const views = {
     dashboard:    <AdminDashboard setView={navigate} setFocusClient={setFocusClient} dbClients={dbClients} notifCounts={notifCounts} />,
     consultations:<AdminConsultations setView={navigate} session={session} onReviewed={loadNotifCounts} />,
-    clients:      <AdminClients   setView={navigate} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} />,
+    clients:      <AdminClients setView={navigate} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} session={session} onReload={loadClients} />,
     programs:     <AdminPrograms  session={session} />,
     schedule:     <AdminSchedule  session={session} />,
     feedback:     <AdminFeedback />,
@@ -8062,6 +8330,7 @@ function AdminShell({ onLogout, session }) {
 
   return (
     <div className="admin-shell">
+      {/* Desktop sidebar */}
       <aside className="admin-sidebar">
         <div className="admin-brand">
           <div className="admin-logo">MLVNT</div>
@@ -8087,9 +8356,39 @@ function AdminShell({ onLogout, session }) {
           <button className="btn btn-ghost" style={{marginLeft:"auto",fontSize:"0.6rem"}} onClick={onLogout}>Out</button>
         </div>
       </aside>
+
+      {/* Mobile top bar — sticky, shown only on small screens */}
+      <div className="admin-mob-topbar">
+        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+          {canGoBack ? (
+            <button className="admin-mob-back" onClick={goBack} aria-label="Back">
+              <span style={{fontSize:"1.2rem",lineHeight:1}}>‹</span>
+            </button>
+          ) : (
+            <div style={{width:36,flexShrink:0}} />
+          )}
+          <span className="admin-mob-topbar-title">{VIEW_TITLES[view] || "MLVNT"}</span>
+        </div>
+        <span style={{fontFamily:"var(--fh)",fontSize:"0.78rem",fontWeight:800,letterSpacing:"0.12em",color:"var(--txt-0)",opacity:0.4,flexShrink:0}}>M</span>
+      </div>
+
       <div className="admin-main">
         {views[view]||views["dashboard"]}
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="admin-mob-nav">
+        {ADMIN_NAV.filter(i=>["dashboard","clients","programs","messages","schedule"].includes(i.id)).map(item=>{
+          const count = notifCounts[item.id] || 0;
+          return (
+            <button key={item.id} className={`admin-mob-btn${view===item.id?" on":""}`} onClick={()=>navigate(item.id)}>
+              <span className="admin-mob-ic">{item.ic}</span>
+              <span className="admin-mob-lbl">{item.lbl}</span>
+              {count > 0 && <span className="a-badge" style={{position:"absolute",top:4,right:"calc(50% - 18px)"}}>{count}</span>}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
