@@ -81,14 +81,23 @@ export async function getActiveProgram(clientId) {
 
 /**
  * All programs across all clients AND unassigned templates (client_id IS NULL).
- * Includes joined client name/email when assigned.
+ * Uses a left join so templates with client_id=null are never dropped.
  */
 export async function getAllPrograms() {
   const { data, error } = await supabase
     .from("programs")
     .select(`*, profiles!programs_client_id_fkey (name, email)`)
     .order("updated_at", { ascending: false });
-  if (error) { console.error("getAllPrograms:", error.message); return []; }
+  if (error) {
+    // If the FK join errors (e.g. no foreign key on null rows), fall back to plain select
+    console.warn("getAllPrograms join failed, falling back:", error.message);
+    const { data: fallback, error: fbErr } = await supabase
+      .from("programs")
+      .select("*")
+      .order("updated_at", { ascending: false });
+    if (fbErr) { console.error("getAllPrograms fallback:", fbErr.message); return []; }
+    return fallback || [];
+  }
   return data || [];
 }
 
