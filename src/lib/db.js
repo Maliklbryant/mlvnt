@@ -105,6 +105,7 @@ export async function createProgram(clientId, coachId, overrides = {}) {
     name:        "New Program",
     block:       "Block 1",
     phase:       "",
+    weekly_focus:"",
     status:      "draft",
     start_date:  null,
     end_date:    null,
@@ -139,6 +140,8 @@ export async function saveProgram(program) {
     client_id:   fields.clientId    ?? null,
     coach_id:    fields.coachId     ?? null,
     is_template: fields.clientId == null,
+    // template_id, assigned_by, assigned_at are set once at assignment time.
+    // We deliberately do NOT include them here so a save never clears them.
   };
   const { data, error } = await supabase.from("programs").update(payload).eq("id", id).select().single();
   if (error) { console.error("saveProgram:", error.message); return { ok: false, error: error.message }; }
