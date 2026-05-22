@@ -3991,11 +3991,6 @@ function AppShell({ onLogout, session }) {
     };
   }, [session?.id]);
 
-  const navigate = (id) => {
-    setView(id);
-    if (id === "messages") setUnreadMsgs(0);
-  };
-
   const views = {
     home:           <Dashboard setView={navigate} activeProgram={activeProgram} workoutLogs={workoutLogs} session={session} profileData={profileData} unreadMsgs={unreadMsgs} />,
     book:           <Booking setView={navigate} profileData={profileData} onBack={goBack} />,
