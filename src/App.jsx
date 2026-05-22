@@ -133,13 +133,96 @@ body::after{
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 
 /* ── MOBILE NAV ── */
-.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(10,11,13,0.95);backdrop-filter:blur(28px);border-top:1px solid var(--b0);padding:8px 0 max(8px,env(safe-area-inset-bottom));}
-.mob-nav-inner{display:flex;justify-content:space-around;}
-.mob-tab{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 16px;cursor:pointer;border:none;background:none;color:var(--txt-2);transition:color 0.2s;}
-.mob-tab.active{color:var(--txt-0);}
-.mob-tab .ic{font-size:1.1rem;}
-.mob-tab .lbl{font-size:0.55rem;font-family:var(--fb);font-weight:500;letter-spacing:0.1em;text-transform:uppercase;}
-
+.mob-nav{display:none;}
+.mobile-dock{
+  display:none;
+  position:fixed;
+  bottom:0;left:0;right:0;
+  z-index:200;
+  padding:8px 12px;
+  padding-bottom:max(12px,env(safe-area-inset-bottom,12px));
+  pointer-events:none;
+}
+.mobile-dock-inner{
+  display:flex;
+  align-items:stretch;
+  background:rgba(12,14,18,0.86);
+  backdrop-filter:blur(40px) saturate(160%);
+  -webkit-backdrop-filter:blur(40px) saturate(160%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:20px;
+  overflow:hidden;
+  pointer-events:all;
+  box-shadow:0 4px 24px rgba(0,0,0,0.6),0 1px 0 rgba(255,255,255,0.05) inset,0 -1px 0 rgba(0,0,0,0.3) inset;
+}
+.mobile-dock-item{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  padding:11px 4px 9px;
+  cursor:pointer;
+  border:none;
+  background:transparent;
+  -webkit-appearance:none;
+  appearance:none;
+  outline:none;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;
+  transition:opacity 0.12s;
+  min-width:0;
+}
+.mobile-dock-item:active{opacity:0.5;}
+.mobile-dock-ic{
+  font-size:1rem;
+  line-height:1;
+  color:rgba(255,255,255,0.25);
+  transition:color 0.18s,transform 0.18s;
+  display:block;
+}
+.mobile-dock-lbl{
+  font-size:0.46rem;
+  font-family:var(--fc);
+  font-weight:500;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.22);
+  transition:color 0.18s;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:100%;
+}
+.mobile-dock-item.active .mobile-dock-ic{
+  color:rgba(160,195,240,0.92);
+  transform:translateY(-1px);
+}
+.mobile-dock-item.active .mobile-dock-lbl{
+  color:rgba(140,175,220,0.65);
+}
+.mobile-dock-item.active::before{
+  content:'';
+  position:absolute;
+  top:5px;
+  left:50%;
+  transform:translateX(-50%);
+  width:18px;height:2px;
+  border-radius:2px;
+  background:rgba(140,175,220,0.75);
+  box-shadow:0 0 10px rgba(140,175,220,0.35);
+}
+.mobile-dock-badge{
+  position:absolute;top:5px;right:calc(50% - 18px);
+  min-width:14px;height:14px;border-radius:7px;
+  padding:0 3px;
+  background:rgba(200,75,75,0.92);
+  border:1.5px solid rgba(10,11,13,0.85);
+  color:#fff;
+  font-size:0.4rem;font-family:var(--fc);font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
 /* Mobile topbar — hidden on desktop */
 .mob-topbar{display:none;}
 .mob-back-btn{width:36px;height:36px;border-radius:50%;background:var(--gb);border:1px solid var(--b0);color:var(--txt-1);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;}
@@ -149,7 +232,8 @@ body::after{
 @media(max-width:900px){
   .app-shell{grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto;}
   .sidebar{display:none;}
-  .mob-nav{display:block;}
+  .mob-nav{display:none;}
+  .mobile-dock{display:block;}
   .mob-topbar{
     display:flex;
     align-items:center;
@@ -164,7 +248,7 @@ body::after{
     top:0;
     z-index:60;
   }
-  .page-body{padding:20px 20px 100px;}
+  .page-body{padding:20px 20px 120px;}
   .topbar{display:none;}
 }
 
@@ -4077,26 +4161,25 @@ function AppShell({ onLogout, session }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="mob-nav">
-        <div className="mob-nav-inner">
+      {/* Premium floating dock — shown only on mobile */}
+      <div className="mobile-dock">
+        <div className="mobile-dock-inner">
           {NAV.map(item => {
             const badge = item.id === "messages" ? unreadMsgs : 0;
             return (
-              <button key={item.id}
-                className={`mob-tab${view===item.id?" active":""}`}
-                onClick={()=>navigate(item.id)}
-                style={{position:"relative"}}
+              <button
+                key={item.id}
+                className={`mobile-dock-item${view === item.id ? " active" : ""}`}
+                onClick={() => navigate(item.id)}
               >
-                <span className="ic">{item.ic}</span>
-                <span className="lbl">{item.lbl}</span>
-                {badge > 0 && (
-                  <span style={{position:"absolute",top:4,right:"calc(50% - 14px)",width:16,height:16,borderRadius:"50%",background:"rgba(200,80,80,0.9)",color:"white",fontSize:"0.48rem",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--fc)",fontWeight:700}}>{badge}</span>
-                )}
+                {badge > 0 && <span className="mobile-dock-badge">{badge > 9 ? "9+" : badge}</span>}
+                <span className="mobile-dock-ic">{item.ic}</span>
+                <span className="mobile-dock-lbl">{item.lbl}</span>
               </button>
             );
           })}
         </div>
-      </nav>
+      </div>
     </div>
   );
 }
@@ -4253,7 +4336,8 @@ const ADMIN_CSS = `
 .pb-ex-table{display:block;}
 .pb-ex-card-mob{display:none;flex-direction:column;gap:0;}
 .pb-save-bar{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
-/* ── Admin mobile topbar ── (hidden on desktop) */
+/* ── Admin mobile topbar + dock ── (hidden on desktop) */
+.admin-mob-nav{display:none;}
 .admin-mob-topbar{display:none;}
 .admin-mob-back{width:36px;height:36px;border-radius:50%;background:var(--gb);border:1px solid var(--b0);color:var(--txt-1);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;}
 .admin-mob-back:active{background:var(--gb2);}
@@ -4269,8 +4353,8 @@ const ADMIN_CSS = `
 @media(max-width:960px){
   .admin-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr auto;}
   .admin-sidebar{display:none;}
-  .admin-mob-nav{display:flex;}
-  /* Mobile topbar */
+  /* Show dock and topbar on mobile */
+  .admin-mob-nav{display:block;}
   .admin-mob-topbar{
     display:flex;
     align-items:center;
@@ -4286,7 +4370,7 @@ const ADMIN_CSS = `
     z-index:60;
     grid-column:1;
   }
-  /* Hide desktop topbar on mobile — admin-mob-topbar replaces it */
+  /* Hide desktop topbar — admin-mob-topbar takes over */
   .admin-topbar{display:none;}
   .a-kpi-row{grid-template-columns:repeat(2,1fr);gap:10px;}
   .a-grid-2{grid-template-columns:1fr;}
@@ -4295,7 +4379,8 @@ const ADMIN_CSS = `
   .pe-layout{grid-template-columns:1fr;}
   .pe-days{border-right:none;border-bottom:1px solid var(--b0);display:flex;gap:5px;overflow-x:auto;padding:8px;}
   .pe-day-tab{flex-shrink:0;}
-  .admin-body{padding:16px 16px 100px;}
+  /* Extra bottom padding so dock doesn't cover content */
+  .admin-body{padding:16px 16px 120px;}
   /* Client list — show cards, hide table */
   .client-cards-mob{display:block;}
   .client-table-wrap{display:none;}
@@ -4827,14 +4912,8 @@ function AdminClientWorkoutHistory({ clientId }) {
   );
 }
 
-function AdminClients({ setView, focusClient, setFocusClient, dbClients, session, onReload }) {
-  const clients = dbClients || [];
-  const [selected,  setSelected]  = useState(focusClient || null);
-  const [cpTab,     setCpTab]     = useState("overview");
-  const [noteText,  setNoteText]  = useState("");
-
-  // ── New Client modal state ────────────────────────────────────────────
-  const [showNewClient, setShowNew]    = useState(false);
+/* ── NEW CLIENT MODAL — top-level component so inputs don't lose focus ── */
+function NewClientModal({ show, onClose, onSuccess, session }) {
   const [ncFirst,  setNcFirst]  = useState("");
   const [ncLast,   setNcLast]   = useState("");
   const [ncEmail,  setNcEmail]  = useState("");
@@ -4845,66 +4924,65 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
   const [ncErr,    setNcErr]    = useState("");
   const [ncDone,   setNcDone]   = useState(false);
 
-  const resetNewClient = () => {
-    setNcFirst(""); setNcLast(""); setNcEmail(""); setNcPhone("");
-    setNcPkg(""); setNcNotes(""); setNcErr(""); setNcDone(false); setNcSaving(false);
-  };
+  // Reset when opened
+  useEffect(() => {
+    if (show) {
+      setNcFirst(""); setNcLast(""); setNcEmail(""); setNcPhone("");
+      setNcPkg(""); setNcNotes(""); setNcErr(""); setNcDone(false); setNcSaving(false);
+    }
+  }, [show]);
 
-  const openNewClient = () => { resetNewClient(); setShowNew(true); };
-  const closeNewClient = () => { setShowNew(false); };
+  if (!show) return null;
 
-  const submitNewClient = async () => {
+  const submit = async () => {
     if (!ncEmail.trim()) { setNcErr("Email is required."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ncEmail.trim())) {
       setNcErr("Please enter a valid email address."); return;
     }
     setNcSaving(true); setNcErr("");
     const result = await createClientInvite({
-      firstName:   ncFirst,
-      lastName:    ncLast,
-      email:       ncEmail,
-      phone:       ncPhone,
-      packagePlan: ncPkg,
-      notes:       ncNotes,
-      coachId:     session?.id,
+      firstName: ncFirst, lastName: ncLast, email: ncEmail,
+      phone: ncPhone, packagePlan: ncPkg, notes: ncNotes,
+      coachId: session?.id,
     });
     setNcSaving(false);
     if (!result.ok) { setNcErr(result.error || "Failed to create invite."); return; }
     setNcDone(true);
-    if (onReload) setTimeout(onReload, 300);
+    if (onSuccess) setTimeout(onSuccess, 400);
   };
 
-  const client = selected ? clients.find(c => c.id === selected) : null;
-  const tabs = ["overview","program","notes","history","feedback"];
-
-  // ── New Client Modal ─────────────────────────────────────────────────
-  const NewClientModal = () => !showNewClient ? null : (
-    <div style={{position:"fixed",inset:0,background:"rgba(5,6,8,0.9)",backdropFilter:"blur(16px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}
-      onClick={closeNewClient}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:480,borderRadius:"var(--r5)",padding:28,background:"var(--gb2)",border:"1px solid var(--b1)",backdropFilter:"blur(32px)",boxShadow:"0 32px 80px rgba(0,0,0,0.8)",position:"relative",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
+  return (
+    <div
+      style={{position:"fixed",inset:0,background:"rgba(5,6,8,0.88)",backdropFilter:"blur(18px)",WebkitBackdropFilter:"blur(18px)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{width:"100%",maxWidth:480,borderRadius:"var(--r5)",padding:28,background:"var(--gb2)",border:"1px solid var(--b1)",boxShadow:"0 32px 80px rgba(0,0,0,0.85)",position:"relative",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}
+      >
         <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)"}} />
 
         {ncDone ? (
-          <div style={{textAlign:"center",padding:"16px 0"}}>
-            <div style={{fontSize:"2rem",marginBottom:12}}>✓</div>
+          <div style={{textAlign:"center",padding:"24px 0"}}>
+            <div style={{fontSize:"2.4rem",marginBottom:14}}>✓</div>
             <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>Invite Created</p>
-            <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65,marginBottom:20}}>
-              An invite record has been created for <strong style={{color:"var(--txt-0)"}}>{ncEmail}</strong>. Share the app link with them to complete sign-up.
+            <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.7,marginBottom:20}}>
+              An invite record was created for <strong style={{color:"var(--txt-0)"}}>{ncEmail}</strong>. Share the app link with them to complete sign-up.
             </p>
-            <button className="btn btn-p btn-sm" onClick={closeNewClient}>Done</button>
+            <button className="btn btn-p btn-sm" onClick={onClose}>Done</button>
           </div>
         ) : (
           <>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
               <div>
-                <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)"}}>New Client</p>
-                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:3}}>Create an invite record for a new client.</p>
+                <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)",letterSpacing:"-0.01em"}}>New Client</p>
+                <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:3}}>Create an invite record.</p>
               </div>
-              <button onClick={closeNewClient} style={{width:28,height:28,borderRadius:"50%",background:"var(--gb)",border:"1px solid var(--b0)",color:"var(--txt-1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",flexShrink:0}}>✕</button>
+              <button onClick={onClose} style={{width:28,height:28,borderRadius:"50%",background:"var(--gb)",border:"1px solid var(--b0)",color:"var(--txt-1)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",flexShrink:0,marginTop:2}}>✕</button>
             </div>
 
             {ncErr && (
-              <div style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(107,26,26,0.2)",border:"1px solid rgba(180,60,60,0.3)",fontSize:"0.74rem",color:"rgba(220,120,120,0.9)",marginBottom:14}}>
+              <div style={{padding:"10px 12px",borderRadius:"var(--r2)",background:"rgba(107,26,26,0.22)",border:"1px solid rgba(180,60,60,0.32)",fontSize:"0.74rem",color:"rgba(220,120,120,0.9)",marginBottom:14}}>
                 {ncErr}
               </div>
             )}
@@ -4921,37 +4999,37 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
                 </div>
               </div>
               <div className="field">
-                <label className="field-label">Email Address *</label>
+                <label className="field-label">Email *</label>
                 <input className="fi" type="email" value={ncEmail} onChange={e=>{setNcEmail(e.target.value);setNcErr("");}} placeholder="client@email.com" autoComplete="email" />
               </div>
               <div className="field">
-                <label className="field-label">Phone <span style={{opacity:0.5}}>optional</span></label>
+                <label className="field-label">Phone <span style={{opacity:0.45,fontWeight:400}}>optional</span></label>
                 <input className="fi" type="tel" value={ncPhone} onChange={e=>setNcPhone(e.target.value)} placeholder="+1 (555) 000-0000" autoComplete="tel" />
               </div>
               <div className="field">
-                <label className="field-label">Package <span style={{opacity:0.5}}>optional</span></label>
+                <label className="field-label">Package <span style={{opacity:0.45,fontWeight:400}}>optional</span></label>
                 <select className="fi" value={ncPkg} onChange={e=>setNcPkg(e.target.value)} style={{cursor:"pointer"}}>
-                  <option value="">— No package yet —</option>
-                  <option value="1x Per Week">1x Per Week</option>
-                  <option value="2x Per Week">2x Per Week</option>
-                  <option value="3x Per Week">3x Per Week</option>
-                  <option value="Online Programming">Online Programming</option>
-                  <option value="Single Session">Single Session</option>
+                  <option value="">— Select package —</option>
+                  <option>1x Per Week</option>
+                  <option>2x Per Week</option>
+                  <option>3x Per Week</option>
+                  <option>Online Programming</option>
+                  <option>Single Session</option>
                 </select>
               </div>
               <div className="field">
-                <label className="field-label">Notes <span style={{opacity:0.5}}>optional</span></label>
-                <textarea className="note-area" rows={3} value={ncNotes} onChange={e=>setNcNotes(e.target.value)} placeholder="Initial context, referral source, goals mentioned…" />
+                <label className="field-label">Notes <span style={{opacity:0.45,fontWeight:400}}>optional</span></label>
+                <textarea className="note-area" rows={3} value={ncNotes} onChange={e=>setNcNotes(e.target.value)} placeholder="Goals, referral source, initial context…" />
               </div>
             </div>
 
             <div style={{display:"flex",gap:8,marginTop:20}}>
-              <button className="btn btn-s btn-sm" onClick={closeNewClient}>Cancel</button>
+              <button className="btn btn-s btn-sm" onClick={onClose}>Cancel</button>
               <button
-                className={"btn btn-p btn-sm" + (ncSaving ? " btn-loading" : "")}
-                style={{flex:1,justifyContent:"center",opacity:ncEmail.trim()?1:0.45}}
-                disabled={!ncEmail.trim() || ncSaving}
-                onClick={submitNewClient}
+                className={"btn btn-p btn-sm"+(ncSaving?" btn-loading":"")}
+                style={{flex:1,justifyContent:"center",opacity:ncEmail.trim()?1:0.4}}
+                disabled={!ncEmail.trim()||ncSaving}
+                onClick={submit}
               >
                 {ncSaving ? <><Spinner />Creating…</> : "Create Invite"}
               </button>
@@ -4961,7 +5039,17 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
       </div>
     </div>
   );
+}
 
+function AdminClients({ setView, focusClient, setFocusClient, dbClients, session, onReload }) {
+  const clients = dbClients || [];
+  const [selected,      setSelected]  = useState(focusClient || null);
+  const [cpTab,         setCpTab]     = useState("overview");
+  const [noteText,      setNoteText]  = useState("");
+  const [showNewClient, setShowNew]   = useState(false);
+
+  const client = selected ? clients.find(c => c.id === selected) : null;
+  const tabs = ["overview","program","notes","history","feedback"];
   // ── CLIENT DETAIL VIEW ───────────────────────────────────────────────
   if (client) return (
     <div className="page-fade">
@@ -5064,7 +5152,7 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
   return (
     <div className="page-fade">
       <AdminTopbar title="Clients" actions={
-        <button className="btn btn-p btn-sm" onClick={openNewClient}>+ New Client</button>
+        <button className="btn btn-p btn-sm" onClick={() => setShowNew(true)}>+ New Client</button>
       } />
       <div className="admin-body">
         {clients.length === 0 ? (
@@ -5073,7 +5161,7 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
               <span className="empty-ic">◉</span>
               <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No clients yet</p>
               <p className="empty-txt">Invite your first client to get started.</p>
-              <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={openNewClient}>+ New Client</button>
+              <button className="btn btn-p btn-sm" style={{marginTop:16}} onClick={() => setShowNew(true)}>+ New Client</button>
             </div>
           </div>
         ) : (
@@ -5152,7 +5240,12 @@ function AdminClients({ setView, focusClient, setFocusClient, dbClients, session
           </>
         )}
       </div>
-      <NewClientModal />
+      <NewClientModal
+        show={showNewClient}
+        onClose={() => setShowNew(false)}
+        onSuccess={() => { setShowNew(false); if (onReload) onReload(); }}
+        session={session}
+      />
     </div>
   );
 }
@@ -8376,19 +8469,25 @@ function AdminShell({ onLogout, session }) {
         {views[view]||views["dashboard"]}
       </div>
 
-      {/* Mobile bottom nav */}
-      <nav className="admin-mob-nav">
-        {ADMIN_NAV.filter(i=>["dashboard","clients","programs","messages","schedule"].includes(i.id)).map(item=>{
-          const count = notifCounts[item.id] || 0;
-          return (
-            <button key={item.id} className={`admin-mob-btn${view===item.id?" on":""}`} onClick={()=>navigate(item.id)}>
-              <span className="admin-mob-ic">{item.ic}</span>
-              <span className="admin-mob-lbl">{item.lbl}</span>
-              {count > 0 && <span className="a-badge" style={{position:"absolute",top:4,right:"calc(50% - 18px)"}}>{count}</span>}
-            </button>
-          );
-        })}
-      </nav>
+      {/* Premium floating dock — mobile only */}
+      <div className="admin-mob-nav mobile-dock">
+        <div className="mobile-dock-inner">
+          {ADMIN_NAV.filter(i=>["dashboard","clients","programs","messages","schedule"].includes(i.id)).map(item=>{
+            const count = notifCounts[item.id] || 0;
+            return (
+              <button
+                key={item.id}
+                className={`mobile-dock-item${view===item.id?" active":""}`}
+                onClick={()=>navigate(item.id)}
+              >
+                {count > 0 && <span className="mobile-dock-badge">{count > 9 ? "9+" : count}</span>}
+                <span className="mobile-dock-ic">{item.ic}</span>
+                <span className="mobile-dock-lbl">{item.lbl}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
