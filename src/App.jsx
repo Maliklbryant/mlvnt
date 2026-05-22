@@ -4988,10 +4988,8 @@ function AdminPrograms({ session }) {
       return;
     }
     if (!editProg.id) {
-      const msg = "[saveAndPush] editProg.id is missing: " + JSON.stringify(editProg);
-      console.error(msg);
-      setSaveErr("Program ID is missing. Please reload the page.");
-      alert("Debug: " + msg);
+      console.error("[saveAndPush] editProg.id is missing:", editProg);
+      setSaveErr("Program ID is missing. Please reload and try again.");
       return;
     }
 
@@ -5001,12 +4999,10 @@ function AdminPrograms({ session }) {
     const result = await saveProgram(editProg);
     setSaving(false);
 
-    console.log("[saveAndPush] result:", JSON.stringify(result));
+    console.log("[saveAndPush] result:", result.ok, result.error || "");
 
     if (!result.ok) {
-      const errMsg = result.error || "Save failed — unknown error.";
-      setSaveErr(errMsg);
-      alert("Save failed: " + errMsg);
+      setSaveErr(result.error || "Save failed — check console for details.");
       return;
     }
 
