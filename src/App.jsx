@@ -4917,15 +4917,34 @@ function AdminPrograms({ session }) {
     mutateDay(dId, d => ({...d, exercises: d.exercises.map(e => e.id===eId ? fn(e) : e)}));
 
   const saveAndPush = async () => {
-    if (!editProg) return;
-    setSaving(true); setSaved(false); setSaveErr("");
-    const result = await saveProgram(editProg);
-    setSaving(false);
-    if (!result.ok) {
-      setSaveErr(result.error || "Save failed — check your connection and try again.");
+    if (!editProg) {
+      console.error("[saveAndPush] editProg is null — nothing to save");
       return;
     }
-    // Update local state immediately from DB response, then reload from Supabase
+    if (!editProg.id) {
+      const msg = "[saveAndPush] editProg.id is missing: " + JSON.stringify(editProg);
+      console.error(msg);
+      setSaveErr("Program ID is missing. Please reload the page.");
+      alert("Debug: " + msg);
+      return;
+    }
+
+    console.log("[saveAndPush] Saving program:", editProg.id, editProg.name);
+    setSaving(true); setSaved(false); setSaveErr("");
+
+    const result = await saveProgram(editProg);
+    setSaving(false);
+
+    console.log("[saveAndPush] result:", JSON.stringify(result));
+
+    if (!result.ok) {
+      const errMsg = result.error || "Save failed — unknown error.";
+      setSaveErr(errMsg);
+      alert("Save failed: " + errMsg);
+      return;
+    }
+
+    // Update local state from the authoritative DB response
     setAllProgs(p => p.map(x => x.id === result.program.id ? dbToUI(result.program) : x));
     setSaved(true);
     setTimeout(() => setSaved(false), 2400);
