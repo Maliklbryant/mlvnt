@@ -123,29 +123,80 @@ export async function createProgram(clientId, coachId, overrides = {}) {
 /** Save full program (camelCase UI → snake_case DB). Preserves identity fields. */
 export async function saveProgram(program) {
   const { id, ...fields } = program;
+
+  // Guard: id must be a non-empty string (real UUID from Supabase)
+  if (!id || typeof id !== "string") {
+    console.error("saveProgram: program.id is missing or invalid:", id);
+    return { ok: false, error: "Program ID is missing. Cannot save." };
+  }
+
   const payload = {
-    name:        fields.name,
-    block:       fields.block,
-    phase:       fields.phase       ?? "",
-    status:      fields.status,
-    start_date:  fields.startDate   || null,
-    end_date:    fields.endDate     || null,
-    week:        fields.week        ?? 1,
-    total_weeks: fields.totalWeeks  ?? 8,
-    coach_note:  fields.coachNote   ?? "",
-    days:        fields.days        ?? [],
-    weekly_focus:fields.weeklyFocus ?? "",
-    updated_at:  new Date().toISOString(),
-    // Preserve identity/assignment fields — never strip them on save
-    client_id:   fields.clientId    ?? null,
-    coach_id:    fields.coachId     ?? null,
-    is_template: fields.clientId == null,
-    // template_id, assigned_by, assigned_at are set once at assignment time.
-    // We deliberately do NOT include them here so a save never clears them.
+    name:         fields.name,
+    block:        fields.block,
+    phase:        fields.phase       ?? "",
+    status:       fields.status,
+    start_date:   fields.startDate   || null,
+    end_date:     fields.endDate     || null,
+    week:         fields.week        ?? 1,
+    total_weeks:  fields.totalWeeks  ?? 8,
+    coach_note:   fields.coachNote   ?? "",
+    days:         fields.days        ?? [],
+    weekly_focus: fields.weeklyFocus ?? "",
+    updated_at:   new Date().toISOString(),
+    // Preserve identity fields — never clear them on a routine save
+    client_id:    fields.clientId    ?? null,
+    coach_id:     fields.coachId     ?? null,
+    is_template:  fields.clientId == null,
+    // template_id / assigned_by / assigned_at: set once at assignment, never touched here
   };
-  const { data, error } = await supabase.from("programs").update(payload).eq("id", id).select().single();
-  if (error) { console.error("saveProgram:", error.message); return { ok: false, error: error.message }; }
-  return { ok: true, program: data };
+
+  console.log("[saveProgram] id:", id);
+  console.log("[saveProgram] payload:", JSON.stringify(payload, null, 2));
+
+  // 1. Attempt UPDATE
+  const { data: updated, error: updateErr } = await supabase
+    .from("programs")
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (updateErr) {
+    // PGRST116 = "no rows returned" — row wasn't matched (wrong id, or RLS blocked)
+    if (updateErr.code === "PGRST116") {
+      console.warn("[saveProgram] UPDATE matched 0 rows (id not found or RLS blocked). Trying upsert fallback.");
+      // 2. Fallback: upsert with id included in the payload
+      const upsertPayload = { id, ...payload };
+      const { data: upserted, error: upsertErr } = await supabase
+        .from("programs")
+        .upsert(upsertPayload, { onConflict: "id" })
+        .select()
+        .single();
+      if (upsertErr) {
+        console.error("[saveProgram] upsert fallback failed:", upsertErr.message, "code:", upsertErr.code);
+        return { ok: false, error: `Save failed: ${upsertErr.message} (code ${upsertErr.code})` };
+      }
+      console.log("[saveProgram] upsert succeeded:", upserted?.id);
+      return { ok: true, program: upserted };
+    }
+    console.error("[saveProgram] update error:", updateErr.message, "code:", updateErr.code);
+    return { ok: false, error: `Save failed: ${updateErr.message} (code ${updateErr.code})` };
+  }
+
+  // 3. Re-select to confirm the row exists in DB
+  const { data: confirmed, error: confirmErr } = await supabase
+    .from("programs")
+    .select("id, name, updated_at")
+    .eq("id", id)
+    .single();
+
+  if (confirmErr || !confirmed) {
+    console.error("[saveProgram] post-save confirm failed:", confirmErr?.message);
+    return { ok: false, error: "Save appeared to succeed but could not confirm. Check Supabase." };
+  }
+
+  console.log("[saveProgram] confirmed in DB:", confirmed.id, "updated_at:", confirmed.updated_at);
+  return { ok: true, program: updated };
 }
 
 /** Duplicate a program as a draft copy. */
