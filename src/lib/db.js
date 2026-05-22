@@ -541,3 +541,40 @@ export async function assignProgramTemplate(templateId, clientId, coachId) {
   }
   return { ok: true, program: data };
 }
+
+// ─────────────────────────────────────────────────────────────
+// CLIENT INVITES
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Create a client invite record.
+ * Used when the coach wants to add a new client from the admin dashboard.
+ * The invite is stored in client_invites table.
+ * When the invitee signs up with the matching email, they become a client.
+ */
+export async function createClientInvite({ firstName, lastName, email, phone, packagePlan, notes, coachId }) {
+  if (!email || !email.trim()) {
+    return { ok: false, error: "Email is required." };
+  }
+  const payload = {
+    first_name:   firstName?.trim()  || null,
+    last_name:    lastName?.trim()   || null,
+    email:        email.trim().toLowerCase(),
+    phone:        phone?.trim()      || null,
+    package_plan: packagePlan?.trim()|| null,
+    notes:        notes?.trim()      || null,
+    invited_by:   coachId            || null,
+    status:       "pending",
+    created_at:   new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("client_invites")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) {
+    console.error("createClientInvite:", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, invite: data };
+}
