@@ -4102,6 +4102,10 @@ const ADMIN_CSS = `
 .quick-msg-btn{padding:9px 14px;border-radius:var(--r2);border:1px solid var(--b0);background:none;color:var(--txt-1);font-family:var(--fb);font-size:0.76rem;cursor:pointer;transition:all 0.17s;text-align:left;width:100%;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px;}
 .quick-msg-btn:hover{background:var(--gb);color:var(--txt-0);border-color:var(--b1);}
 .quick-msg-ic{flex-shrink:0;font-size:0.85rem;margin-top:1px;opacity:0.6;}
+/* Program builder responsive helpers */
+.pb-ex-table{display:block;}
+.pb-ex-card-mob{display:none;flex-direction:column;gap:0;}
+.pb-save-bar{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
 @media(max-width:960px){
   .admin-shell{grid-template-columns:1fr;}
   .admin-sidebar{display:none;}
@@ -4134,7 +4138,7 @@ const ADMIN_CSS = `
   .a-row-main{font-size:0.78rem;line-height:1.35;}
   .a-row-sub{font-size:0.65rem;color:var(--txt-2);}
   /* Body */
-  .admin-body{padding:14px 14px 80px;}
+  .admin-body{padding:14px 14px 100px;}
   /* Topbar */
   .admin-topbar{padding:0 14px;height:48px;}
   .admin-topbar .btn{font-size:0.62rem;padding:5px 11px;}
@@ -4144,10 +4148,10 @@ const ADMIN_CSS = `
   /* Messages */
   .admin-msg-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;}
   .msg-tl{border-right:none;border-bottom:1px solid var(--b0);max-height:180px;overflow-y:auto;}
-  /* Programs */
+  /* Programs tabs */
   .prog-tabs{flex-wrap:wrap;gap:4px;margin-bottom:14px;}
   .prog-tab{font-size:0.65rem;padding:6px 10px;}
-  /* Quick actions grid always visible on mobile */
+  /* Quick actions */
   .admin-quick-actions{display:grid !important;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
   .admin-quick-btn{flex-direction:row;justify-content:flex-start;gap:10px;padding:12px 14px;}
   .admin-quick-btn-ic{font-size:0.9rem;}
@@ -4155,13 +4159,59 @@ const ADMIN_CSS = `
   /* Grid stacking */
   .a-grid-2{grid-template-columns:1fr;gap:10px;}
   .a-grid-3{grid-template-columns:1fr;gap:10px;}
-  /* C-av avatars */
+  /* C-av */
   .c-av{width:32px;height:32px;font-size:0.54rem;}
-  /* Program builder */
-  .pe-days{padding:6px;}
-  .pe-day-tab{min-width:90px;}
-  .pe-day-name{font-size:0.72rem;}
-  .pe-day-type{font-size:0.6rem;}
+
+  /* ── PROGRAM BUILDER MOBILE ─────────────────────────────── */
+  /* Metadata grids → single column */
+  .pb-meta-4,.pb-meta-3{display:flex !important;flex-direction:column !important;gap:10px !important;}
+  /* Day + exercise panel → stack vertically */
+  .pb-layout{grid-template-columns:1fr !important;min-height:unset !important;}
+  /* Day sidebar → horizontal scroll strip */
+  .pb-days-col{
+    border-right:none !important;
+    border-bottom:1px solid var(--b0) !important;
+    display:flex !important;
+    flex-direction:row !important;
+    overflow-x:auto !important;
+    padding:8px !important;
+    gap:6px !important;
+    -webkit-overflow-scrolling:touch;
+  }
+  .pb-days-col .pe-day-tab{
+    flex-shrink:0;
+    min-width:90px;
+    margin-bottom:0 !important;
+  }
+  /* Exercise area → no horizontal overflow, full width */
+  .pb-ex-area{
+    overflow-x:hidden !important;
+    padding:14px 14px !important;
+  }
+  /* Desktop exercise table → hidden on mobile */
+  .pb-ex-table{display:none !important;}
+  /* Mobile exercise card → shown on mobile */
+  .pb-ex-card-mob{display:flex !important;}
+  /* Duration buttons → wrap */
+  .pb-dur-btns{flex-wrap:wrap !important;}
+  /* Edit view outer padding */
+  .pb-edit-body{padding:14px 14px 100px !important;}
+  /* Save bar at bottom — sticky on mobile */
+  .pb-save-bar{
+    position:sticky;
+    bottom:0;
+    left:0;
+    right:0;
+    background:rgba(10,11,13,0.97);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border-top:1px solid var(--b0);
+    padding:10px 14px max(12px,env(safe-area-inset-bottom,12px));
+    display:flex;
+    gap:8px;
+    z-index:40;
+    margin-top:16px;
+  }
 }
   .admin-msg-layout{grid-template-columns:1fr;}
   .msg-tl{display:none;}
@@ -5002,9 +5052,9 @@ function AdminPrograms({ session }) {
           </button>
         </>} />
 
-        <div style={{padding:"20px 28px"}}>
+        <div style={{padding:"20px 28px"}} className="pb-edit-body">
           {/* Metadata */}
-          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:12,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:12,marginBottom:14}} className="pb-meta-4">
             <div className="field"><label className="field-label">Program Name</label>
               <input className="fi" value={editProg.name} onChange={e=>mutate(p=>({...p,name:e.target.value}))} /></div>
             <div className="field"><label className="field-label">Block</label>
@@ -5012,7 +5062,7 @@ function AdminPrograms({ session }) {
             <div className="field"><label className="field-label">Phase</label>
               <input className="fi" value={editProg.phase} onChange={e=>mutate(p=>({...p,phase:e.target.value}))} /></div>
             <div className="field"><label className="field-label">Duration</label>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}} className="pb-dur-btns">
                 {[2,4,8,12].map(w=>(
                   <button key={w} onClick={()=>mutate(p=>({...p,totalWeeks:w}))}
                     style={{padding:"6px 10px",borderRadius:"var(--r2)",border:"1px solid "+(editProg.totalWeeks===w?"var(--b1)":"var(--b0)"),background:editProg.totalWeeks===w?"var(--acc-0)":"none",color:editProg.totalWeeks===w?"var(--txt-0)":"var(--txt-1)",fontSize:"0.64rem",fontFamily:"var(--fh)",fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}
@@ -5024,7 +5074,7 @@ function AdminPrograms({ session }) {
               </div>
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:12,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:12,marginBottom:14}} className="pb-meta-3">
             <div className="field"><label className="field-label">Start Date</label>
               <input className="fi" type="date" value={editProg.startDate} onChange={e=>mutate(p=>({...p,startDate:e.target.value}))} /></div>
             <div className="field"><label className="field-label">End Date</label>
@@ -5041,9 +5091,9 @@ function AdminPrograms({ session }) {
           </div>
 
           {/* Day + exercise layout */}
-          <div style={{display:"grid",gridTemplateColumns:"200px 1fr",gap:0,border:"1px solid var(--b0)",borderRadius:"var(--r3)",overflow:"hidden",background:"var(--bg-1)",minHeight:520}}>
+          <div style={{display:"grid",gridTemplateColumns:"200px 1fr",gap:0,border:"1px solid var(--b0)",borderRadius:"var(--r3)",overflow:"hidden",background:"var(--bg-1)",minHeight:520}} className="pb-layout">
             {/* Day sidebar */}
-            <div style={{borderRight:"1px solid var(--b0)",padding:"14px 10px",display:"flex",flexDirection:"column"}}>
+            <div style={{borderRight:"1px solid var(--b0)",padding:"14px 10px",display:"flex",flexDirection:"column"}} className="pb-days-col">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 6px 10px",borderBottom:"1px solid var(--b0)",marginBottom:8}}>
                 <p style={{fontSize:"0.52rem",letterSpacing:"0.2em",textTransform:"uppercase",color:"var(--txt-2)"}}>Days</p>
                 <button className="btn btn-xs btn-p" style={{padding:"3px 8px",fontSize:"0.58rem"}} onClick={addDay}>+ Day</button>
@@ -5061,7 +5111,7 @@ function AdminPrograms({ session }) {
             </div>
 
             {/* Exercise area */}
-            <div style={{overflowX:"auto",overflowY:"auto",padding:"20px 22px"}}>
+            <div style={{overflowX:"auto",overflowY:"auto",padding:"20px 22px"}} className="pb-ex-area">
               {!curDay ? (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12,color:"var(--txt-2)"}}>
                   <span style={{fontSize:"2rem",opacity:0.15}}>▦</span>
@@ -5106,6 +5156,8 @@ function AdminPrograms({ session }) {
                       {grp==="A"?"Primary":grp==="B"?"Secondary":grp==="C"?"Accessory":("Section "+grp)}
                     </p>
 
+                    {/* ── DESKTOP TABLE ── (hidden on mobile via pb-ex-table) */}
+                    <div className="pb-ex-table">
                     {/* Column headers */}
                     <div style={{display:"grid",gridTemplateColumns:"50px 34px minmax(180px,2fr) 50px 80px 50px 40px "+wkGrid+" 90px 90px 28px",gap:4,marginBottom:3,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
                       {["§","↕","Exercise Name","Sets","Reps","Rest","RIR",...weekCols,"Client Note","Coach Note",""].map((h,hi)=>(
@@ -5177,6 +5229,75 @@ function AdminPrograms({ session }) {
                         </div>
                       );
                     })}
+                    </div>{/* end pb-ex-table */}
+
+                    {/* ── MOBILE EXERCISE CARDS ── (hidden on desktop via pb-ex-card-mob) */}
+                    <div className="pb-ex-card-mob">
+                      {exs.map(ex=>{
+                        const dId = curDayId;
+                        return (
+                          <div key={ex.id} style={{borderRadius:"var(--r2)",border:"1px solid var(--b0)",background:"var(--bg-2)",padding:"14px",marginBottom:10}}>
+                            {/* Row 1: Section + Name + Remove */}
+                            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+                              <select value={ex.section||"A1"} onChange={e=>updEx(dId,ex.id,"section",e.target.value)}
+                                style={{background:"var(--bg-1)",border:"1px solid var(--b0)",color:"var(--acc-1)",padding:"7px 6px",borderRadius:"var(--r1)",fontSize:"0.7rem",fontFamily:"var(--fc)",cursor:"pointer",outline:"none",flexShrink:0,width:54}}>
+                                {SECTION_LABELS.map(s=><option key={s} value={s}>{s}</option>)}
+                              </select>
+                              <input type="text" className="fi" value={ex.name||""} placeholder="Exercise name"
+                                autoComplete="off"
+                                style={{flex:1,fontWeight:600,fontSize:"0.84rem",padding:"8px 12px"}}
+                                onChange={e=>updEx(dId,ex.id,"name",e.target.value)} />
+                              <button onClick={()=>removeExercise(ex.id)}
+                                style={{width:30,height:30,borderRadius:"var(--r1)",border:"1px solid rgba(180,60,60,0.3)",background:"none",color:"rgba(200,100,100,0.7)",fontSize:"0.7rem",cursor:"pointer",lineHeight:1,flexShrink:0}}>✕</button>
+                            </div>
+                            {/* Row 2: Sets / Reps / Rest / RIR */}
+                            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
+                              {[["Sets","sets","4"],["Reps","reps","8-10"],["Rest","rest","90s"],["RIR","rir","2"]].map(([lbl,field,ph])=>(
+                                <div key={field}>
+                                  <p style={{fontSize:"0.52rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:3}}>{lbl}</p>
+                                  <input className="set-inp" value={ex[field]||""} placeholder={ph}
+                                    style={{width:"100%",textAlign:"center",fontSize:"0.76rem",padding:"7px 4px"}}
+                                    onChange={e=>updEx(dId,ex.id,field,e.target.value)} />
+                                </div>
+                              ))}
+                            </div>
+                            {/* Row 3: Week progression (W1–W8 in 2 rows of 4) */}
+                            {totalWeeks > 0 && (
+                              <div style={{marginBottom:10}}>
+                                <p style={{fontSize:"0.52rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:5}}>Week Progression</p>
+                                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                                  {Array.from({length:totalWeeks},(_,wi)=>{
+                                    const key="w"+(wi+1);
+                                    return (
+                                      <div key={wi}>
+                                        <p style={{fontSize:"0.5rem",color:"var(--txt-2)",textAlign:"center",marginBottom:2}}>W{wi+1}</p>
+                                        <input className="set-inp" value={ex[key]||""} placeholder="—"
+                                          style={{width:"100%",textAlign:"center",fontSize:"0.7rem",padding:"6px 3px"}}
+                                          onChange={e=>updEx(dId,ex.id,key,e.target.value)} />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            {/* Row 4: Client note */}
+                            <div style={{marginBottom:8}}>
+                              <p style={{fontSize:"0.52rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:3}}>Client Note</p>
+                              <input className="fi" value={ex.clientNote||""} placeholder="Note visible to client"
+                                style={{width:"100%",fontSize:"0.76rem",padding:"7px 10px"}}
+                                onChange={e=>updEx(dId,ex.id,"clientNote",e.target.value)} />
+                            </div>
+                            {/* Row 5: Coach note */}
+                            <div>
+                              <p style={{fontSize:"0.52rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:3}}>Coach Note</p>
+                              <input className="fi" value={ex.coachNote||""} placeholder="Internal coach note"
+                                style={{width:"100%",fontSize:"0.76rem",padding:"7px 10px"}}
+                                onChange={e=>updEx(dId,ex.id,"coachNote",e.target.value)} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>{/* end pb-ex-card-mob */}
                   </div>
                 ))}
 
@@ -5200,7 +5321,7 @@ function AdminPrograms({ session }) {
             </div>
           </div>
 
-          <div style={{marginTop:14,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
+          <div className="pb-save-bar">
             {saveErr && <span style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.9)"}}>{saveErr}</span>}
             {saved   && <span style={{fontSize:"0.7rem",color:"rgba(140,210,155,0.8)"}}>✓ Saved</span>}
             <button className="btn btn-ghost btn-sm" onClick={()=>{reload();setView("list");setDay(null);setEditProg(null);}}>← Back</button>
