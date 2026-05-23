@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import malikImg from "./assets/malik.jpg";
 import { supabase } from "./lib/supabase.js";
 import {
   signIn,
@@ -8777,18 +8776,8 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
             {/* Avatar */}
             <div style={{display:"flex",justifyContent:"center"}}>
               <div style={{position:"relative"}}>
-                <div className="site-about-av">
-                  <img
-                    src={malikImg}
-                    alt="Malik Bryant — MLVNT Founder & Personal Trainer"
-                    style={{
-                      width:"100%",
-                      height:"100%",
-                      objectFit:"cover",
-                      objectPosition:"center top",
-                      display:"block",
-                    }}
-                  />
+                <div className="site-about-av" style={{background:"var(--acc-0)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{fontFamily:"var(--fh)",fontSize:"2.4rem",fontWeight:800,letterSpacing:"-0.04em",color:"rgba(255,255,255,0.15)"}}>MB</span>
                 </div>
                 {/* Credential tag floating off the avatar */}
                 <div style={{
