@@ -5228,59 +5228,6 @@ function AdminClientWorkoutHistory({ clientId }) {
   );
 }
 
-  if (loading) return <div style={{padding:"20px 0",display:"flex",justifyContent:"center"}}><Spinner /></div>;
-  if (logs.length === 0) return (
-    <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No completed workouts yet for this client.</p>
-  );
-
-  return (
-    <div>
-      <p className="label mb-10">Completed Workouts ({logs.length})</p>
-      {logs.map((log, i) => {
-        const progName = progMap[log.program_id] || "Program";
-        const sets     = log.sets_data || {};
-        const date     = log.completed_at
-          ? new Date(log.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
-          : "—";
-        return (
-          <div key={log.id||i} style={{padding:"12px 0",borderBottom:"1px solid var(--b0)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-              <div>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)"}}>{progName}</p>
-                <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>Day: {log.day_id||"—"} · {date}</p>
-              </div>
-              <ATag type="ok">✓ Complete</ATag>
-            </div>
-            {Object.entries(sets).length > 0 && (
-              <div style={{background:"rgba(0,0,0,0.15)",borderRadius:"var(--r2)",padding:"10px 12px",border:"1px solid var(--b0)"}}>
-                <p style={{fontSize:"0.56rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Logged Performance</p>
-                {Object.entries(sets).map(([exId, exData]) => {
-                  const setsArr = Array.isArray(exData?.sets) ? exData.sets : [];
-                  const hasData = setsArr.some(s => s.actualWeight || s.actualReps);
-                  if (!hasData) return null;
-                  return (
-                    <div key={exId} style={{marginBottom:8}}>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {setsArr.map((s,si) => (s.actualWeight || s.actualReps) ? (
-                          <div key={si} style={{padding:"4px 10px",borderRadius:"var(--r1)",background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",fontSize:"0.66rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>
-                            Set {si+1}: {s.actualWeight||"—"}{s.actualWeight?" · ":""}{s.actualReps||"—"} reps
-                            {s.done&&<span style={{color:"rgba(140,210,155,0.8)",marginLeft:4}}>✓</span>}
-                          </div>
-                        ) : null)}
-                      </div>
-                      {exData?.note&&<p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:4,fontStyle:"italic"}}>Note: {exData.note}</p>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /* ── NEW CLIENT MODAL — top-level component so inputs don't lose focus ── */
 function NewClientModal({ show, onClose, onSuccess, session }) {
   const [ncFirst,  setNcFirst]  = useState("");
