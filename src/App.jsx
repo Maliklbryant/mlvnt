@@ -40,6 +40,8 @@ import {
   getUnreadNotificationCount,
   subscribeToNotifications,
   createSession,
+  saveWeightLog,
+  getWeightLogs,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -3438,21 +3440,62 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
   const [weightInput,  setWeightInput]  = useState("");
   const [weightLog,    setWeightLog]    = useState([]);
   const [savingWeight, setSavingWeight] = useState(false);
+  const [weightErr,    setWeightErr]    = useState("");
+  const [loadingLog,   setLoadingLog]   = useState(true);
 
   const completedDays  = Object.values(workoutLogs || {}).filter(l => l.completed);
   const totalLogged    = completedDays.length;
   const activeProg     = (allPrograms || []).find(p => p.status === "active");
   const completedProgs = (allPrograms || []).filter(p => p.status === "completed");
 
-  const logWeight = () => {
+  // Load weight history from Supabase on mount
+  useEffect(() => {
+    if (!session?.id) return;
+    getWeightLogs(session.id, "bodyweight").then(rows => {
+      setWeightLog(rows.map(r => ({
+        id:    r.id,
+        date:  new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),
+        value: `${r.value} ${r.unit || "lbs"}`,
+        raw:   r.value,
+      })));
+    }).catch(()=>{}).finally(()=>setLoadingLog(false));
+  }, [session?.id]);
+
+  const logWeight = async () => {
     const val = parseFloat(weightInput);
-    if (!val || isNaN(val)) return;
-    setSavingWeight(true);
-    const entry = { date: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}), value:`${val} lbs` };
-    if (session?.id) saveClientProfile(session.id, { weight:`${val} lbs` }).catch(()=>{});
-    setWeightLog(prev => [entry, ...prev].slice(0,20));
+    if (!val || isNaN(val) || val <= 0) { setWeightErr("Enter a valid weight."); return; }
+    setSavingWeight(true); setWeightErr("");
+
+    // Optimistic update
+    const tmpId = `tmp-${Date.now()}`;
+    const optimistic = {
+      id:    tmpId,
+      date:  new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),
+      value: `${val} lbs`,
+      raw:   val,
+    };
+    setWeightLog(prev => [optimistic, ...prev].slice(0, 50));
     setWeightInput("");
+
+    // Persist to Supabase
+    const result = await saveWeightLog(session.id, {
+      metricType: "bodyweight",
+      value:      val,
+      unit:       "lbs",
+      programId:  activeProg?.id   || null,
+      weekNumber: activeProg?.week || null,
+    });
     setSavingWeight(false);
+
+    if (!result.ok) {
+      setWeightErr(result.error || "Failed to save. Try again.");
+      setWeightLog(prev => prev.filter(e => e.id !== tmpId));
+      return;
+    }
+    // Confirm with real DB id
+    setWeightLog(prev => prev.map(e => e.id === tmpId ? { ...e, id: result.log.id } : e));
+    // Also update profile current weight
+    saveClientProfile(session.id, { weight: `${val} lbs` }).catch(()=>{});
   };
 
   return (
@@ -3475,84 +3518,79 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
           </div>
           <div className="metric-card">
             <div className="metric-n">{completedProgs.length || "—"}</div>
-            <p className="metric-lbl">Programs Completed</p>
-            <p className="metric-delta" style={{color:"var(--txt-2)"}}>All time</p>
+            <p className="metric-lbl">Completed</p>
+            <p className="metric-delta" style={{color:"var(--txt-2)"}}>Programs finished</p>
           </div>
         </div>
 
+        {/* Bodyweight tracker */}
         <div className="card card-p mb-16">
-          <div className="panel-hd"><span className="panel-title">Workout History</span></div>
-          {completedDays.length === 0 ? (
-            <div className="empty-state" style={{padding:"28px 0"}}>
-              <span className="empty-ic">◈</span>
-              <p className="empty-txt">No workouts logged yet. Complete a workout day to start building your history.</p>
-            </div>
-          ) : completedDays.slice(0,10).map((log,i) => (
-            <div className="list-row" key={i}>
-              <p className="list-main" style={{fontSize:"0.78rem"}}>Workout completed</p>
-              <span className="list-sub">{log.completedAt || "—"}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="dash-grid">
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Body Weight Log</span></div>
-            {weightLog.length === 0
-              ? <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No entries yet.</p>
-              : weightLog.map(({date,value}) => (
-                <div className="list-row" key={date}>
-                  <span className="list-sub">{date}</span>
-                  <span className="list-main">{value}</span>
-                </div>
-              ))
-            }
-            <div className="field mt-16">
-              <label className="field-label">Log Today's Weight</label>
-              <div className="flex gap-8">
-                <input className="fi" style={{flex:1}} placeholder="lbs" type="number" step="0.1"
-                  value={weightInput} onChange={e=>setWeightInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&logWeight()} />
-                <button className={"btn btn-p btn-sm"+(savingWeight?" btn-loading":"")} onClick={logWeight}>Log</button>
-              </div>
-            </div>
+          <p className="label mb-12">Log Bodyweight</p>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+            <input
+              className="fi"
+              type="number"
+              min="50" max="500" step="0.1"
+              placeholder="e.g. 185.5"
+              value={weightInput}
+              onChange={e=>{ setWeightInput(e.target.value); setWeightErr(""); }}
+              style={{flex:1,minWidth:120}}
+            />
+            <span style={{display:"flex",alignItems:"center",padding:"0 4px",fontSize:"0.76rem",color:"var(--txt-2)"}}>lbs</span>
+            <button
+              className={"btn btn-p btn-sm"+(savingWeight?" btn-loading":"")}
+              disabled={savingWeight}
+              onClick={logWeight}
+              style={{flexShrink:0}}
+            >
+              {savingWeight ? <><Spinner />Saving…</> : "Log Weight"}
+            </button>
           </div>
+          {weightErr && <p style={{fontSize:"0.7rem",color:"rgba(220,100,100,0.85)",marginTop:6}}>{weightErr}</p>}
 
-          <div className="card card-p">
-            <div className="panel-hd"><span className="panel-title">Program Milestones</span></div>
-            {completedProgs.length === 0 ? (
-              <div className="empty-state" style={{padding:"20px 0"}}>
-                <span className="empty-ic">◎</span>
-                <p className="empty-txt">Milestones appear as you complete program blocks.</p>
-              </div>
-            ) : completedProgs.map(p => (
-              <div className="list-row" key={p.id}>
-                <div>
-                  <p className="list-main" style={{fontSize:"0.78rem"}}>Completed: {p.name}</p>
-                  <p className="list-sub">{p.block}{p.endDate ? ` · ${p.endDate}` : ""}</p>
-                </div>
-                <Tag type="ok">✓</Tag>
+          <div style={{marginTop:14}}>
+            {loadingLog ? (
+              <p style={{fontSize:"0.7rem",color:"var(--txt-2)"}}>Loading history…</p>
+            ) : weightLog.length === 0 ? (
+              <p style={{fontSize:"0.72rem",color:"var(--txt-2)",lineHeight:1.7}}>
+                No entries yet. Log your first bodyweight above.
+              </p>
+            ) : weightLog.map((entry, i) => (
+              <div key={entry.id || i} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--b0)",opacity:entry.id?.startsWith("tmp-")?0.6:1}}>
+                <span style={{fontSize:"0.76rem",color:"var(--txt-1)"}}>{entry.date}</span>
+                <span style={{fontSize:"0.76rem",fontWeight:600,color:"var(--txt-0)",fontFamily:"var(--fh)"}}>{entry.value}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="card card-p mt-16">
-          <div className="panel-hd">
-            <span className="panel-title">Progress Photos</span>
-            <Tag type="pend">Coming Soon</Tag>
+        {/* Workout history */}
+        {completedDays.length > 0 && (
+          <div className="card card-p mb-16">
+            <p className="label mb-12">Workout History</p>
+            {completedDays.slice(0,10).map((log, i) => (
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:"1px solid var(--b0)"}}>
+                <p style={{fontSize:"0.78rem",color:"var(--txt-0)"}}>{log.completed_at || "Completed"}</p>
+                <span style={{fontSize:"0.65rem",color:"rgba(140,210,155,0.85)",fontFamily:"var(--fc)"}}>&#10003; Done</span>
+              </div>
+            ))}
           </div>
-          <div className="empty-state" style={{padding:"28px 0"}}>
-            <span className="empty-ic">📷</span>
-            <p className="empty-txt">Progress photo uploads coming soon.</p>
+        )}
+
+        {completedDays.length === 0 && weightLog.length === 0 && !loadingLog && (
+          <div className="empty-state">
+            <span className="empty-ic">&#9672;</span>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>No progress data yet</p>
+            <p className="empty-txt">Complete workouts and log your weight to start tracking.</p>
           </div>
-        </div>
+        )}
+
       </div>
     </div>
   );
 }
 
-/* ── FEEDBACK ────────────────────────────────────────────────────────────── */
+
 function Feedback({ onBack }) {
   const [ratings, setRatings] = useState({});
   const [submitted, setDone]  = useState(false);
@@ -4133,11 +4171,24 @@ function AppShell({ onLogout, session }) {
         })
       : null;
 
+    // Realtime: update profile/session balance instantly when coach adjusts it
+    const profileSub = session?.id ? supabase
+      .channel(`client_profiles:${session.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "client_profiles",
+        filter: `id=eq.${session.id}`,
+      }, () => reloadProfileData())
+      .subscribe()
+    : null;
+
     return () => {
       clearInterval(interval);
       progSub?.unsubscribe();
       logSub?.unsubscribe();
       notifSub?.unsubscribe();
+      profileSub?.unsubscribe();
     };
   }, [session?.id]);
 
@@ -6349,10 +6400,24 @@ function AdminPackages({ dbClients }) {
       return acc;
     }, {});
   });
-  const [adjAmt,   setAdjAmt]   = useState({});   // clientId → input string
-  const [adjNote,  setAdjNote]  = useState({});   // clientId → reason string
-  const [expanded, setExpanded] = useState(null); // clientId for expanded row
+  const [adjAmt,   setAdjAmt]   = useState({});
+  const [adjNote,  setAdjNote]  = useState({});
+  const [expanded, setExpanded] = useState(null);
   const [saved,    setSaved]    = useState({});
+
+  // Re-sync local inventory when dbClients updates (via realtime)
+  useEffect(() => {
+    setClientInv(clients.reduce((acc, c) => {
+      const cp = c.client_profiles;
+      acc[c.id] = {
+        balance:   c.sessLeft  ?? 0,
+        weeklyMax: PLAN_CATALOGUE[c.pkg]?.weeklyMax || 2,
+        plan:      c.pkg       || "—",
+        override:  false,
+      };
+      return acc;
+    }, {}));
+  }, [dbClients]);
 
   const applyAdj = async (clientId, sign) => {
     const n = parseInt(adjAmt[clientId] || "0");
@@ -6376,6 +6441,24 @@ function AdminPackages({ dbClients }) {
         body: `Your session balance is now ${newBal}.`,
         relatedId: null,
       }).catch(() => {});
+      // Low-session warnings
+      if (newBal === 2) {
+        createNotification({
+          recipientId: clientId,
+          type: "package_updated",
+          title: "2 sessions remaining",
+          body: "You have 2 sessions left. Reach out to renew your package.",
+          relatedId: null,
+        }).catch(() => {});
+      } else if (newBal === 1) {
+        createNotification({
+          recipientId: clientId,
+          type: "package_updated",
+          title: "1 session remaining",
+          body: "You have 1 session left. Contact your coach to renew.",
+          relatedId: null,
+        }).catch(() => {});
+      }
     } else {
       console.error("adminAdj:", result.error);
       // Revert optimistic update on failure
@@ -8567,11 +8650,20 @@ function AdminShell({ onLogout, session }) {
       ? subscribeToNotifications(session.id, () => loadNotifCounts())
       : null;
 
+    // Realtime: reload client list when any client_profile changes (balances, packages)
+    const profilesSub = supabase
+      .channel("client_profiles:coach")
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "client_profiles",
+      }, () => loadClients())
+      .subscribe();
+
     return () => {
       clearInterval(interval);
       logSub?.unsubscribe();
       consultSub?.unsubscribe();
       notifSub?.unsubscribe();
+      profilesSub?.unsubscribe();
     };
   }, [session?.id]);
 
