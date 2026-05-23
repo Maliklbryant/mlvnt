@@ -349,16 +349,22 @@ export async function saveConsultationRequest(data) {
     status:           "pending",
     created_at:       new Date().toISOString(),
   };
+  console.log("saving consultation request", payload);
   const { data: row, error } = await supabase
     .from("consultation_requests").insert(payload).select().single();
-  if (error) { console.error("saveConsultationRequest:", error.message); return { ok: false, error: error.message }; }
-  return { ok: true, request: row };
+  const result = error
+    ? { ok: false, error: error.message }
+    : { ok: true, request: row };
+  console.log("consultation save result", result);
+  if (error) console.error("saveConsultationRequest:", error.message);
+  return result;
 }
 
 export async function getConsultationRequests() {
   const { data, error } = await supabase
     .from("consultation_requests").select("*").order("created_at", { ascending: false });
   if (error) { console.error("getConsultationRequests:", error.message); return []; }
+  console.log("loaded consultation requests", data?.length ?? 0, "rows");
   return data || [];
 }
 
@@ -577,4 +583,153 @@ export async function createClientInvite({ firstName, lastName, email, phone, pa
     return { ok: false, error: error.message };
   }
   return { ok: true, invite: data };
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Create a notification for a user.
+ * type: 'new_message' | 'program_assigned' | 'workout_completed' |
+ *       'consultation_request' | 'session_booked' | 'check_in' | 'package_updated'
+ */
+export async function createNotification({ recipientId, type, title, body, relatedId }) {
+  if (!recipientId) return { ok: false, error: "recipientId required" };
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert({
+      recipient_id: recipientId,
+      type,
+      title:      title || "",
+      body:       body  || "",
+      related_id: relatedId || null,
+      read:       false,
+      created_at: new Date().toISOString(),
+    })
+    .select().single();
+  if (error) { console.error("createNotification:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, notification: data };
+}
+
+/** Fetch unread + recent notifications for a user (max 50). */
+export async function getNotifications(userId) {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("recipient_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) { console.error("getNotifications:", error.message); return []; }
+  return data || [];
+}
+
+/** Count unread notifications for a user. */
+export async function getUnreadNotificationCount(userId) {
+  if (!userId) return 0;
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("recipient_id", userId)
+    .eq("read", false);
+  if (error) { console.error("getUnreadNotificationCount:", error.message); return 0; }
+  return count || 0;
+}
+
+/** Mark a single notification as read. */
+export async function markNotificationRead(notificationId) {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("id", notificationId);
+  if (error) { console.error("markNotificationRead:", error.message); return { ok: false }; }
+  return { ok: true };
+}
+
+/** Mark ALL notifications for a user as read. */
+export async function markAllNotificationsRead(userId) {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("recipient_id", userId)
+    .eq("read", false);
+  if (error) { console.error("markAllNotificationsRead:", error.message); return { ok: false }; }
+  return { ok: true };
+}
+
+/** Subscribe to new notifications for a user in realtime. */
+export function subscribeToNotifications(userId, callback) {
+  return supabase
+    .channel(`notifications:${userId}`)
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "notifications",
+      filter: `recipient_id=eq.${userId}`,
+    }, payload => callback(payload.new))
+    .subscribe();
+}
+
+// ─────────────────────────────────────────────────────────────
+// SESSIONS / BOOKINGS
+// ─────────────────────────────────────────────────────────────
+
+/** Create a session booking record. */
+export async function createSession({ clientId, coachId, date, time, notes }) {
+  const { data, error } = await supabase
+    .from("sessions")
+    .insert({
+      client_id:  clientId,
+      coach_id:   coachId  || null,
+      date,
+      time,
+      notes:      notes || null,
+      status:     "booked",
+      created_at: new Date().toISOString(),
+    })
+    .select().single();
+  if (error) { console.error("createSession:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, session: data };
+}
+
+/** Get upcoming sessions for a client. */
+export async function getClientSessions(clientId) {
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("date", { ascending: true })
+    .limit(20);
+  if (error) { console.error("getClientSessions:", error.message); return []; }
+  return data || [];
+}
+
+/** Get all sessions for the coach (optionally filtered by date). */
+export async function getCoachSessions(fromDate) {
+  let q = supabase
+    .from("sessions")
+    .select(`*, profiles!sessions_client_id_fkey (name, email)`)
+    .order("date", { ascending: true })
+    .limit(100);
+  if (fromDate) q = q.gte("date", fromDate);
+  const { data, error } = await q;
+  if (error) {
+    // FK join fallback if foreign key not set
+    const { data: fb, error: fbErr } = await supabase
+      .from("sessions").select("*").order("date", { ascending: true }).limit(100);
+    if (fbErr) { console.error("getCoachSessions:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
+}
+
+/** Update session status (booked → confirmed | cancelled | completed). */
+export async function updateSessionStatus(sessionId, status, coachNotes) {
+  const { error } = await supabase
+    .from("sessions")
+    .update({ status, coach_notes: coachNotes || null, updated_at: new Date().toISOString() })
+    .eq("id", sessionId);
+  if (error) { console.error("updateSessionStatus:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true };
 }
