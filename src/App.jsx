@@ -42,6 +42,8 @@ import {
   createSession,
   saveWeightLog,
   getWeightLogs,
+  getCoachAvailability,
+  saveCoachAvailability,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -881,6 +883,11 @@ function wlIsDone(logs, progId, dayId) {
 function wlSetsForEx(logs, progId, dayId, exId) {
   const raw = logs?.[`${progId}:${dayId}`]?.sets?.[exId];
   if (!raw) return new Set();
+  // New shape: { sets: [{done, actualWeight, actualReps}] }
+  if (raw && typeof raw === "object" && Array.isArray(raw.sets)) {
+    return new Set(raw.sets.map((s, i) => s.done ? i : -1).filter(i => i >= 0));
+  }
+  // Legacy shape: array of indices or Set
   return raw instanceof Set ? raw : new Set(Array.isArray(raw) ? raw : Object.keys(raw).map(Number));
 }
 function wlCheckedSets(logs, progId, dayId, exId) {
@@ -2674,15 +2681,74 @@ function Booking({ setView, profileData, onBack }) {
   const ALL_TIMES = ["7:00 AM","8:00 AM","9:00 AM","10:00 AM","12:00 PM","1:00 PM","3:00 PM","5:00 PM","6:00 PM","7:00 PM"];
 
   // All slots are available — real scheduling availability will come from booking API
+  const DOW_KEYS = ["sun","mon","tue","wed","thu","fri","sat"];
+
+  // Load coach availability + already-booked sessions on mount
+  const loadAvailability = () => {
+    getCoachId().then(async coachId => {
+      if (!coachId) { setAvailLoad(false); return; }
+      const datePrefix = `${yr}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      const [avail, sessResult] = await Promise.all([
+        getCoachAvailability(coachId).catch(() => null),
+        supabase.from("sessions").select("date,time,status")
+          .neq("status","cancelled")
+          .gte("date", datePrefix+"-01")
+          .then(({data}) => data || []).catch(() => []),
+      ]);
+      setCoachAvail(avail);
+      setBookedSlots(sessResult.map(s => `${s.date}:${s.time}`));
+      setAvailLoad(false);
+    }).catch(() => setAvailLoad(false));
+  };
+
+  useEffect(() => { loadAvailability(); }, []);
+
+  // Build slot statuses from real coach availability
   const slotStatuses = ALL_TIMES.reduce((acc, t) => {
-    acc[t] = { status: "available", reason: null, buffer: 0 };
+    let status = "available"; let reason = null;
+    const selDow = DOW_KEYS[new Date(yr, now.getMonth(), selDate).getDay()];
+    const ws = coachAvail?.weekly_schedule;
+    if (ws) {
+      const day = ws[selDow];
+      if (!day?.open) {
+        status = "unavailable"; reason = "Coach unavailable";
+      } else if (day.from && day.to) {
+        const ti = ALL_TIMES.indexOf(t);
+        const fi = ALL_TIMES.indexOf(day.from);
+        const toi = ALL_TIMES.indexOf(day.to);
+        if (fi >= 0 && toi >= 0 && (ti < fi || ti >= toi)) {
+          status = "unavailable"; reason = "Outside hours";
+        }
+      }
+    }
+    if (coachAvail?.blocked_windows?.length) {
+      const dateStr = `${yr}-${String(now.getMonth()+1).padStart(2,"0")}-${String(selDate).padStart(2,"0")}`;
+      for (const b of coachAvail.blocked_windows) {
+        if (b.date === dateStr) {
+          const ti = ALL_TIMES.indexOf(t);
+          const fi = ALL_TIMES.indexOf(b.from);
+          const toi = ALL_TIMES.indexOf(b.to);
+          if (fi >= 0 && toi >= 0 && ti >= fi && ti < toi) {
+            status = "blocked"; reason = b.reason || "Blocked";
+          }
+        }
+      }
+    }
+    const dateStr = `${yr}-${String(now.getMonth()+1).padStart(2,"0")}-${String(selDate).padStart(2,"0")}`;
+    if (bookedSlots.includes(`${dateStr}:${t}`)) {
+      status = "booked"; reason = "Already booked";
+    }
+    acc[t] = { status, reason, buffer: 0 };
     return acc;
   }, {});
 
   const openDirections = addr =>
     window.open(`https://maps.google.com/?q=${encodeURIComponent(addr)}`, "_blank", "noopener");
 
-  const [bookErr, setBookErr] = useState("");
+  const [bookErr,     setBookErr]    = useState("");
+  const [coachAvail,  setCoachAvail]  = useState(null);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [availLoading,setAvailLoad]   = useState(true);
 
   const confirmBook = async () => {
     if (!c1 || !c2) return;
@@ -3003,7 +3069,8 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
   const todayDay   = active?.days.find(d=>d.id===todayDayId) || null;
 
   // Per-session set tracking — stored locally, flushed to DB on completeDay
-  const [localSets, setLocalSets] = useState({}); // key "progId:dayId:exId" → Set<si>
+  const [localSets,    setLocalSets]    = useState({}); // key "progId:dayId:exId" → Set<si>
+  const [localSetData, setLocalSetData] = useState({}); // key "progId:dayId:exId:si" → { weight, reps }
 
   const toggleSet = (dayId, exId, si) => {
     const key = `${progId}:${dayId}:${exId}`;
@@ -3013,6 +3080,20 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
       return { ...prev, [key]: s };
     });
     setTick(t => t + 1);
+  };
+
+  // Update weight or reps for a specific set
+  const updateSetData = (dayId, exId, si, field, value) => {
+    const key = `${progId}:${dayId}:${exId}:${si}`;
+    setLocalSetData(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), [field]: value },
+    }));
+  };
+
+  const getSetData = (dayId, exId, si) => {
+    const key = `${progId}:${dayId}:${exId}:${si}`;
+    return localSetData[key] || {};
   };
 
   // Resolve sets: prefer localSets (in-progress), fall back to persisted workoutLogs
@@ -3031,18 +3112,30 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
     setActiveDay(null);
     setTick(t => t + 1);
     if (session?.id && progId) {
-      // Build setsObj from localSets for this day
+      // Build enriched setsObj: { exId: [ { done, actualWeight, actualReps } ] }
       const setsObj = {};
       const day = active?.days?.find(d => d.id === dayId);
       (day?.exercises || []).forEach(ex => {
-        const key = `${progId}:${dayId}:${ex.id}`;
-        setsObj[ex.id] = [...(localSets[key] || [])];
+        const completedKey = `${progId}:${dayId}:${ex.id}`;
+        const completedSet = localSets[completedKey] || new Set();
+        const numSets = typeof ex.sets === "number" ? ex.sets : (ex.sets?.length || 0);
+        setsObj[ex.id] = {
+          sets: Array.from({ length: numSets }, (_, si) => {
+            const d = localSetData[`${progId}:${dayId}:${ex.id}:${si}`] || {};
+            return {
+              done:         completedSet.has(si),
+              actualWeight: d.weight || null,
+              actualReps:   d.reps   || null,
+            };
+          }),
+          note: ex.clientNote || null,
+        };
       });
       await saveWorkoutLog(progId, dayId, session.id, {
         sets: setsObj, completed: true, completedAt,
       }).catch(e => console.error("saveWorkoutLog:", e));
       if (onWorkoutComplete) onWorkoutComplete();
-      // Notify coach that client completed a workout
+      // Notify coach of workout completion
       getCoachId().then(coachId => {
         if (!coachId) return;
         createNotification({
@@ -3152,15 +3245,37 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
                 {/* Set bubbles */}
                 <div style={{display:"flex",flexDirection:"column",gap:2}}>
                   {Array.from({length:numSets},(_,si) => {
-                    const done   = isSetDone(activeDay, ex.id, si);
-                    const reps   = repsArr[si]   || repsArr[repsArr.length-1]   || "—";
-                    const weight = weightArr[si] || weightArr[weightArr.length-1] || "";
+                    const done    = isSetDone(activeDay, ex.id, si);
+                    const reps    = repsArr[si]   || repsArr[repsArr.length-1]   || "—";
+                    const weight  = weightArr[si] || weightArr[weightArr.length-1] || "";
+                    const setD    = getSetData(activeDay, ex.id, si);
                     return (
                       <div className="wk-set-row" key={si}>
                         <span className="wk-set-label">Set {si+1}</span>
                         <div className="wk-set-targets">
                           <span className="wk-set-target" style={{fontFamily:"var(--fc)",fontSize:"0.72rem",color:done?"rgba(140,210,155,0.7)":"var(--txt-1)"}}>{reps} reps{weight?` · ${weight}`:""}</span>
                         </div>
+                        {/* Weight / reps inputs — only shown while workout is active */}
+                        {!isDone && (
+                          <div style={{display:"flex",gap:4,flex:"1 1 auto",maxWidth:160}}>
+                            <input
+                              type="number" min="0" step="2.5" placeholder="lbs"
+                              value={setD.weight || ""}
+                              onChange={e => updateSetData(activeDay, ex.id, si, "weight", e.target.value)}
+                              className="set-inp"
+                              style={{width:52,textAlign:"center",fontSize:"0.7rem",padding:"4px 4px"}}
+                              title="Actual weight used"
+                            />
+                            <input
+                              type="number" min="0" step="1" placeholder="reps"
+                              value={setD.reps || ""}
+                              onChange={e => updateSetData(activeDay, ex.id, si, "reps", e.target.value)}
+                              className="set-inp"
+                              style={{width:44,textAlign:"center",fontSize:"0.7rem",padding:"4px 4px"}}
+                              title="Actual reps done"
+                            />
+                          </div>
+                        )}
                         <button
                           className={`set-bubble${done?" done":""}`}
                           onClick={()=>{ if(!isDone) toggleSet(activeDay, ex.id, si); }}
@@ -3448,7 +3563,7 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
   const activeProg     = (allPrograms || []).find(p => p.status === "active");
   const completedProgs = (allPrograms || []).filter(p => p.status === "completed");
 
-  // Load weight history from Supabase on mount
+  // Load weight history from Supabase on mount + realtime subscription
   useEffect(() => {
     if (!session?.id) return;
     getWeightLogs(session.id, "bodyweight").then(rows => {
@@ -3459,6 +3574,34 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
         raw:   r.value,
       })));
     }).catch(()=>{}).finally(()=>setLoadingLog(false));
+
+    // Realtime: update when new weight log is inserted
+    const sub = supabase
+      .channel(`weight_logs:${session.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "client_weight_logs",
+        filter: `client_id=eq.${session.id}`,
+      }, payload => {
+        const r = payload.new;
+        if (r.metric_type !== "bodyweight") return;
+        setWeightLog(prev => {
+          // Replace matching optimistic entry by value+date, or prepend
+          const dateStr = new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+          const entry = { id: r.id, date: dateStr, value: `${r.value} ${r.unit || "lbs"}`, raw: r.value };
+          const idx = prev.findIndex(e => e.id?.startsWith("tmp-") && Math.abs(e.raw - r.value) < 0.01);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = entry;
+            return updated;
+          }
+          return [entry, ...prev].slice(0, 50);
+        });
+      })
+      .subscribe();
+
+    return () => { sub?.unsubscribe(); };
   }, [session?.id]);
 
   const logWeight = async () => {
@@ -4955,25 +5098,135 @@ function AdminDashboard({ setView, setFocusClient, dbClients, notifCounts }) {
 
 /* ── ADMIN CLIENT WORKOUT HISTORY ───────────────────────────────────────── */
 function AdminClientWorkoutHistory({ clientId }) {
-  const [logs,    setLogs]    = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [progMap, setProgMap] = useState({});
+  const [logs,       setLogs]       = useState([]);
+  const [weightLogs, setWeightLogs] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [progMap,    setProgMap]    = useState({});
+  const [activeTab,  setActiveTab]  = useState("workouts"); // "workouts" | "weight"
 
   useEffect(() => {
     if (!clientId) return;
-    getPrograms(clientId).then(progs => {
+    Promise.all([
+      getPrograms(clientId),
+      getWeightLogs(clientId, null), // all metric types
+    ]).then(([progs, wLogs]) => {
       const pm = {};
       progs.forEach(p => { pm[p.id] = p.name || p.block || "Program"; });
       setProgMap(pm);
-      Promise.all(progs.map(p => getProgramLogs(p.id))).then(results => {
+      return Promise.all(progs.map(p => getProgramLogs(p.id))).then(results => {
         const all = results.flat().sort((a,b) =>
           new Date(b.completed_at||0) - new Date(a.completed_at||0)
         );
         setLogs(all);
+        setWeightLogs(wLogs);
         setLoading(false);
       });
     }).catch(() => setLoading(false));
   }, [clientId]);
+
+  if (loading) return <div style={{padding:"20px 0",display:"flex",justifyContent:"center"}}><Spinner /></div>;
+
+  return (
+    <div>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {[["workouts","Workouts"],["weight","Weight Log"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setActiveTab(id)}
+            style={{fontSize:"0.62rem",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",
+              padding:"5px 12px",borderRadius:"var(--r2)",border:"1px solid var(--b0)",cursor:"pointer",
+              background:activeTab===id?"var(--acc-0)":"none",color:activeTab===id?"var(--txt-0)":"var(--txt-2)"}}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "workouts" && (
+        logs.length === 0 ? (
+          <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No completed workouts yet.</p>
+        ) : (
+          <div>
+            <p className="label mb-10">Completed Workouts ({logs.length})</p>
+            {logs.map((log, i) => {
+              const progName = progMap[log.program_id] || "Program";
+              const sets     = log.sets_data || {};
+              const date     = log.completed_at
+                ? new Date(log.completed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+                : "—";
+              return (
+                <div key={log.id||i} style={{padding:"12px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)"}}>{progName}</p>
+                      <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>Day: {log.day_id||"—"} · {date}</p>
+                    </div>
+                    <ATag type="ok">✓ Complete</ATag>
+                  </div>
+                  {/* Per-exercise set performance */}
+                  {Object.entries(sets).length > 0 && (() => {
+                    const entriesWithData = Object.entries(sets).filter(([, exData]) => {
+                      const sArr = Array.isArray(exData?.sets) ? exData.sets : [];
+                      return sArr.some(s => s.actualWeight || s.actualReps);
+                    });
+                    if (entriesWithData.length === 0) return null;
+                    return (
+                      <div style={{background:"rgba(0,0,0,0.15)",borderRadius:"var(--r2)",padding:"10px 12px",border:"1px solid var(--b0)"}}>
+                        <p style={{fontSize:"0.56rem",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--txt-2)",marginBottom:8}}>Performance</p>
+                        {entriesWithData.map(([exId, exData]) => {
+                          const setsArr = Array.isArray(exData?.sets) ? exData.sets : [];
+                          return (
+                            <div key={exId} style={{marginBottom:8}}>
+                              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                                {setsArr.map((s,si) => (
+                                  <div key={si} style={{padding:"4px 10px",borderRadius:"var(--r1)",background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",fontSize:"0.66rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>
+                                    S{si+1}: {s.actualWeight ? `${s.actualWeight}lbs` : "—"} × {s.actualReps || "—"}
+                                    {s.done && <span style={{color:"rgba(140,210,155,0.8)",marginLeft:4}}>✓</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              {exData?.note && <p style={{fontSize:"0.64rem",color:"var(--txt-2)",marginTop:4,fontStyle:"italic"}}>{exData.note}</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {activeTab === "weight" && (
+        weightLogs.length === 0 ? (
+          <p className="body-sm" style={{padding:"8px 0",color:"var(--txt-2)"}}>No weight entries logged yet.</p>
+        ) : (
+          <div>
+            <p className="label mb-10">Weight Log ({weightLogs.length} entries)</p>
+            {weightLogs.slice(0,30).map((entry, i) => {
+              const date = new Date(entry.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+              const label = entry.metric_type === "bodyweight" ? "Bodyweight"
+                : entry.exercise_name ? entry.exercise_name
+                : entry.metric_type || "Entry";
+              return (
+                <div key={entry.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--b0)"}}>
+                  <div>
+                    <p style={{fontSize:"0.76rem",color:"var(--txt-0)",fontWeight:500}}>{label}</p>
+                    {entry.week_number && <p style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:2}}>Wk {entry.week_number}</p>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <p style={{fontSize:"0.76rem",fontWeight:700,color:"var(--txt-0)",fontFamily:"var(--fh)"}}>{entry.value} {entry.unit||"lbs"}</p>
+                    <p style={{fontSize:"0.62rem",color:"var(--txt-2)",marginTop:2}}>{date}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
 
   if (loading) return <div style={{padding:"20px 0",display:"flex",justifyContent:"center"}}><Spinner /></div>;
   if (logs.length === 0) return (
