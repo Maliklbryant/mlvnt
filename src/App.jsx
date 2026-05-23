@@ -36,6 +36,16 @@ import {
   getUnreadMessageCount,
   getCoachId,
   createClientInvite,
+  createNotification,
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  subscribeToNotifications,
+  createSession,
+  getClientSessions,
+  getCoachSessions,
+  updateSessionStatus,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -3015,6 +3025,17 @@ function Program({ session, activeProgram, allPrograms, workoutLogs, onWorkoutCo
         sets: setsObj, completed: true, completedAt,
       }).catch(e => console.error("saveWorkoutLog:", e));
       if (onWorkoutComplete) onWorkoutComplete();
+      // Notify coach that client completed a workout
+      getCoachId().then(coachId => {
+        if (!coachId) return;
+        createNotification({
+          recipientId: coachId,
+          type: "workout_completed",
+          title: "Workout completed",
+          body: `${session.name || "A client"} completed ${day?.name || "a workout"} on ${completedAt}.`,
+          relatedId: progId,
+        }).catch(()=>{});
+      }).catch(()=>{});
     }
   };
 
@@ -3621,6 +3642,19 @@ function Messages({ session, onRead, onBack }) {
         setLoad(false);
       }
     }).catch(() => setLoad(false));
+
+    // Realtime: receive new messages from coach instantly
+    const sub = subscribeToMessages(session.id, newMsg => {
+      setMsgs(p => {
+        // Replace optimistic or append
+        const withoutTmp = p.filter(m => !m.id?.startsWith('tmp-') || m.content !== newMsg.content);
+        return [...withoutTmp, newMsg];
+      });
+      if (onRead) onRead();
+      setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+    });
+
+    return () => { sub?.unsubscribe(); };
   }, [session?.id]);
 
   const send = async () => {
@@ -3631,6 +3665,14 @@ function Messages({ session, onRead, onBack }) {
     setMsgs(p => [...p, optimistic]);
     setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
     await sendMessage(session.id, coachId, text).catch(()=>{});
+    // Notify the coach of the new message
+    createNotification({
+      recipientId: coachId,
+      type: "new_message",
+      title: "New message",
+      body: text.length > 60 ? text.slice(0,60)+"…" : text,
+      relatedId: session.id,
+    }).catch(()=>{});
   };
 
   return (
@@ -4004,7 +4046,8 @@ function AppShell({ onLogout, session }) {
   const [profileData, setProfileData] = useState(null);
 
   // ── Real unread message count ─────────────────────────────────────────────
-  const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const [unreadMsgs,  setUnreadMsgs]  = useState(0);
+  const [unreadNotifs,setUnreadNotifs] = useState(0);
 
   const reloadProfileData = () => {
     if (!session?.id) return;
@@ -4068,10 +4111,18 @@ function AppShell({ onLogout, session }) {
       .subscribe()
     : null;
 
+    // Realtime: receive notifications instantly
+    const notifSub = session?.id
+      ? subscribeToNotifications(session.id, () => {
+          setUnreadNotifs(n => n + 1);
+        })
+      : null;
+
     return () => {
       clearInterval(interval);
       progSub?.unsubscribe();
       logSub?.unsubscribe();
+      notifSub?.unsubscribe();
     };
   }, [session?.id]);
 
@@ -5406,10 +5457,17 @@ function AdminPrograms({ session }) {
   const confirmAssign = async () => {
     if (!assignCId) { setAssignErr("Select a client."); return; }
     setAssigning(true); setAssignErr("");
-    // Use assignProgramTemplate to create a client copy, preserving the original template
     const r = await assignProgramTemplate(assignModal, assignCId, session?.id);
     setAssigning(false);
     if (!r.ok) { setAssignErr(r.error || "Failed"); return; }
+    // Notify client that a program was assigned
+    createNotification({
+      recipientId: assignCId,
+      type: "program_assigned",
+      title: "New program assigned",
+      body: "Your coach assigned you a new training program.",
+      relatedId: r.program?.id || null,
+    }).catch(()=>{});
     setAssignModal(null);
     reload();
   };
@@ -6516,7 +6574,32 @@ function AdminMessages({ dbClients = [], session, onRead }) {
     setThreads(p => ({...p, [selThread]: [...(p[selThread]||[]), optimistic]}));
     setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
     await sendMessage(session.id, selThread, text).catch(()=>{});
+    // Notify the client of the coach's reply
+    createNotification({
+      recipientId: selThread,
+      type: "new_message",
+      title: "Message from your coach",
+      body: text.length > 60 ? text.slice(0,60)+"…" : text,
+      relatedId: session.id,
+    }).catch(()=>{});
   };
+
+  // Realtime: receive new messages from any client immediately
+  useEffect(() => {
+    if (!session?.id) return;
+    const sub = subscribeToMessages(session.id, newMsg => {
+      const clientId = newMsg.sender_id;
+      setThreads(p => {
+        const existing = p[clientId] || [];
+        // Don't duplicate
+        if (existing.some(m => m.id === newMsg.id)) return p;
+        return { ...p, [clientId]: [...existing, newMsg] };
+      });
+      setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+      if (onRead) onRead();
+    });
+    return () => { sub?.unsubscribe(); };
+  }, [session?.id]);
 
   const QUICK = [
     {ic:"◷", text:"Running 5 min late — see you shortly."},
@@ -6793,30 +6876,30 @@ const CONSULT_UNAVAIL = new Set(["10:00 AM","1:00 PM"]);
 const STRIPE_PACKAGES = [
   {
     id:           "1x",
-    name:         "1x Per Week",
+    name:         "4 Sessions",
     sessions:     4,
-    monthlyPrice: 400,          // USD — full monthly rate
-    sessionLabel: "4 sessions / month",
+    monthlyPrice: 400,
+    sessionLabel: "4 training sessions",
     desc:         "A structured starting point for building consistency and establishing a strong foundation.",
     badge:        null,
     stripeUrl:    "https://buy.stripe.com/8x2eVc7s92xp3oKei83ZK03",
   },
   {
     id:           "2x",
-    name:         "2x Per Week",
+    name:         "8 Sessions",
     sessions:     8,
-    monthlyPrice: 720,          // USD — full monthly rate
-    sessionLabel: "8 sessions / month",
+    monthlyPrice: 720,
+    sessionLabel: "8 training sessions",
     desc:         "A balanced approach for steady progress, improved fitness, and noticeable results.",
     badge:        "Most Popular",
     stripeUrl:    "https://buy.stripe.com/28E00i3bTdc37F0ei83ZK02",
   },
   {
     id:           "3x",
-    name:         "3x Per Week",
+    name:         "12 Sessions",
     sessions:     12,
-    monthlyPrice: 960,          // USD — full monthly rate
-    sessionLabel: "12 sessions / month",
+    monthlyPrice: 960,
+    sessionLabel: "12 training sessions",
     desc:         "For those looking to move with intention, train consistently, and accelerate progress.",
     badge:        null,
     stripeUrl:    "https://buy.stripe.com/00w3cu13L0ph7F0de43ZK01",
@@ -7017,10 +7100,10 @@ function ProrateCalculator() {
           marginBottom:18,
         }}>
           {[
-            ["Plan",             pkg.name],
-            ["Sessions",         `${pkg.sessions} sessions / month`],
-            ["Monthly rate",     `$${pkg.monthlyPrice.toLocaleString()}/mo`],
-            ["Billing cycle",    "1st of each month"],
+            ["Package",          pkg.name],
+            ["Sessions",         `${pkg.sessions} sessions`],
+            ["Package rate",     `$${pkg.monthlyPrice.toLocaleString()}`],
+            ["Billing",          "One-time purchase"],
           ].map(([k, v], i, arr) => (
             <div key={k} style={{
               display:"flex",justifyContent:"space-between",alignItems:"center",
@@ -7519,7 +7602,7 @@ function PackagePricing({ onBack, onConsult }) {
               Train with structure.<br />Move with purpose.
             </h1>
             <p style={{fontSize:"0.85rem",color:"var(--txt-1)",lineHeight:1.75,maxWidth:460,margin:"0 auto"}}>
-              Select a monthly training plan below. All packages include programming, coaching, and ongoing support.
+              Select a training package below. All packages include programming, coaching, and ongoing support.
             </p>
           </div>
 
@@ -7657,9 +7740,12 @@ function ConsultationFlow({ onBack, onComplete }) {
     true,                                                    // 5 confirm
   ];
 
+  const [submitErr, setSubmitErr] = useState("");
+
   const submit = async () => {
     setSaving(true);
-    await saveConsultationRequest({
+    setSubmitErr("");
+    const result = await saveConsultationRequest({
       firstName, lastName, email, phone, age,
       goals: [...goals, customGoal].filter(Boolean),
       level, hadCoach, trainFreq, gymAccess, location,
@@ -7668,8 +7754,23 @@ function ConsultationFlow({ onBack, onComplete }) {
       agreedRisk, agreedMed, agreedComms,
       selDate: selDate ? `${mnth} ${selDate}, ${yr}` : null,
       selTime,
-    }).catch(e => console.error("saveConsultationRequest:", e));
+    });
     setSaving(false);
+    if (!result.ok) {
+      setSubmitErr(result.error || "Failed to submit. Please try again.");
+      return;
+    }
+    // Notify coach of the new consultation request
+    getCoachId().then(coachId => {
+      if (!coachId) return;
+      createNotification({
+        recipientId: coachId,
+        type: "consultation_request",
+        title: "New consultation request",
+        body: `${firstName || "Someone"} requested a free consultation.`,
+        relatedId: result.request?.id || null,
+      }).catch(()=>{});
+    }).catch(()=>{});
     setStep(6);
   };
 
@@ -8005,6 +8106,9 @@ function ConsultationFlow({ onBack, onComplete }) {
                   step === 0 && !selTime ? "Select a time" :
                   "Continue →"}
               </button>
+              {step === 5 && submitErr && (
+                <p style={{fontSize:"0.72rem",color:"rgba(220,100,100,0.9)",marginTop:8,textAlign:"center"}}>{submitErr}</p>
+              )}
             </div>
           )}
         </div>
@@ -8363,6 +8467,11 @@ function AdminShell({ onLogout, session }) {
     getUnreadMessageCount(session?.id).then(count => {
       setNotifCounts(p => ({ ...p, messages: count }));
     }).catch(() => {});
+
+    // Load unread notification count
+    getUnreadNotificationCount(session?.id).then(count => {
+      setNotifCounts(p => ({ ...p, notifications: count }));
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -8378,9 +8487,27 @@ function AdminShell({ onLogout, session }) {
       }, () => loadClients())
       .subscribe();
 
+    // Realtime: update consultation badge instantly when new request arrives
+    const consultSub = supabase
+      .channel("consultation_requests:coach")
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "consultation_requests",
+      }, payload => {
+        console.log("new consultation realtime insert", payload.new);
+        loadNotifCounts();
+      })
+      .subscribe();
+
+    // Realtime: update notification badge instantly
+    const notifSub = session?.id
+      ? subscribeToNotifications(session.id, () => loadNotifCounts())
+      : null;
+
     return () => {
       clearInterval(interval);
       logSub?.unsubscribe();
+      consultSub?.unsubscribe();
+      notifSub?.unsubscribe();
     };
   }, [session?.id]);
 
@@ -8586,6 +8713,13 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
           </button>
           <button className="btn btn-s" style={{padding:"13px 28px",fontSize:"0.72rem"}} onClick={onPackages}>
             View Plans
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{padding:"13px 24px",fontSize:"0.68rem",letterSpacing:"0.08em",opacity:0.7}}
+            onClick={onLogin}
+          >
+            Create Profile →
           </button>
         </div>
 
@@ -9167,7 +9301,7 @@ export default function App() {
       {/* ── PUBLIC WEBSITE — root "/" ── */}
       {screen === "home" && (
         <PublicSite
-          onLogin={()=>setScreen("login")}
+          onLogin={()=>setScreen("signup")}
           onConsult={()=>setScreen("consult")}
           onPackages={()=>setScreen("packages")}
         />
