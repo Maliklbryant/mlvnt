@@ -733,3 +733,55 @@ export async function updateSessionStatus(sessionId, status, coachNotes) {
   if (error) { console.error("updateSessionStatus:", error.message); return { ok: false, error: error.message }; }
   return { ok: true };
 }
+
+// ─────────────────────────────────────────────────────────────
+// CLIENT WEIGHT LOGS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Save a bodyweight / lift entry for a client.
+ * metricType: 'bodyweight' | 'lift' | 'measurement'
+ */
+export async function saveWeightLog(clientId, { metricType, value, unit, exerciseName, programId, dayId, weekNumber, notes }) {
+  if (!clientId) return { ok: false, error: "clientId required" };
+  const payload = {
+    client_id:     clientId,
+    metric_type:   metricType   || "bodyweight",
+    value:         parseFloat(value) || null,
+    unit:          unit          || "lbs",
+    exercise_name: exerciseName  || null,
+    program_id:    programId     || null,
+    day_id:        dayId         || null,
+    week_number:   weekNumber    || null,
+    notes:         notes         || null,
+    created_at:    new Date().toISOString(),
+    updated_at:    new Date().toISOString(),
+  };
+  console.log("saving weight log", payload);
+  const { data, error } = await supabase
+    .from("client_weight_logs")
+    .insert(payload)
+    .select()
+    .single();
+  const result = error
+    ? { ok: false, error: error.message }
+    : { ok: true, log: data };
+  console.log("weight log saved", result);
+  if (error) console.error("saveWeightLog:", error.message);
+  return result;
+}
+
+/** Get weight/progress log entries for a client (most recent first, max 100). */
+export async function getWeightLogs(clientId, metricType) {
+  if (!clientId) return [];
+  let q = supabase
+    .from("client_weight_logs")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (metricType) q = q.eq("metric_type", metricType);
+  const { data, error } = await q;
+  if (error) { console.error("getWeightLogs:", error.message); return []; }
+  return data || [];
+}
