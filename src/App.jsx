@@ -2316,7 +2316,7 @@ function SessionAlert({ setView, profileData }) {
     name:           pkg.name,
     sessionsAdded:  pkg.sessions,
     weeklyMax:      pkg.id === "1x" ? 1 : pkg.id === "2x" ? 2 : 3,
-    price:          `${pkg.sessions} sessions/mo`,
+    price:          `${pkg.sessions} sessions`,
     stripeUrl:      pkg.stripeUrl,
     desc:           pkg.desc,
     badge:          pkg.badge,
@@ -2383,19 +2383,13 @@ function SessionAlert({ setView, profileData }) {
                       <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,color:"var(--txt-0)"}}>{opt.name}</p>
                       {opt.badge && <span style={{fontSize:"0.55rem",padding:"2px 7px",borderRadius:100,background:"rgba(42,122,75,0.2)",color:"rgba(140,210,155,0.85)",border:"1px solid rgba(42,122,75,0.25)",fontFamily:"var(--fc)",letterSpacing:"0.08em",textTransform:"uppercase",whiteSpace:"nowrap"}}>{opt.badge}</span>}
                     </div>
-                    <p style={{fontSize:"0.65rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.08em",marginBottom:6}}>{opt.sessionsAdded} sessions/mo · {opt.weeklyMax}x/week</p>
+                    <p style={{fontSize:"0.65rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.08em",marginBottom:6}}>{opt.sessionsAdded} sessions · {opt.weeklyMax}x per week</p>
                     <p style={{fontSize:"0.72rem",color:"var(--txt-1)",lineHeight:1.55}}>{opt.desc}</p>
                   </div>
                 ))}
               </div>
               <button className="btn btn-p btn-full" onClick={()=>setRenewStep(1)}>Continue →</button>
-              <div style={{marginTop:12,padding:"10px 14px",borderRadius:"var(--r2)",background:"rgba(255,255,255,0.03)",border:"1px solid var(--b0)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <p style={{fontSize:"0.72rem",color:"var(--txt-2)",lineHeight:1.6,flex:1}}>Want to start this month? Begin with a prorated plan.</p>
-                <button className="btn btn-ghost btn-sm" style={{flexShrink:0,fontSize:"0.64rem"}}
-                  onClick={()=>window.open(STRIPE_START_NOW.stripeUrl,"_blank","noopener,noreferrer")}>
-                  Start Now →
-                </button>
-              </div>
+
               <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginTop:12,fontSize:"0.6rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.08em"}}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 Secure checkout powered by Stripe
@@ -2420,7 +2414,7 @@ function SessionAlert({ setView, profileData }) {
                   </div>
                 ))}
                 <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:14,marginBottom:18,lineHeight:1.65}}>
-                  In production this will connect to your Stripe subscription or payment method on file.
+                  Sessions will be added to your account after purchase.
                 </p>
                 <div style={{display:"flex",gap:8}}>
                   <button className="btn btn-s btn-sm" onClick={()=>setRenewStep(0)}>← Back</button>
@@ -4158,7 +4152,7 @@ function ProfileSettings({ onLogout, session, profileData, onBack }) {
                   {[
                     ["Sessions Available", profileData?.sessions_balance != null ? String(profileData.sessions_balance) : "—"],
                     ["Weekly Structure",   profileData?.sessions_weekly_max ? `${profileData.sessions_weekly_max}x per week` : "—"],
-                    ["Billing Cycle",      "Monthly on the 1st"],
+                    ["Billing",          "Session-based package"],
                     ["Member Since",       session?.email ? "—" : "—"],
                   ].map(([k,v])=>(
                     <div className="list-row" key={k}><span className="list-sub">{k}</span><span className="list-main" style={{fontSize:"0.78rem"}}>{v}</span></div>
@@ -6587,7 +6581,6 @@ function AdminFeedback() {
 /* ── ADMIN PACKAGES / SESSION INVENTORY ──────────────────────────────────── */
 function AdminPackages({ dbClients }) {
   const clients = dbClients || [];
-  const [prorateEnabled, setProrateEnabled] = useState(true);
   // Per-client inventory state — live for Jordan (id:1), demo values for others
   const [clientInv, setClientInv] = useState(() => {
     return clients.reduce((acc, c) => {
@@ -6689,13 +6682,7 @@ function AdminPackages({ dbClients }) {
       <AdminTopbar title="Session Inventory" actions={<button className="btn btn-p btn-sm">+ Add Sessions</button>} />
       <div className="admin-body">
 
-        {/* Prorated start calculator — admin review + override */}
-        <ProrateAdminPanel
-          enabled={prorateEnabled}
-          onToggle={() => setProrateEnabled(p => !p)}
-        />
-
-        {/* Held inventory — future-start packages and pause controls */}
+{/* Held inventory — future-start packages and pause controls */}
         <AdminHeldPanel dbClients={dbClients} />
 
         {/* KPI row */}
@@ -7203,532 +7190,49 @@ const CONSULT_UNAVAIL = new Set(["10:00 AM","1:00 PM"]);
 ────────────────────────────────────────────────────────────────────────── */
 const STRIPE_PACKAGES = [
   {
-    id:           "1x",
-    name:         "4 Sessions",
-    sessions:     4,
-    monthlyPrice: 400,
+    id:        "single",
+    name:      "Single Session",
+    sessions:  1,
+    price:     null,
+    sessionLabel: "1 training session",
+    desc:      "Book one session and experience MLVNT firsthand. No commitment required.",
+    badge:     null,
+    stripeUrl: "https://buy.stripe.com/4gM6oGaEldc3e3o7TK3ZK04",
+  },
+  {
+    id:        "4x",
+    name:      "4 Sessions",
+    sessions:  4,
+    price:     null,
     sessionLabel: "4 training sessions",
-    desc:         "A structured starting point for building consistency and establishing a strong foundation.",
-    badge:        null,
-    stripeUrl:    "https://buy.stripe.com/8x2eVc7s92xp3oKei83ZK03",
+    desc:      "A structured starting point for building consistency and establishing a strong foundation.",
+    badge:     null,
+    stripeUrl: "https://buy.stripe.com/14A8wO3bTdc34sO0ri3ZK05",
   },
   {
-    id:           "2x",
-    name:         "8 Sessions",
-    sessions:     8,
-    monthlyPrice: 720,
+    id:        "8x",
+    name:      "8 Sessions",
+    sessions:  8,
+    price:     null,
     sessionLabel: "8 training sessions",
-    desc:         "A balanced approach for steady progress, improved fitness, and noticeable results.",
-    badge:        "Most Popular",
-    stripeUrl:    "https://buy.stripe.com/28E00i3bTdc37F0ei83ZK02",
+    desc:      "A balanced approach for steady progress, improved fitness, and noticeable results.",
+    badge:     "Most Popular",
+    stripeUrl: "https://buy.stripe.com/aFa7sK13Lc7Z6AWgqg3ZK06",
   },
   {
-    id:           "3x",
-    name:         "12 Sessions",
-    sessions:     12,
-    monthlyPrice: 960,
+    id:        "12x",
+    name:      "12 Sessions",
+    sessions:  12,
+    price:     null,
     sessionLabel: "12 training sessions",
-    desc:         "For those looking to move with intention, train consistently, and accelerate progress.",
-    badge:        null,
-    stripeUrl:    "https://buy.stripe.com/00w3cu13L0ph7F0de43ZK01",
+    desc:      "For those who are ready to train consistently and accelerate their results.",
+    badge:     null,
+    stripeUrl: "https://buy.stripe.com/8x2eVc7s92xp3oKei83ZK03",
   },
 ];
 
-const STRIPE_START_NOW = {
-  label:     "Start Now",
-  desc:      "Start immediately with a prorated plan based on your remaining time this month. Your full monthly structure begins at the start of the next billing cycle.",
-  stripeUrl: "https://buy.stripe.com/dRmeVcfYF0phaRcca03ZK00",
-};
 
-/* ── PRORATED START ENGINE ────────────────────────────────────────────────────
-   Pure calculation — no side effects, easy to unit-test.
-   All pricing logic lives here. The UI simply calls calcProrate() and displays.
 
-   Rules:
-   • Monthly billing resets on the 1st of each month.
-   • Sessions/week schedule = Mon–Fri (5 weekdays). Weekly cadence distributes
-     sessions across available weekdays remaining in the month.
-   • Session count uses Math.ceil so the client always gets at least 1 session
-     per week remaining, then capped to the plan's monthly maximum.
-   • Price = (daysLeft / daysInMonth) × monthlyRate, rounded to nearest dollar.
-   • Admin can override both session count and price before confirming.
-────────────────────────────────────────────────────────────────────────── */
-function calcProrate(pkg, startDate = new Date(), overrides = {}) {
-  const start = new Date(startDate);
-  start.setHours(0, 0, 0, 0);
-
-  const year  = start.getFullYear();
-  const month = start.getMonth();
-
-  // Days in current month
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  // Days remaining including start day (client pays for today)
-  const dayOfMonth  = start.getDate();
-  const daysLeft    = daysInMonth - dayOfMonth + 1;
-
-  // Next billing date = 1st of next month
-  const nextBilling = new Date(year, month + 1, 1);
-  const nextBillingLabel = nextBilling.toLocaleDateString("en-US", {
-    month: "long", day: "numeric", year: "numeric",
-  });
-
-  // Session count: scale sessions proportionally, ceil to avoid short-changing,
-  // then cap at the plan's full monthly allocation.
-  const raw          = (daysLeft / daysInMonth) * pkg.sessions;
-  const sessionsCalc = Math.min(pkg.sessions, Math.max(1, Math.ceil(raw)));
-  const sessions     = overrides.sessions ?? sessionsCalc;
-
-  // Prorated price: daily rate × days left, rounded to nearest dollar
-  const dailyRate   = pkg.monthlyPrice / daysInMonth;
-  const priceCalc   = Math.round(dailyRate * daysLeft);
-  const price       = overrides.price ?? priceCalc;
-
-  // Per-session effective rate for transparency
-  const perSession  = sessions > 0 ? Math.round(price / sessions) : 0;
-
-  return {
-    pkg,
-    startDate:       start.toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" }),
-    daysLeft,
-    daysInMonth,
-    sessions,
-    sessionsCalc,    // unoverridden value, used to show admin the suggestion
-    price,
-    priceCalc,       // unoverridden value
-    perSession,
-    nextBillingLabel,
-    nextBilling,
-    isFirstOfMonth:  dayOfMonth === 1,
-  };
-}
-
-// Legacy alias kept so existing components that reference CONSULT_PACKAGES continue to work
-const CONSULT_PACKAGES = [
-  { id:"1x",   name:"1x Per Week",  price:"4 sessions/mo",  desc:"A structured starting point for building consistency and establishing a strong foundation." },
-  { id:"2x",   name:"2x Per Week",  price:"8 sessions/mo",  desc:"A balanced approach for steady progress, improved fitness, and noticeable results." },
-  { id:"3x",   name:"3x Per Week",  price:"12 sessions/mo", desc:"For those looking to move with intention, train consistently, and accelerate progress." },
-];
-
-const GOAL_OPTS_C  = ["Fat Loss","Muscle Growth","Athletic Performance","Build Strength","Move Better","General Fitness","Body Recomposition"];
-const LEVEL_OPTS_C = ["New to training","Beginner","Beginner–Intermediate","Intermediate","Advanced"];
-const FREQ_OPTS_C  = ["1x per week","2x per week","3x per week","4x per week","5+ per week"];
-
-/* ── PRORATED START CALCULATOR — client-facing ───────────────────────────────
-   Dropped into PackagePricing below the package cards.
-   Shows: selected plan · sessions this month · prorated total · next billing.
-   On submit: opens the STRIPE_START_NOW link (the prorated checkout).
-   If the client is joining on the 1st, shows the full plan instead.
-────────────────────────────────────────────────────────────────────────── */
-function ProrateCalculator() {
-  const [selId,   setSelId]   = useState("2x");
-  const [today]               = useState(new Date()); // stable across renders
-  const open = url => window.open(url, "_blank", "noopener,noreferrer");
-
-  const pkg    = STRIPE_PACKAGES.find(p => p.id === selId) || STRIPE_PACKAGES[1];
-  const result = calcProrate(pkg, today);
-
-  // If client is joining on the 1st, prorating isn't needed — offer full plan
-  const isFirst = result.isFirstOfMonth;
-
-  return (
-    <div style={{
-      borderRadius:"var(--r4)",
-      padding:"24px",
-      background:"var(--gb2)",
-      border:"1px solid var(--b1)",
-      marginBottom:20,
-      position:"relative",
-      overflow:"hidden",
-    }}>
-      {/* shimmer line */}
-      <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)"}} />
-
-      {/* Header */}
-      <div style={{marginBottom:18}}>
-        <p className="label mb-4">Start Now</p>
-        <p style={{fontFamily:"var(--fh)",fontSize:"1rem",fontWeight:700,color:"var(--txt-0)",marginBottom:6}}>
-          {isFirst ? "Begin Your Full Plan Today" : "Begin This Month, Prorated"}
-        </p>
-        <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65}}>
-          {isFirst
-            ? "You're starting on the 1st — your full monthly plan begins today with no proration needed."
-            : `Start immediately. You'll be charged for the ${result.daysLeft} remaining days of ${today.toLocaleString("default",{month:"long"})}. Your full monthly plan begins ${result.nextBillingLabel}.`}
-        </p>
-      </div>
-
-      {/* Plan selector */}
-      <p className="label mb-8">Select Plan</p>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
-        {STRIPE_PACKAGES.map(p => (
-          <button
-            key={p.id}
-            onClick={() => setSelId(p.id)}
-            style={{
-              padding:"7px 14px",
-              borderRadius:"var(--r2)",
-              border:`1px solid ${selId===p.id ? "var(--b1)" : "var(--b0)"}`,
-              background: selId===p.id ? "var(--acc-0)" : "none",
-              color: selId===p.id ? "var(--txt-0)" : "var(--txt-1)",
-              fontFamily:"var(--fh)",fontSize:"0.7rem",fontWeight:600,
-              letterSpacing:"0.04em",cursor:"pointer",transition:"all 0.17s",
-              whiteSpace:"nowrap",
-            }}
-          >
-            {p.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Calculation breakdown */}
-      {!isFirst && (
-        <div style={{
-          borderRadius:"var(--r2)",
-          background:"rgba(0,0,0,0.2)",
-          border:"1px solid var(--b0)",
-          overflow:"hidden",
-          marginBottom:18,
-        }}>
-          {[
-            ["Plan",              pkg.name],
-            ["Sessions included", `${result.sessions} session${result.sessions !== 1 ? "s" : ""} this month`],
-            ["Days remaining",    `${result.daysLeft} of ${result.daysInMonth} days`],
-            ["Total today",       `$${result.price.toLocaleString()}`],
-            ["Full plan begins",  result.nextBillingLabel],
-            ["Monthly rate",      `$${pkg.monthlyPrice.toLocaleString()}/mo`],
-          ].map(([k, v], i, arr) => (
-            <div key={k} style={{
-              display:"flex",
-              justifyContent:"space-between",
-              alignItems:"center",
-              padding:"10px 14px",
-              borderBottom: i < arr.length - 1 ? "1px solid var(--b0)" : "none",
-              gap:12,
-            }}>
-              <span style={{fontSize:"0.68rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",flexShrink:0}}>{k}</span>
-              <span style={{
-                fontSize: k === "Total today" ? "0.88rem" : "0.78rem",
-                fontWeight: k === "Total today" ? 700 : 400,
-                color: k === "Total today" ? "var(--txt-0)" : "var(--txt-1)",
-                fontFamily: k === "Total today" ? "var(--fh)" : "inherit",
-                textAlign:"right",
-              }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* First-of-month: show full plan summary */}
-      {isFirst && (
-        <div style={{
-          borderRadius:"var(--r2)",
-          background:"rgba(0,0,0,0.2)",
-          border:"1px solid var(--b0)",
-          overflow:"hidden",
-          marginBottom:18,
-        }}>
-          {[
-            ["Package",          pkg.name],
-            ["Sessions",         `${pkg.sessions} sessions`],
-            ["Package rate",     `$${pkg.monthlyPrice.toLocaleString()}`],
-            ["Billing",          "One-time purchase"],
-          ].map(([k, v], i, arr) => (
-            <div key={k} style={{
-              display:"flex",justifyContent:"space-between",alignItems:"center",
-              padding:"10px 14px",borderBottom:i<arr.length-1?"1px solid var(--b0)":"none",gap:12,
-            }}>
-              <span style={{fontSize:"0.68rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",flexShrink:0}}>{k}</span>
-              <span style={{fontSize:"0.78rem",color:"var(--txt-1)",textAlign:"right"}}>{v}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* CTA */}
-      <button
-        className="btn btn-p btn-full"
-        onClick={() => open(isFirst ? pkg.stripeUrl : STRIPE_START_NOW.stripeUrl)}
-      >
-        {isFirst
-          ? `Get Started — ${pkg.name}`
-          : `Start Now — $${result.price.toLocaleString()} today`}
-      </button>
-
-      {/* Subtext */}
-      <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:12,textAlign:"center",lineHeight:1.65}}>
-        {isFirst
-          ? `Your ${pkg.sessions}-session monthly plan begins today.`
-          : `After today's payment, your full ${pkg.name} plan (${pkg.sessions} sessions/mo at $${pkg.monthlyPrice.toLocaleString()}/mo) renews on ${result.nextBillingLabel}.`}
-      </p>
-    </div>
-  );
-}
-
-/* ── PRORATED START CALCULATOR — admin panel ─────────────────────────────────
-   Embedded in AdminPackages for coach review and override.
-────────────────────────────────────────────────────────────────────────── */
-function ProrateAdminPanel({ enabled, onToggle }) {
-  const [selId,        setSelId]        = useState("2x");
-  const [startDateStr, setStartDateStr] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [ovSessions, setOvSessions] = useState("");
-  const [ovPrice,    setOvPrice]    = useState("");
-  const [approved,   setApproved]   = useState(false);
-
-  const pkg    = STRIPE_PACKAGES.find(p => p.id === selId) || STRIPE_PACKAGES[1];
-  const start  = new Date(startDateStr + "T00:00:00");
-  const result = calcProrate(pkg, start, {
-    sessions: ovSessions !== "" ? parseInt(ovSessions) : undefined,
-    price:    ovPrice    !== "" ? parseInt(ovPrice)    : undefined,
-  });
-
-  const resetOverrides = () => { setOvSessions(""); setOvPrice(""); setApproved(false); };
-
-  return (
-    <div className="a-panel" style={{marginBottom:14}}>
-      <div className="a-panel-hd">
-        <span className="a-panel-title">Prorated Start Calculator</span>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          {!enabled && <span style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Disabled</span>}
-          <div className={`toggle ${enabled ? "on" : "off"}`} onClick={onToggle}>
-            <div className="toggle-knob" />
-          </div>
-        </div>
-      </div>
-
-      {!enabled && (
-        <p style={{fontSize:"0.72rem",color:"var(--txt-2)",padding:"8px 0",lineHeight:1.55}}>
-          Prorated starts are currently disabled. Enable to let clients join mid-month.
-        </p>
-      )}
-
-      {enabled && (<>
-        <p style={{fontSize:"0.72rem",color:"var(--txt-2)",marginBottom:14,lineHeight:1.55}}>
-          Review and optionally override the auto-calculated prorated amount before confirming a client's mid-month start.
-        </p>
-
-        {/* Inputs row */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          <div className="field">
-            <label className="field-label">Plan</label>
-            <select
-              className="fi"
-              value={selId}
-              onChange={e=>{setSelId(e.target.value);resetOverrides();}}
-              style={{cursor:"pointer"}}
-            >
-              {STRIPE_PACKAGES.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field-label">Start Date</label>
-            <input
-              className="fi"
-              type="date"
-              value={startDateStr}
-              onChange={e=>{setStartDateStr(e.target.value);resetOverrides();}}
-            />
-          </div>
-        </div>
-
-        {/* Calculated result */}
-        <div style={{
-          borderRadius:"var(--r2)",
-          background:"rgba(0,0,0,0.2)",
-          border:"1px solid var(--b0)",
-          overflow:"hidden",
-          marginBottom:14,
-        }}>
-          {[
-            ["Plan",             pkg.name],
-            ["Start date",       result.startDate],
-            ["Days remaining",   `${result.daysLeft} of ${result.daysInMonth}`],
-            ["Sessions (calc)",  `${result.sessionsCalc} — override below if needed`],
-            ["Price (calc)",     `$${result.priceCalc.toLocaleString()}`],
-            ["Next billing",     result.nextBillingLabel],
-          ].map(([k, v], i, arr) => (
-            <div key={k} style={{
-              display:"flex",justifyContent:"space-between",alignItems:"center",
-              padding:"9px 14px",borderBottom:i<arr.length-1?"1px solid var(--b0)":"none",gap:12,
-            }}>
-              <span style={{fontSize:"0.62rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.1em",textTransform:"uppercase",flexShrink:0}}>{k}</span>
-              <span style={{fontSize:"0.74rem",color:"var(--txt-1)",textAlign:"right"}}>{v}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Override inputs */}
-        <p className="label mb-8">Admin Overrides <span style={{fontFamily:"var(--fb)",textTransform:"none",letterSpacing:0,color:"var(--txt-2)",fontSize:"0.65rem",fontWeight:400}}>(leave blank to use calculated values)</span></p>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-          <div className="field">
-            <label className="field-label">Sessions Override</label>
-            <input
-              className="fi"
-              type="number"
-              min="1"
-              max={pkg.sessions}
-              placeholder={`Suggested: ${result.sessionsCalc}`}
-              value={ovSessions}
-              onChange={e=>{setOvSessions(e.target.value);setApproved(false);}}
-            />
-          </div>
-          <div className="field">
-            <label className="field-label">Price Override ($)</label>
-            <input
-              className="fi"
-              type="number"
-              min="0"
-              placeholder={`Suggested: $${result.priceCalc}`}
-              value={ovPrice}
-              onChange={e=>{setOvPrice(e.target.value);setApproved(false);}}
-            />
-          </div>
-        </div>
-
-        {/* Final confirmed summary */}
-        <div style={{
-          padding:"12px 14px",
-          borderRadius:"var(--r2)",
-          background: approved ? "rgba(42,122,75,0.08)" : "rgba(255,255,255,0.03)",
-          border:`1px solid ${approved ? "rgba(42,122,75,0.25)" : "var(--b0)"}`,
-          marginBottom:12,
-          display:"flex",
-          justifyContent:"space-between",
-          alignItems:"center",
-          gap:10,
-          flexWrap:"wrap",
-        }}>
-          <div>
-            <p style={{fontSize:"0.78rem",color:"var(--txt-0)",fontWeight:500}}>
-              {result.sessions} session{result.sessions!==1?"s":""} — ${result.price.toLocaleString()} due today
-            </p>
-            <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>
-              Full plan begins {result.nextBillingLabel} · {pkg.name} · ${pkg.monthlyPrice.toLocaleString()}/mo
-            </p>
-          </div>
-          {approved
-            ? <span style={{fontSize:"0.62rem",padding:"3px 10px",borderRadius:100,background:"rgba(42,122,75,0.15)",color:"rgba(140,210,155,0.85)",border:"1px solid rgba(42,122,75,0.25)",fontFamily:"var(--fc)",letterSpacing:"0.08em",textTransform:"uppercase"}}>Approved</span>
-            : <button className="btn btn-p btn-sm" onClick={()=>setApproved(true)}>Approve</button>
-          }
-        </div>
-
-        {approved && (
-          <p style={{fontSize:"0.66rem",color:"rgba(140,210,155,0.7)",textAlign:"center",lineHeight:1.65}}>
-            ✓ Prorated start approved. Send the Start Now link to the client to complete checkout via Stripe.
-          </p>
-        )}
-      </>)}
-    </div>
-  );
-}
-
-/* ── HELD INVENTORY PANEL — client-facing ────────────────────────────────────
-   Inserted in Dashboard below the KPI row.
-   Shows: active pause status · held packages · scheduled future-start packages.
-   Hidden when there is nothing to show.
-────────────────────────────────────────────────────────────────────────── */
-function HeldInventoryPanel({ setView }) {
-  const [tick, setTick] = useState(0);
-  HELD_INVENTORY.tick(); // auto-activate any due packages on render
-
-  const pending = HELD_INVENTORY.pending(1);
-  const paused  = HELD_INVENTORY.isPaused();
-  const pInfo   = HELD_INVENTORY.pauseInfo();
-
-  // Nothing to show when not paused and no pending packages
-  if (!paused && pending.length === 0) return null;
-
-  return (
-    <div style={{marginBottom:16}}>
-      {/* Active pause banner */}
-      {paused && (
-        <div style={{
-          borderRadius:"var(--r2)",padding:"12px 16px",
-          background:"rgba(60,60,70,0.25)",border:"1px solid rgba(255,255,255,0.08)",
-          display:"flex",alignItems:"center",justifyContent:"space-between",
-          gap:12,flexWrap:"wrap",marginBottom:pending.length?10:0,
-        }}>
-          <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
-            <span style={{fontSize:"0.85rem",flexShrink:0}}>⏸</span>
-            <div>
-              <p style={{fontSize:"0.8rem",fontFamily:"var(--fh)",fontWeight:700,color:"var(--txt-0)",marginBottom:2}}>
-                Training Paused
-              </p>
-              <p style={{fontSize:"0.7rem",color:"var(--txt-2)",lineHeight:1.5}}>
-                {pInfo?.reason || "Your active package is currently paused."}
-                {" "}Sessions are preserved and booking is unavailable during this period.
-              </p>
-            </div>
-          </div>
-          <span style={{fontSize:"0.62rem",padding:"3px 10px",borderRadius:100,background:"rgba(255,255,255,0.06)",color:"var(--txt-2)",border:"1px solid var(--b0)",fontFamily:"var(--fc)",letterSpacing:"0.08em",textTransform:"uppercase",flexShrink:0,whiteSpace:"nowrap"}}>
-            Paused
-          </span>
-        </div>
-      )}
-
-      {/* Held / scheduled packages */}
-      {pending.length > 0 && (
-        <div>
-          <p className="label mb-8" style={{marginTop:paused?8:0}}>Upcoming Package</p>
-          {pending.map(pkg => {
-            const daysStart  = HELD_INVENTORY.daysUntilStart(pkg);
-            const daysExpiry = HELD_INVENTORY.daysUntilExpiry(pkg);
-            return (
-              <div key={pkg.id} className={`held-card ${pkg.status}`}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
-                  <div>
-                    <p style={{fontFamily:"var(--fh)",fontSize:"0.86rem",fontWeight:700,color:"var(--txt-0)"}}>{pkg.plan}</p>
-                    <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:2}}>{pkg.sessions} sessions — purchased {HELD_INVENTORY.purchaseLabel(pkg)}</p>
-                  </div>
-                  <span className={`held-status-pill ${pkg.status}`}>{pkg.status}</span>
-                </div>
-
-                <div className="held-meta-row">
-                  {pkg.activationDate && (
-                    <div className="held-meta-item">
-                      <span className="held-meta-lbl">Starts</span>
-                      <span className="held-meta-val">{HELD_INVENTORY.activationLabel(pkg)}{daysStart !== null && daysStart > 0 ? ` · in ${daysStart}d` : daysStart === 0 ? " · today" : ""}</span>
-                    </div>
-                  )}
-                  {!pkg.activationDate && (
-                    <div className="held-meta-item">
-                      <span className="held-meta-lbl">Status</span>
-                      <span className="held-meta-val">No start date set — contact Malik to schedule</span>
-                    </div>
-                  )}
-                  <div className="held-meta-item">
-                    <span className="held-meta-lbl">Hold expires</span>
-                    <span className="held-meta-val" style={{color:daysExpiry !== null && daysExpiry < 14?"rgba(220,175,100,0.85)":"var(--txt-1)"}}>
-                      {HELD_INVENTORY.expiresLabel(pkg)}{daysExpiry !== null && daysExpiry < 30 ? ` · ${daysExpiry}d left` : ""}
-                    </span>
-                  </div>
-                  <div className="held-meta-item">
-                    <span className="held-meta-lbl">Sessions</span>
-                    <span className="held-meta-val">{pkg.sessions}</span>
-                  </div>
-                </div>
-
-                {pkg.note && (
-                  <p style={{fontSize:"0.68rem",color:"var(--txt-2)",marginTop:8,lineHeight:1.55,fontStyle:"italic"}}>
-                    {pkg.note}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-          <p style={{fontSize:"0.65rem",color:"var(--txt-2)",lineHeight:1.65,marginTop:8}}>
-            Held sessions are reserved for you and will be added to your active balance on the scheduled start date. Hold packages are valid for {HOLD_WINDOW_DAYS} days from purchase.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── ADMIN HELD INVENTORY PANEL ───────────────────────────────────────────────
-   Embedded in AdminPackages below the prorated calculator.
-────────────────────────────────────────────────────────────────────────── */
 function AdminHeldPanel({ dbClients = [] }) {
   const [tick,      setTick]      = useState(0);
   const [newPlan,   setNewPlan]   = useState("2x Per Week");
@@ -7955,11 +7459,7 @@ function PackagePricing({ onBack, onConsult }) {
             ))}
           </div>
 
-          {/* Prorated start calculator — live, auto-calculated */}
-          <div className="page-fade">
-            <p className="label mb-10" style={{textAlign:"center"}}>Or Start This Month</p>
-            <ProrateCalculator />
-          </div>
+
 
           {/* Microcopy */}
           <div style={{textAlign:"center",padding:"4px 0 28px"}}>
@@ -8520,19 +8020,7 @@ function ConsultationRecommendation({ onBack, onProceed }) {
             Get Started — {selected.name}
           </button>
 
-          {/* Start Now prorated option */}
-          <div style={{marginTop:12,padding:"12px 14px",borderRadius:"var(--r2)",background:"rgba(255,255,255,0.03)",border:"1px solid var(--b0)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <p style={{fontSize:"0.73rem",color:"var(--txt-2)",lineHeight:1.6,flex:1}}>
-              Want to begin this month? Start now with a prorated plan.
-            </p>
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{flexShrink:0,fontSize:"0.66rem"}}
-              onClick={() => open(STRIPE_START_NOW.stripeUrl)}
-            >
-              Start Now →
-            </button>
-          </div>
+
 
           {/* Security note */}
           <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:6,marginTop:16,fontSize:"0.6rem",color:"var(--txt-2)",fontFamily:"var(--fc)",letterSpacing:"0.08em"}}>
@@ -9218,7 +8706,7 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
             ))}
           </div>
 
-          {/* Start Now */}
+          {/* Session Package prompt */}
           <div style={{
             marginTop:20,
             padding:"20px 24px",
@@ -9232,11 +8720,11 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
             flexWrap:"wrap",
           }}>
             <div>
-              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:5}}>Start Now</p>
-              <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65,maxWidth:500}}>{STRIPE_START_NOW.desc}</p>
+              <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:5}}>Ready to Start?</p>
+              <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65,maxWidth:500}}>Purchase a session package to book your first session. Sessions are added to your account on purchase.</p>
             </div>
-            <button className="btn btn-s btn-sm" style={{flexShrink:0}} onClick={()=>open(STRIPE_START_NOW.stripeUrl)}>
-              Start Now →
+            <button className="btn btn-s btn-sm" style={{flexShrink:0}} onClick={onBack}>
+              View Packages →
             </button>
           </div>
 
@@ -9266,8 +8754,19 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
             {/* Avatar */}
             <div style={{display:"flex",justifyContent:"center"}}>
               <div style={{position:"relative"}}>
-                <div className="site-about-av" style={{background:"var(--acc-0)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <span style={{fontFamily:"var(--fh)",fontSize:"2.4rem",fontWeight:800,letterSpacing:"-0.04em",color:"rgba(255,255,255,0.15)"}}>MB</span>
+                <div className="site-about-av" style={{overflow:"hidden",background:"var(--acc-0)"}}>
+                  <img
+                    src="/malik.jpg"
+                    alt="Malik Bryant — MLVNT Founder & Personal Trainer"
+                    style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",display:"block"}}
+                    onError={e => {
+                      e.target.style.display = "none";
+                      e.target.parentElement.style.display = "flex";
+                      e.target.parentElement.style.alignItems = "center";
+                      e.target.parentElement.style.justifyContent = "center";
+                      e.target.parentElement.innerHTML = '<span style="font-family:var(--fh);font-size:2.4rem;font-weight:800;letter-spacing:-0.04em;color:rgba(255,255,255,0.2)">MB</span>';
+                    }}
+                  />
                 </div>
                 {/* Credential tag floating off the avatar */}
                 <div style={{
