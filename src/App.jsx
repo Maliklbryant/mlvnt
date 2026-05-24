@@ -8723,7 +8723,7 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
               <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:5}}>Ready to Start?</p>
               <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65,maxWidth:500}}>Purchase a session package to book your first session. Sessions are added to your account on purchase.</p>
             </div>
-            <button className="btn btn-s btn-sm" style={{flexShrink:0}} onClick={onBack}>
+            <button className="btn btn-s btn-sm" style={{flexShrink:0}} onClick={onPackages}>
               View Packages →
             </button>
           </div>
