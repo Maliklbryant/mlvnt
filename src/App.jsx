@@ -2315,7 +2315,7 @@ function SessionAlert({ setView, profileData }) {
   const RENEW_OPTIONS = STRIPE_PACKAGES.map(pkg => ({
     name:           pkg.name,
     sessionsAdded:  pkg.sessions,
-    weeklyMax:      pkg.id === "1x" ? 1 : pkg.id === "2x" ? 2 : 3,
+    weeklyMax:      pkg.id === "single" ? 1 : pkg.id === "4x" ? 1 : pkg.id === "8x" ? 2 : 3,
     price:          `${pkg.sessions} sessions`,
     stripeUrl:      pkg.stripeUrl,
     desc:           pkg.desc,
@@ -7235,7 +7235,7 @@ const STRIPE_PACKAGES = [
 
 function AdminHeldPanel({ dbClients = [] }) {
   const [tick,      setTick]      = useState(0);
-  const [newPlan,   setNewPlan]   = useState("2x Per Week");
+  const [newPlan,   setNewPlan]   = useState("8 Sessions");
   const [newDate,   setNewDate]   = useState("");
   const [newNote,   setNewNote]   = useState("");
   const [selClient, setSelClient] = useState(1);
@@ -7955,7 +7955,7 @@ function ConsultationFlow({ onBack, onComplete }) {
 
 
 function ConsultationRecommendation({ onBack, onProceed }) {
-  const [selPkg, setSelPkg] = useState("2x");
+  const [selPkg, setSelPkg] = useState("8x");
   const open = (url) => window.open(url, "_blank", "noopener,noreferrer");
   const selected = STRIPE_PACKAGES.find(p=>p.id===selPkg) || STRIPE_PACKAGES[1];
 
@@ -8759,13 +8759,7 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
                     src="/malik.jpg"
                     alt="Malik Bryant — MLVNT Founder & Personal Trainer"
                     style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",display:"block"}}
-                    onError={e => {
-                      e.target.style.display = "none";
-                      e.target.parentElement.style.display = "flex";
-                      e.target.parentElement.style.alignItems = "center";
-                      e.target.parentElement.style.justifyContent = "center";
-                      e.target.parentElement.innerHTML = '<span style="font-family:var(--fh);font-size:2.4rem;font-weight:800;letter-spacing:-0.04em;color:rgba(255,255,255,0.2)">MB</span>';
-                    }}
+                    onError={e => { e.currentTarget.style.display = "none"; }}
                   />
                 </div>
                 {/* Credential tag floating off the avatar */}
