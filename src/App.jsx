@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase.js";
 import {
   signIn,
@@ -3808,30 +3808,29 @@ function Feedback({ onBack }) {
 
 /* ── MESSAGES ────────────────────────────────────────────────────────────── */
 function Messages({ session, onRead, onBack }) {
-  const [msgs,    setMsgs]  = useState([]);
-  const [input,   setInput] = useState("");
-  const [loading, setLoad]  = useState(true);
-  const bottomRef           = useRef(null);
-
-  // Coach user ID is fetched from profiles where is_owner=true
+  const [msgs,    setMsgs]   = useState([]);
+  const [input,   setInput]  = useState("");
+  const [loading, setLoad]   = useState(true);
+  const [msgErr,  setMsgErr] = useState("");   // ← declared first, before useEffect uses it
   const [coachId, setCoachId] = useState(null);
+  const bottomRef = useRef(null);
 
   useEffect(() => {
     if (!session?.id) { setLoad(false); return; }
+
     getCoachId().then(id => {
       setCoachId(id);
       if (id) {
         getMessages(session.id, id).then(rows => {
-          setMsgs(rows);
+          setMsgs(Array.isArray(rows) ? rows : []);
           setLoad(false);
           if (onRead) onRead();
           setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 100);
-        }).catch(e => {
+        }).catch(() => {
           setMsgErr("Could not load messages. Check your connection.");
           setLoad(false);
         });
       } else {
-        // No coach found — show empty state, not a crash
         setLoad(false);
       }
     }).catch(() => {
@@ -3839,11 +3838,12 @@ function Messages({ session, onRead, onBack }) {
       setLoad(false);
     });
 
-    // Realtime: receive new messages from coach instantly
+    // Realtime: receive new messages instantly
     const sub = subscribeToMessages(session.id, newMsg => {
       setMsgs(p => {
-        // Replace optimistic or append
-        const withoutTmp = p.filter(m => !m.id?.startsWith('tmp-') || m.content !== newMsg.content);
+        const withoutTmp = (Array.isArray(p) ? p : []).filter(
+          m => !m.id?.startsWith('tmp-') || m.content !== newMsg.content
+        );
         return [...withoutTmp, newMsg];
       });
       if (onRead) onRead();
@@ -3854,14 +3854,19 @@ function Messages({ session, onRead, onBack }) {
   }, [session?.id]);
 
   const send = async () => {
-    if (!input.trim() || !session?.id || !coachId) return;
     const text = input.trim();
+    if (!text || !session?.id || !coachId) return;
     setInput("");
-    const optimistic = { id:`tmp-${Date.now()}`, sender_id:session.id, receiver_id:coachId, content:text, created_at:new Date().toISOString() };
-    setMsgs(p => [...p, optimistic]);
+    const optimistic = {
+      id: `tmp-${Date.now()}`,
+      sender_id: session.id,
+      receiver_id: coachId,
+      content: text,
+      created_at: new Date().toISOString(),
+    };
+    setMsgs(p => [...(Array.isArray(p) ? p : []), optimistic]);
     setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
     await sendMessage(session.id, coachId, text).catch(()=>{});
-    // Notify the coach of the new message
     createNotification({
       recipientId: coachId,
       type: "new_message",
@@ -3871,57 +3876,66 @@ function Messages({ session, onRead, onBack }) {
     }).catch(()=>{});
   };
 
-  const [msgErr, setMsgErr] = useState("");
-
   return (
     <div className="page-fade" style={{display:"flex",flexDirection:"column",height:"100%",minHeight:0}}>
       <Topbar title="Messages" onBack={onBack} />
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:0}}>
         <div className="msg-layout" style={{flex:1,minHeight:0}}>
-          {/* Thread list — single coach thread */}
+
+          {/* Thread sidebar */}
           <div className="msg-list">
             <p className="label mb-10" style={{padding:"0 2px"}}>Conversations</p>
             <div className="msg-thread active">
               <div className="msg-av">MB</div>
               <div style={{flex:1,overflow:"hidden"}}>
-                <div className="flex between items-center">
-                  <span className="msg-thread-name">Malik Bryant</span>
-                </div>
+                <span className="msg-thread-name">Malik Bryant</span>
                 <p className="msg-thread-preview">Your coach</p>
               </div>
             </div>
           </div>
 
-          {/* Chat */}
+          {/* Chat area */}
           <div className="msg-chat">
             <div className="msg-chat-head">
               <div className="msg-av">MB</div>
               <div>
-                <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700}}>Malik Bryant</p>
-                <p className="body-sm" style={{fontSize:"0.65rem",color:"var(--txt-2)"}}>Coach · MLVNT</p>
+                <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,color:"var(--txt-0)"}}>Malik Bryant</p>
+                <p style={{fontSize:"0.65rem",color:"var(--txt-2)",marginTop:2}}>Coach · MLVNT</p>
               </div>
             </div>
 
             <div className="msg-chat-body">
-              {loading && <div style={{textAlign:"center",padding:40}}><Spinner /></div>}
+              {loading && (
+                <div style={{display:"flex",justifyContent:"center",paddingTop:60}}>
+                  <Spinner />
+                </div>
+              )}
               {!loading && msgErr && (
-                <div style={{textAlign:"center",padding:40}}>
-                  <p style={{fontSize:"0.76rem",color:"rgba(220,100,100,0.85)",lineHeight:1.65}}>{msgErr}</p>
+                <div className="empty-state" style={{paddingTop:60}}>
+                  <span className="empty-ic" style={{opacity:0.4}}>⚠</span>
+                  <p className="empty-txt">{msgErr}</p>
                 </div>
               )}
               {!loading && !msgErr && msgs.length === 0 && (
                 <div className="empty-state" style={{paddingTop:60}}>
                   <span className="empty-ic">✉</span>
-                  <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>No messages yet</p>
-                  <p className="empty-txt">Your conversations with Malik will appear here. Send a message below to get started.</p>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,color:"var(--txt-0)",marginBottom:8}}>
+                    No messages yet
+                  </p>
+                  <p className="empty-txt">
+                    Your conversations with Malik will appear here.<br/>
+                    Send a message below to get started.
+                  </p>
                 </div>
               )}
-              {msgs.map((m,i) => {
+              {!loading && !msgErr && msgs.map((m, i) => {
                 const isMe = m.sender_id === session?.id;
-                const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : "Just now";
+                const time = m.created_at
+                  ? new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})
+                  : "Just now";
                 return (
                   <div key={m.id||i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
-                    <div className={`bubble ${isMe?"me":"them"}`}>{m.content||m.text}</div>
+                    <div className={`bubble ${isMe?"me":"them"}`}>{m.content||m.text||""}</div>
                     <span className="bubble-time">{time}</span>
                   </div>
                 );
@@ -3931,10 +3945,22 @@ function Messages({ session, onRead, onBack }) {
 
             <div className="msg-chat-foot">
               <div className="msg-input-row">
-                <input className="fi msg-input" placeholder="Message Malik…" value={input}
-                  onChange={e=>setInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&send()} />
-                <button className="btn btn-p btn-sm" onClick={send}>Send</button>
+                <input
+                  className="fi msg-input"
+                  placeholder={coachId ? "Message Malik…" : "Connecting…"}
+                  value={input}
+                  disabled={!coachId}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && send()}
+                />
+                <button
+                  className="btn btn-p btn-sm"
+                  onClick={send}
+                  disabled={!coachId || !input.trim()}
+                  style={{opacity: coachId && input.trim() ? 1 : 0.45}}
+                >
+                  Send
+                </button>
               </div>
             </div>
           </div>
@@ -8787,14 +8813,16 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
                     onError={e => { e.currentTarget.style.display = "none"; }}
                   />
                 </div>
-                {/* Credential tag floating off the avatar */}
-                <div style={{
-                  position:"absolute",bottom:-12,left:"50%",transform:"translateX(-50%)",
-                  whiteSpace:"nowrap",padding:"4px 12px",borderRadius:100,
-                  background:"var(--bg-1)",border:"1px solid var(--b1)",
-                  fontFamily:"var(--fc)",fontSize:"0.58rem",letterSpacing:"0.12em",
-                  textTransform:"uppercase",color:"var(--txt-2)",
-                }}>New York</div>
+                {/* Location subtag — below avatar, centered, no floating chip */}
+                <p style={{
+                  textAlign:"center",
+                  marginTop:14,
+                  fontFamily:"var(--fc)",
+                  fontSize:"0.58rem",
+                  letterSpacing:"0.18em",
+                  textTransform:"uppercase",
+                  color:"var(--txt-2)",
+                }}>New York</p>
               </div>
             </div>
 
@@ -9051,6 +9079,24 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
      3. role check    — admin/owner vs client routing
      4. double-check  — admin route JSX re-validates role before rendering
 ────────────────────────────────────────────────────────────────────────── */
+
+/* ── ERROR BOUNDARY ─────────────────────────────────────────────────────── */
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(e, info) { console.error("MLVNT boundary:", e, info?.componentStack?.split('\n')[1]); }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#0A0B0D",flexDirection:"column",gap:14,padding:32,textAlign:"center"}}>
+        <p style={{fontFamily:"Georgia,serif",fontSize:"1.5rem",fontWeight:700,color:"rgba(255,255,255,0.85)",letterSpacing:"-0.02em"}}>MLVNT</p>
+        <p style={{fontSize:"0.8rem",color:"rgba(255,255,255,0.45)",lineHeight:1.75,maxWidth:320}}>Something went wrong.<br/>Please refresh to continue.</p>
+        <button onClick={()=>window.location.reload()} style={{marginTop:4,padding:"9px 22px",borderRadius:8,border:"1px solid rgba(255,255,255,0.1)",background:"none",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:"0.72rem",letterSpacing:"0.1em",textTransform:"uppercase"}}>Reload</button>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   const [session,   setSession]  = useState(null);
   const [screen,    setScreen]   = useState("home");  // "home" = public website
@@ -9168,6 +9214,7 @@ export default function App() {
   );
 
   return (
+    <ErrorBoundary>
     <>
       <style>{CSS}</style>
       <style>{ADMIN_CSS}</style>
@@ -9263,5 +9310,6 @@ export default function App() {
         <AccessDenied onBack={()=>{ setDenied(false); setScreen("login"); }} />
       )}
     </>
+    </ErrorBoundary>
   );
 }
