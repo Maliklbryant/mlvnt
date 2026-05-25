@@ -7237,7 +7237,7 @@ const STRIPE_PACKAGES = [
     sessionLabel: "1 training session",
     desc:      "Book one session and experience MLVNT firsthand. No commitment required.",
     badge:     null,
-    stripeUrl: "https://buy.stripe.com/4gM6oGaEldc3e3o7TK3ZK04",
+    stripeUrl: "https://buy.stripe.com/8x2eVc7s92xp3oKei83ZK03",
   },
   {
     id:        "4x",
@@ -7247,7 +7247,7 @@ const STRIPE_PACKAGES = [
     sessionLabel: "4 training sessions",
     desc:      "A structured starting point for building consistency and establishing a strong foundation.",
     badge:     null,
-    stripeUrl: "https://buy.stripe.com/14A8wO3bTdc34sO0ri3ZK05",
+    stripeUrl: "https://buy.stripe.com/aFa7sK13Lc7Z6AWgqg3ZK06",
   },
   {
     id:        "8x",
@@ -7257,7 +7257,7 @@ const STRIPE_PACKAGES = [
     sessionLabel: "8 training sessions",
     desc:      "A balanced approach for steady progress, improved fitness, and noticeable results.",
     badge:     "Most Popular",
-    stripeUrl: "https://buy.stripe.com/aFa7sK13Lc7Z6AWgqg3ZK06",
+    stripeUrl: "https://buy.stripe.com/4gM6oGaEldc3e3o7TK3ZK04",
   },
   {
     id:        "12x",
@@ -7267,7 +7267,7 @@ const STRIPE_PACKAGES = [
     sessionLabel: "12 training sessions",
     desc:      "For those who are ready to train consistently and accelerate their results.",
     badge:     null,
-    stripeUrl: "https://buy.stripe.com/8x2eVc7s92xp3oKei83ZK03",
+    stripeUrl: "https://buy.stripe.com/14A8wO3bTdc34sO0ri3ZK05",
   },
 ];
 
