@@ -146,21 +146,21 @@ body::after{
   position:fixed;
   bottom:0;left:0;right:0;
   z-index:200;
-  padding:8px 12px;
-  padding-bottom:max(12px,env(safe-area-inset-bottom,12px));
+  padding:8px 14px;
+  padding-bottom:max(14px,env(safe-area-inset-bottom,14px));
   pointer-events:none;
 }
 .mobile-dock-inner{
   display:flex;
   align-items:stretch;
-  background:rgba(12,14,18,0.86);
-  backdrop-filter:blur(40px) saturate(160%);
-  -webkit-backdrop-filter:blur(40px) saturate(160%);
-  border:1px solid rgba(255,255,255,0.08);
-  border-radius:20px;
+  background:rgba(10,12,16,0.88);
+  backdrop-filter:blur(48px) saturate(180%);
+  -webkit-backdrop-filter:blur(48px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:22px;
   overflow:hidden;
   pointer-events:all;
-  box-shadow:0 4px 24px rgba(0,0,0,0.6),0 1px 0 rgba(255,255,255,0.05) inset,0 -1px 0 rgba(0,0,0,0.3) inset;
+  box-shadow:0 8px 32px rgba(0,0,0,0.7),0 1px 0 rgba(255,255,255,0.06) inset;
 }
 .mobile-dock-item{
   flex:1;
@@ -168,8 +168,9 @@ body::after{
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:3px;
-  padding:11px 4px 9px;
+  gap:4px;
+  padding:13px 6px 11px;
+  min-height:58px;
   cursor:pointer;
   border:none;
   background:transparent;
@@ -178,56 +179,55 @@ body::after{
   outline:none;
   -webkit-tap-highlight-color:transparent;
   position:relative;
-  transition:opacity 0.12s;
+  transition:transform 0.15s ease,opacity 0.15s;
   min-width:0;
 }
-.mobile-dock-item:active{opacity:0.5;}
+.mobile-dock-item:active{transform:scale(0.93);opacity:0.7;}
 .mobile-dock-ic{
-  font-size:1rem;
+  font-size:1.1rem;
   line-height:1;
-  color:rgba(255,255,255,0.25);
-  transition:color 0.18s,transform 0.18s;
+  color:rgba(255,255,255,0.22);
+  transition:color 0.2s ease,transform 0.2s ease;
   display:block;
 }
 .mobile-dock-lbl{
-  font-size:0.46rem;
+  font-size:0.44rem;
   font-family:var(--fc);
   font-weight:500;
-  letter-spacing:0.1em;
+  letter-spacing:0.12em;
   text-transform:uppercase;
-  color:rgba(255,255,255,0.22);
-  transition:color 0.18s;
+  color:rgba(255,255,255,0.2);
+  transition:color 0.2s ease;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   max-width:100%;
 }
 .mobile-dock-item.active .mobile-dock-ic{
-  color:rgba(160,195,240,0.92);
-  transform:translateY(-1px);
+  color:rgba(180,210,255,0.95);
+  transform:translateY(-2px);
 }
 .mobile-dock-item.active .mobile-dock-lbl{
-  color:rgba(140,175,220,0.65);
+  color:rgba(150,185,235,0.72);
 }
 .mobile-dock-item.active::before{
   content:'';
   position:absolute;
-  top:5px;
-  left:50%;
+  top:6px;left:50%;
   transform:translateX(-50%);
-  width:18px;height:2px;
+  width:20px;height:2px;
   border-radius:2px;
-  background:rgba(140,175,220,0.75);
-  box-shadow:0 0 10px rgba(140,175,220,0.35);
+  background:rgba(160,200,255,0.8);
+  box-shadow:0 0 12px rgba(140,175,220,0.5),0 0 4px rgba(140,175,220,0.8);
 }
 .mobile-dock-badge{
-  position:absolute;top:5px;right:calc(50% - 18px);
-  min-width:14px;height:14px;border-radius:7px;
-  padding:0 3px;
-  background:rgba(200,75,75,0.92);
-  border:1.5px solid rgba(10,11,13,0.85);
+  position:absolute;top:6px;right:calc(50% - 20px);
+  min-width:15px;height:15px;border-radius:8px;
+  padding:0 4px;
+  background:rgba(210,70,70,0.95);
+  border:1.5px solid rgba(10,11,13,0.9);
   color:#fff;
-  font-size:0.4rem;font-family:var(--fc);font-weight:700;
+  font-size:0.42rem;font-family:var(--fc);font-weight:700;
   display:flex;align-items:center;justify-content:center;
 }
 /* Mobile topbar — hidden on desktop */
@@ -237,7 +237,7 @@ body::after{
 .mob-topbar-title{font-family:var(--fh);font-size:0.82rem;font-weight:700;letter-spacing:-0.01em;color:var(--txt-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 @media(max-width:900px){
-  .app-shell{grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto;}
+  .app-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr;}
   .sidebar{display:none;}
   .mob-nav{display:none;}
   .mobile-dock{display:block;}
@@ -245,21 +245,29 @@ body::after{
     display:flex;
     align-items:center;
     justify-content:space-between;
-    padding:max(env(safe-area-inset-top,0px),8px) 16px 8px;
-    min-height:48px;
+    padding-top:max(env(safe-area-inset-top,0px),8px);
+    padding-left:16px;padding-right:16px;padding-bottom:8px;
+    min-height:52px;
     background:rgba(10,11,13,0.92);
-    backdrop-filter:blur(20px);
-    -webkit-backdrop-filter:blur(20px);
-    border-bottom:1px solid var(--b0);
+    backdrop-filter:blur(24px) saturate(160%);
+    -webkit-backdrop-filter:blur(24px) saturate(160%);
+    border-bottom:1px solid rgba(255,255,255,0.05);
     position:sticky;
     top:0;
     z-index:60;
   }
-  .page-body{padding:20px 20px 120px;}
+  /* Clear space for the floating dock + safe area */
+  .page-body{
+    padding:20px 20px;
+    padding-bottom:calc(100px + env(safe-area-inset-bottom,0px));
+  }
   .topbar{display:none;}
 }
 
-/* ── BUTTONS ── */
+/* ── AMBIENT MOTION ── */
+@keyframes amb-drift-1{0%{transform:translate(0,0) scale(1);}40%{transform:translate(4%,3%) scale(1.06);}70%{transform:translate(-2%,5%) scale(0.97);}100%{transform:translate(0,0) scale(1);}}
+@keyframes amb-drift-2{0%{transform:translate(0,0) scale(1);}35%{transform:translate(-5%,-3%) scale(1.08);}65%{transform:translate(3%,-5%) scale(0.95);}100%{transform:translate(0,0) scale(1);}}
+@keyframes amb-drift-3{0%{transform:translate(0,0) scale(1);}50%{transform:translate(6%,-4%) scale(1.1);}100%{transform:translate(0,0) scale(1);}}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--fh);font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;border-radius:var(--r2);border:none;cursor:pointer;transition:all 0.2s ease;position:relative;overflow:hidden;white-space:nowrap;}
 .btn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity 0.2s;background:rgba(255,255,255,0.05);}
 .btn:hover::before{opacity:1;}
@@ -2326,27 +2334,26 @@ function SessionAlert({ setView, profileData }) {
     <>
       {/* Alert banner */}
       <div style={{
-        borderRadius:"var(--r3)",
-        padding:"16px 18px",
-        marginBottom:16,
-        background: isEnded ? "rgba(107,26,26,0.12)" : isLow ? "rgba(107,74,26,0.12)" : "rgba(107,26,26,0.12)",
-        border: `1px solid ${isEnded ? "rgba(180,60,60,0.25)" : isLow ? "rgba(180,120,40,0.25)" : "rgba(180,60,60,0.25)"}`,
-        display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap",
+        borderRadius:"var(--r4)",
+        padding:"20px 22px",
+        marginBottom:18,
+        background: isEnded ? "rgba(107,26,26,0.1)" : "rgba(107,74,26,0.1)",
+        border: `1px solid ${isEnded ? "rgba(180,60,60,0.2)" : "rgba(180,120,40,0.2)"}`,
       }}>
-        <div style={{display:"flex",gap:12,alignItems:"flex-start",flex:1,minWidth:0}}>
-          <span style={{fontSize:"1.1rem",flexShrink:0,marginTop:1}}>{config.icon}</span>
-          <div>
-            <p style={{fontFamily:"var(--fh)",fontSize:"0.88rem",fontWeight:700,
+        <div style={{display:"flex",gap:13,alignItems:"flex-start",marginBottom:14}}>
+          <span style={{fontSize:"1rem",flexShrink:0,marginTop:2,opacity:0.7}}>{config.icon}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.9rem",fontWeight:700,
               color: isEnded||isCrit ? "rgba(220,120,120,0.9)" : "rgba(220,175,100,0.9)",
-              marginBottom:4}}>{config.heading}</p>
-            <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.65}}>{config.body}</p>
+              marginBottom:5,letterSpacing:"-0.01em"}}>{config.heading}</p>
+            <p style={{fontSize:"0.76rem",color:"var(--txt-1)",lineHeight:1.7}}>{config.body}</p>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,flexShrink:0,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingLeft:26}}>
           <button className={`btn btn-sm ${config.ctaStyle}`} onClick={()=>setShowRenew(true)}>
             {config.cta}
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={()=>setView("messages")}>
+          <button className="btn btn-ghost btn-sm" style={{opacity:0.65}} onClick={()=>setView("messages")}>
             Message Malik
           </button>
         </div>
@@ -3598,9 +3605,13 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
     return () => { sub?.unsubscribe(); };
   }, [session?.id]);
 
+  const savingRef = useRef(false);  // prevents duplicate submits
+
   const logWeight = async () => {
     const val = parseFloat(weightInput);
     if (!val || isNaN(val) || val <= 0) { setWeightErr("Enter a valid weight."); return; }
+    if (savingRef.current) return;  // debounce: already saving
+    savingRef.current = true;
     setSavingWeight(true); setWeightErr("");
 
     // Optimistic update
@@ -3623,10 +3634,12 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
       weekNumber: activeProg?.week || null,
     });
     setSavingWeight(false);
+    savingRef.current = false;  // release guard
 
     if (!result.ok) {
       setWeightErr(result.error || "Failed to save. Try again.");
       setWeightLog(prev => prev.filter(e => e.id !== tmpId));
+      savingRef.current = false;
       return;
     }
     // Confirm with real DB id
@@ -3818,6 +3831,8 @@ function Messages({ session, onRead, onBack }) {
   useEffect(() => {
     if (!session?.id) { setLoad(false); return; }
 
+    let sub = null;
+
     getCoachId().then(id => {
       setCoachId(id);
       if (id) {
@@ -3830,6 +3845,22 @@ function Messages({ session, onRead, onBack }) {
           setMsgErr("Could not load messages. Check your connection.");
           setLoad(false);
         });
+
+        // Only subscribe after coachId is confirmed
+        try {
+          sub = subscribeToMessages(session.id, newMsg => {
+            setMsgs(p => {
+              const clean = (Array.isArray(p) ? p : []).filter(
+                m => !m.id?.startsWith('tmp-') || m.content !== newMsg.content
+              );
+              return [...clean, newMsg];
+            });
+            if (onRead) onRead();
+            setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
+          });
+        } catch (e) {
+          console.warn("Messages realtime:", e);
+        }
       } else {
         setLoad(false);
       }
@@ -3838,19 +3869,7 @@ function Messages({ session, onRead, onBack }) {
       setLoad(false);
     });
 
-    // Realtime: receive new messages instantly
-    const sub = subscribeToMessages(session.id, newMsg => {
-      setMsgs(p => {
-        const withoutTmp = (Array.isArray(p) ? p : []).filter(
-          m => !m.id?.startsWith('tmp-') || m.content !== newMsg.content
-        );
-        return [...withoutTmp, newMsg];
-      });
-      if (onRead) onRead();
-      setTimeout(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), 50);
-    });
-
-    return () => { sub?.unsubscribe(); };
+    return () => { try { sub?.unsubscribe(); } catch(_){} };
   }, [session?.id]);
 
   const send = async () => {
@@ -3971,7 +3990,8 @@ function Messages({ session, onRead, onBack }) {
 }
 
 function ProfileSettings({ onLogout, session, profileData, onBack }) {
-  const [tab, setTab]     = useState("profile");
+  const [tab, setTab]         = useState("profile");
+  const [signingOut, setSigningOut] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState("");
@@ -4080,7 +4100,17 @@ function ProfileSettings({ onLogout, session, profileData, onBack }) {
               <div key={t.id} className={`settings-tab${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>{t.lbl}</div>
             ))}
             <div style={{marginTop:24,paddingTop:16,borderTop:"1px solid var(--b0)"}}>
-              <button className="btn btn-danger btn-sm btn-full" onClick={onLogout}>Sign Out</button>
+              <button
+                className={`btn btn-danger btn-sm btn-full${signingOut?" btn-loading":""}`}
+                disabled={signingOut}
+                onClick={async () => {
+                  if (!window.confirm("Sign out of MLVNT?")) return;
+                  setSigningOut(true);
+                  await onLogout().catch(()=>{});
+                }}
+              >
+                {signingOut ? <><Spinner />Signing out…</> : "Sign Out"}
+              </button>
             </div>
           </div>
 
@@ -9080,7 +9110,51 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
      4. double-check  — admin route JSX re-validates role before rendering
 ────────────────────────────────────────────────────────────────────────── */
 
-/* ── ERROR BOUNDARY ─────────────────────────────────────────────────────── */
+/* ── AMBIENT BACKGROUND ─────────────────────────────────────────────────── */
+function AmbientBackground() {
+  return (
+    <div style={{
+      position:"fixed",inset:0,zIndex:-1,overflow:"hidden",
+      background:"#0A0B0D",pointerEvents:"none",
+    }}>
+      {/* Slow drifting gradient orbs — GPU composited via transform */}
+      <div style={{
+        position:"absolute",
+        top:"-30%",left:"-20%",
+        width:"70vw",height:"70vw",
+        borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(26,36,54,0.55) 0%,transparent 70%)",
+        animation:"amb-drift-1 28s ease-in-out infinite",
+        willChange:"transform",
+      }}/>
+      <div style={{
+        position:"absolute",
+        bottom:"-20%",right:"-15%",
+        width:"60vw",height:"60vw",
+        borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(20,30,45,0.4) 0%,transparent 70%)",
+        animation:"amb-drift-2 34s ease-in-out infinite",
+        willChange:"transform",
+      }}/>
+      <div style={{
+        position:"absolute",
+        top:"40%",left:"30%",
+        width:"40vw",height:"40vw",
+        borderRadius:"50%",
+        background:"radial-gradient(circle,rgba(16,22,36,0.3) 0%,transparent 70%)",
+        animation:"amb-drift-3 22s ease-in-out infinite",
+        willChange:"transform",
+      }}/>
+      {/* Subtle noise grain overlay */}
+      <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0.025,mixBlendMode:"overlay"}} xmlns="http://www.w3.org/2000/svg">
+        <filter id="amb-noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter>
+        <rect width="100%" height="100%" filter="url(#amb-noise)"/>
+      </svg>
+    </div>
+  );
+}
+
+
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false }; }
   static getDerivedStateFromError() { return { hasError: true }; }
@@ -9218,6 +9292,7 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <style>{ADMIN_CSS}</style>
+      <AmbientBackground />
 
       {/* ── PUBLIC WEBSITE — root "/" ── */}
       {screen === "home" && (
