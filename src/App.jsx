@@ -265,9 +265,42 @@ body::after{
 }
 
 /* ── AMBIENT MOTION ── */
-@keyframes amb-drift-1{0%{transform:translate(0,0) scale(1);}40%{transform:translate(4%,3%) scale(1.06);}70%{transform:translate(-2%,5%) scale(0.97);}100%{transform:translate(0,0) scale(1);}}
-@keyframes amb-drift-2{0%{transform:translate(0,0) scale(1);}35%{transform:translate(-5%,-3%) scale(1.08);}65%{transform:translate(3%,-5%) scale(0.95);}100%{transform:translate(0,0) scale(1);}}
-@keyframes amb-drift-3{0%{transform:translate(0,0) scale(1);}50%{transform:translate(6%,-4%) scale(1.1);}100%{transform:translate(0,0) scale(1);}}
+/* Fog orb 1 — long slow drift, NW→SE breathing */
+@keyframes amb-fog-1{
+  0%  {transform:translate(0,0) scale(1);}
+  25% {transform:translate(3%,2%) scale(1.04);}
+  50% {transform:translate(5%,4%) scale(1.08);}
+  75% {transform:translate(2%,6%) scale(1.03);}
+  100%{transform:translate(0,0) scale(1);}
+}
+/* Fog orb 2 — counter-drift, SE→NW */
+@keyframes amb-fog-2{
+  0%  {transform:translate(0,0) scale(1);}
+  30% {transform:translate(-4%,-3%) scale(1.06);}
+  60% {transform:translate(-6%,-5%) scale(1.1);}
+  80% {transform:translate(-2%,-6%) scale(1.04);}
+  100%{transform:translate(0,0) scale(1);}
+}
+/* Fog orb 3 — centre slow breath */
+@keyframes amb-fog-3{
+  0%  {transform:translate(0,0) scale(1);    opacity:0.9;}
+  40% {transform:translate(4%,-3%) scale(1.07);opacity:1;}
+  70% {transform:translate(-2%,4%) scale(0.96);opacity:0.85;}
+  100%{transform:translate(0,0) scale(1);    opacity:0.9;}
+}
+/* Light sweep — single slow diagonal pass */
+@keyframes amb-light-sweep{
+  0%  {transform:translateX(-20%) translateY(-10%); opacity:0;}
+  15% {opacity:1;}
+  50% {transform:translateX(0%) translateY(0%); opacity:1;}
+  85% {opacity:1;}
+  100%{transform:translateX(20%) translateY(10%); opacity:0;}
+}
+/* Contour lines — imperceptibly slow lateral drift */
+@keyframes amb-contour{
+  0%  {transform:translateX(0);}
+  100%{transform:translateX(-4%);}
+}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--fh);font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;border-radius:var(--r2);border:none;cursor:pointer;transition:all 0.2s ease;position:relative;overflow:hidden;white-space:nowrap;}
 .btn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity 0.2s;background:rgba(255,255,255,0.05);}
 .btn:hover::before{opacity:1;}
@@ -9113,43 +9146,120 @@ function PublicSite({ onLogin, onConsult, onPackages }) {
 /* ── AMBIENT BACKGROUND ─────────────────────────────────────────────────── */
 function AmbientBackground() {
   return (
-    <div style={{
+    <div aria-hidden="true" style={{
       position:"fixed",inset:0,zIndex:-1,overflow:"hidden",
       background:"#0A0B0D",pointerEvents:"none",
     }}>
-      {/* Slow drifting gradient orbs — GPU composited via transform */}
+
+      {/* ── LAYER 1: Base dark gradient — deep graphite space ── */}
+      <div style={{
+        position:"absolute",inset:0,
+        background:"radial-gradient(ellipse 120% 80% at 60% -10%, rgba(18,24,36,0.9) 0%, transparent 65%), radial-gradient(ellipse 80% 60% at -10% 70%, rgba(14,20,32,0.6) 0%, transparent 60%)",
+      }}/>
+
+      {/* ── LAYER 2: Fog orb 1 — slow north drift ── */}
       <div style={{
         position:"absolute",
-        top:"-30%",left:"-20%",
+        top:"-20%",left:"-15%",
+        width:"80vw",height:"80vw",
+        maxWidth:900,maxHeight:900,
+        borderRadius:"50%",
+        background:"radial-gradient(circle, rgba(22,32,52,0.6) 0%, rgba(16,22,36,0.2) 40%, transparent 72%)",
+        filter:"blur(40px)",
+        animation:"amb-fog-1 32s ease-in-out infinite",
+        willChange:"transform",
+      }}/>
+
+      {/* ── LAYER 3: Fog orb 2 — slow south drift ── */}
+      <div style={{
+        position:"absolute",
+        bottom:"-25%",right:"-20%",
         width:"70vw",height:"70vw",
+        maxWidth:800,maxHeight:800,
         borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(26,36,54,0.55) 0%,transparent 70%)",
-        animation:"amb-drift-1 28s ease-in-out infinite",
+        background:"radial-gradient(circle, rgba(18,26,44,0.5) 0%, rgba(12,18,30,0.15) 45%, transparent 72%)",
+        filter:"blur(48px)",
+        animation:"amb-fog-2 40s ease-in-out infinite",
         willChange:"transform",
       }}/>
+
+      {/* ── LAYER 4: Fog orb 3 — centre breath ── */}
       <div style={{
         position:"absolute",
-        bottom:"-20%",right:"-15%",
-        width:"60vw",height:"60vw",
+        top:"25%",left:"20%",
+        width:"55vw",height:"55vw",
+        maxWidth:700,maxHeight:700,
         borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(20,30,45,0.4) 0%,transparent 70%)",
-        animation:"amb-drift-2 34s ease-in-out infinite",
+        background:"radial-gradient(circle, rgba(20,28,46,0.35) 0%, transparent 65%)",
+        filter:"blur(56px)",
+        animation:"amb-fog-3 26s ease-in-out infinite",
         willChange:"transform",
       }}/>
+
+      {/* ── LAYER 5: Slow ambient light sweep — diagonal, barely visible ── */}
       <div style={{
         position:"absolute",
-        top:"40%",left:"30%",
-        width:"40vw",height:"40vw",
-        borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(16,22,36,0.3) 0%,transparent 70%)",
-        animation:"amb-drift-3 22s ease-in-out infinite",
-        willChange:"transform",
+        top:"-40%",left:"-30%",
+        width:"160%",height:"160%",
+        background:"linear-gradient(135deg, transparent 30%, rgba(38,52,80,0.04) 45%, rgba(46,64,100,0.06) 50%, rgba(38,52,80,0.04) 55%, transparent 70%)",
+        animation:"amb-light-sweep 18s ease-in-out infinite",
+        willChange:"transform, opacity",
       }}/>
-      {/* Subtle noise grain overlay */}
-      <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0.025,mixBlendMode:"overlay"}} xmlns="http://www.w3.org/2000/svg">
-        <filter id="amb-noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter>
-        <rect width="100%" height="100%" filter="url(#amb-noise)"/>
+
+      {/* ── LAYER 6: Contour lines — faint athletic force lines ── */}
+      <svg
+        style={{
+          position:"absolute",inset:0,
+          width:"100%",height:"100%",
+          opacity:0.018,
+          mixBlendMode:"lighten",
+          animation:"amb-contour 45s linear infinite",
+          willChange:"transform",
+        }}
+        viewBox="0 0 1440 900"
+        preserveAspectRatio="xMidYMid slice"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <g stroke="rgba(180,200,240,1)" strokeWidth="0.8" fill="none">
+          <path d="M-100,200 Q200,120 500,180 T1100,160 T1600,200"/>
+          <path d="M-100,320 Q250,240 550,300 T1150,280 T1600,320"/>
+          <path d="M-100,440 Q300,360 600,420 T1200,400 T1600,440"/>
+          <path d="M-100,560 Q350,480 650,540 T1250,520 T1600,560"/>
+          <path d="M-100,680 Q400,600 700,660 T1300,640 T1600,680"/>
+        </g>
       </svg>
+
+      {/* ── LAYER 7: Film grain — SVG turbulence, barely visible ── */}
+      <svg
+        style={{
+          position:"absolute",inset:0,
+          width:"100%",height:"100%",
+          opacity:0.028,
+          mixBlendMode:"overlay",
+          pointerEvents:"none",
+        }}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <filter id="amb-grain" x="0%" y="0%" width="100%" height="100%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.68"
+            numOctaves="4"
+            stitchTiles="stitch"
+            seed="2"
+          />
+          <feColorMatrix type="saturate" values="0"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#amb-grain)"/>
+      </svg>
+
+      {/* ── LAYER 8: Vignette — edge darkening for depth ── */}
+      <div style={{
+        position:"absolute",inset:0,
+        background:"radial-gradient(ellipse 90% 90% at 50% 50%, transparent 50%, rgba(4,5,7,0.55) 100%)",
+        pointerEvents:"none",
+      }}/>
+
     </div>
   );
 }
