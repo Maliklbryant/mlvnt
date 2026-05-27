@@ -48,6 +48,7 @@ import {
   getClientIntakes,
   updateIntakeStatus,
   getUnreviewedIntakeCount,
+  sendConsultationEmails,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -8112,18 +8113,44 @@ function ConsultationFlow({ onBack, onComplete }) {
       setSubmitErr(result.error || "Failed to submit. Please try again.");
       return;
     }
-    // Notify coach of the new consultation request
+
+    // Advance to success screen immediately — email is fire-and-forget
+    setStep(6);
+    console.log("consultation saved", result.request);
+
+    // Build human-readable display strings for the email
+    const dateDisplay = selDate
+      ? new Date(yr, now.getMonth(), selDate)
+          .toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" })
+      : "";
+    const timeDisplay = selTime || "";   // still the 12h display value from UI state
+
+    // Fire confirmation emails — never blocks or rolls back the booking
+    sendConsultationEmails({
+      intakeId:    result.request?.id || null,
+      firstName,
+      lastName,
+      email,
+      phone,
+      goals:       [...goals, customGoal].filter(Boolean),
+      level,
+      trainFreq,
+      injuries,
+      dateDisplay,
+      timeDisplay,
+    }).catch(() => {});   // silently swallow network errors
+
+    // Notify coach in-app
     getCoachId().then(coachId => {
       if (!coachId) return;
       createNotification({
         recipientId: coachId,
-        type: "consultation_request",
-        title: "New consultation request",
-        body: `${firstName || "Someone"} requested a free consultation.`,
-        relatedId: result.request?.id || null,
-      }).catch(()=>{});
-    }).catch(()=>{});
-    setStep(6);
+        type:        "consultation_request",
+        title:       "New consultation request",
+        body:        `${firstName || "Someone"} requested a free consultation.`,
+        relatedId:   result.request?.id || null,
+      }).catch(() => {});
+    }).catch(() => {});
   };
 
   const next = () => {
