@@ -902,3 +902,56 @@ export async function getUnreviewedIntakeCount() {
   if (error) return 0;
   return count || 0;
 }
+
+// ─────────────────────────────────────────────────────────────
+// CONSULTATION CONFIRMATION EMAILS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Call the send-consultation-email Edge Function after a successful booking.
+ * Email failure never blocks the booking — always resolves.
+ *
+ * @param {object} data - booking data to include in emails
+ * @param {string} data.intakeId       - UUID returned by the RPC
+ * @param {string} data.firstName
+ * @param {string} data.lastName
+ * @param {string} data.email
+ * @param {string} data.phone
+ * @param {string[]} data.goals
+ * @param {string} data.level
+ * @param {string} data.trainFreq
+ * @param {string} data.injuries
+ * @param {string} data.dateDisplay   - "Wednesday, May 28, 2026"
+ * @param {string} data.timeDisplay   - "4:00 PM"
+ */
+export async function sendConsultationEmails(data) {
+  try {
+    console.log("sending confirmation emails");
+    const { error: fnError } = await supabase.functions.invoke(
+      "send-consultation-email",
+      {
+        body: {
+          intake_id:    data.intakeId    || null,
+          first_name:   data.firstName   || "",
+          last_name:    data.lastName    || "",
+          email:        data.email       || "",
+          phone:        data.phone       || "",
+          goals:        Array.isArray(data.goals) ? data.goals : [],
+          level:        data.level       || null,
+          train_freq:   data.trainFreq   || null,
+          injuries:     data.injuries    || null,
+          date_display: data.dateDisplay || "",
+          time_display: data.timeDisplay || "",
+        },
+      }
+    );
+    if (fnError) {
+      console.error("email send failed", fnError);
+      return { ok: false, error: fnError.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("email send failed", e);
+    return { ok: false, error: e.message };
+  }
+}
