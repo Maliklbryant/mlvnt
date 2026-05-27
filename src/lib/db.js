@@ -289,6 +289,12 @@ export async function getProgramLogs(programId) {
 // ─────────────────────────────────────────────────────────────
 
 export async function saveOnboarding(userId, email, data) {
+  const toArr = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v.filter(Boolean);
+    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+    return [];
+  };
   const { firstName, lastName, phone, birthday, age, height, weight, emergencyContact,
     goals, level, hadCoach, trainDays, trainTimes, sleep, stress, accountability } = data;
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
@@ -297,9 +303,11 @@ export async function saveOnboarding(userId, email, data) {
     id: userId,
     phone: phone || null, birthday: birthday || null,
     age: age ? parseInt(age) : null, height: height || null, weight: weight || null,
-    emergency_contact: emergencyContact || null, goals: goals || [],
+    emergency_contact: emergencyContact || null,
+    goals:       toArr(goals),       // text[]
     fitness_level: level || null, had_coach: hadCoach || null,
-    train_days: trainDays || [], train_times: trainTimes || [],
+    train_days:  toArr(trainDays),   // text[]
+    train_times: toArr(trainTimes),  // text[]
     sleep_hours: sleep || null, stress_level: stress || null,
     accountability: accountability || null, onboarding_done: true,
     updated_at: new Date().toISOString(),
@@ -321,31 +329,46 @@ export async function hasCompletedOnboarding(userId) {
 // ─────────────────────────────────────────────────────────────
 
 export async function saveConsultationRequest(data) {
+  // Helper: ensure value is always a proper array (never a string or undefined)
+  const toArr = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v.filter(Boolean);
+    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+    return [];
+  };
+
+  // Helper: ensure value is a plain object for jsonb columns
+  const toObj = (v) => {
+    if (!v) return {};
+    if (typeof v === "object" && !Array.isArray(v)) return v;
+    return {};
+  };
+
   const payload = {
-    first_name:       data.firstName        || null,
-    last_name:        data.lastName         || null,
-    email:            data.email            || null,
-    phone:            data.phone            || null,
+    first_name:       data.firstName                  || null,
+    last_name:        data.lastName                   || null,
+    email:            data.email                      || null,
+    phone:            data.phone                      || null,
     age:              data.age ? parseInt(data.age) : null,
-    goals:            data.goals            || [],
-    custom_goal:      data.customGoal       || null,
-    experience_level: data.level            || null,
-    had_coach:        data.hadCoach         || null,
-    train_frequency:  data.trainFreq        || null,
-    gym_access:       data.gymAccess        || null,
-    location:         data.location         || null,
-    injuries:         data.injuries         || null,
-    surgeries:        data.surgeries        || null,
-    conditions:       data.conditions       || null,
-    medications:      data.medications      || null,
-    restrictions:     data.restrictions     || null,
-    parq_answers:     data.parqAnswers      || {},
-    parq_any_yes:     data.anyParqYes       || false,
-    agreed_risk:      data.agreedRisk       || false,
-    agreed_medical:   data.agreedMed        || false,
-    agreed_comms:     data.agreedComms      || false,
-    requested_date:   data.selDate          || null,
-    requested_time:   data.selTime          || null,
+    goals:            toArr(data.goals),                        // text[] — always array
+    custom_goal:      data.customGoal                 || null,
+    experience_level: data.level                      || null,
+    had_coach:        data.hadCoach                   || null,
+    train_frequency:  data.trainFreq                  || null,
+    gym_access:       data.gymAccess                  || null,
+    location:         data.location                   || null,
+    injuries:         data.injuries                   || null,
+    surgeries:        data.surgeries                  || null,
+    conditions:       data.conditions                 || null,
+    medications:      data.medications                || null,
+    restrictions:     data.restrictions               || null,
+    parq_answers:     toObj(data.parqAnswers),                  // jsonb — always object
+    parq_any_yes:     Boolean(data.anyParqYes),                 // boolean
+    agreed_risk:      Boolean(data.agreedRisk),                 // boolean
+    agreed_medical:   Boolean(data.agreedMed),                  // boolean
+    agreed_comms:     Boolean(data.agreedComms),                // boolean
+    requested_date:   data.selDate                    || null,  // date "YYYY-MM-DD"
+    requested_time:   data.selTime                    || null,  // text "HH:mm:ss"
     status:           "pending",
     created_at:       new Date().toISOString(),
   };
@@ -796,32 +819,32 @@ export async function getWeightLogs(clientId, metricType) {
  */
 export async function saveClientIntake(clientId, coachId, data) {
   if (!clientId) return { ok: false, error: "clientId required" };
+  const toArr = (v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v.filter(Boolean);
+    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+    return [];
+  };
   const payload = {
     client_id:          clientId,
     coach_id:           coachId || null,
-    // Goals & history
-    goals:              data.goals              || [],
+    goals:              toArr(data.goals),          // text[]
     fitness_level:      data.level              || null,
     had_coach:          data.hadCoach           || null,
-    // Schedule preferences
-    preferred_days:     data.trainDays          || [],
-    preferred_times:    data.trainTimes         || [],
-    // Health & injuries
+    preferred_days:     toArr(data.trainDays),      // text[]
+    preferred_times:    toArr(data.trainTimes),     // text[]
     injuries:           data.injuries           || null,
     surgeries:          data.surgeries          || null,
     conditions:         data.conditions         || null,
     medications:        data.medications        || null,
     movement_limits:    data.restrictions       || null,
-    // Lifestyle
     sleep_quality:      data.sleep              || null,
     stress_level:       data.stress             || null,
     accountability:     data.accountability     || null,
     lifestyle_notes:    data.lifestyleNotes     || null,
-    // Emergency / physical
     height:             data.height             || null,
     weight:             data.weight             || null,
     emergency_contact:  data.emergencyContact   || null,
-    // Status flow: submitted → reviewed → program_assigned → archived
     status:             "submitted",
     submitted_at:       new Date().toISOString(),
     created_at:         new Date().toISOString(),
