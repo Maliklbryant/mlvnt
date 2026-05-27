@@ -785,3 +785,110 @@ export async function getWeightLogs(clientId, metricType) {
   if (error) { console.error("getWeightLogs:", error.message); return []; }
   return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────
+// CLIENT INTAKE FORMS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Save a client intake form record.
+ * Called after onboarding completes — captures full questionnaire answers.
+ */
+export async function saveClientIntake(clientId, coachId, data) {
+  if (!clientId) return { ok: false, error: "clientId required" };
+  const payload = {
+    client_id:          clientId,
+    coach_id:           coachId || null,
+    // Goals & history
+    goals:              data.goals              || [],
+    fitness_level:      data.level              || null,
+    had_coach:          data.hadCoach           || null,
+    // Schedule preferences
+    preferred_days:     data.trainDays          || [],
+    preferred_times:    data.trainTimes         || [],
+    // Health & injuries
+    injuries:           data.injuries           || null,
+    surgeries:          data.surgeries          || null,
+    conditions:         data.conditions         || null,
+    medications:        data.medications        || null,
+    movement_limits:    data.restrictions       || null,
+    // Lifestyle
+    sleep_quality:      data.sleep              || null,
+    stress_level:       data.stress             || null,
+    accountability:     data.accountability     || null,
+    lifestyle_notes:    data.lifestyleNotes     || null,
+    // Emergency / physical
+    height:             data.height             || null,
+    weight:             data.weight             || null,
+    emergency_contact:  data.emergencyContact   || null,
+    // Status flow: submitted → reviewed → program_assigned → archived
+    status:             "submitted",
+    submitted_at:       new Date().toISOString(),
+    created_at:         new Date().toISOString(),
+  };
+  const { data: row, error } = await supabase
+    .from("client_intake_forms")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) { console.error("saveClientIntake:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, intake: row };
+}
+
+/**
+ * Get all intake forms for the coach (ordered newest first).
+ * Optional status filter: "submitted" | "reviewed" | "program_assigned" | "archived"
+ */
+export async function getClientIntakes(statusFilter) {
+  let q = supabase
+    .from("client_intake_forms")
+    .select(`
+      *,
+      profiles!client_intake_forms_client_id_fkey (
+        name, email
+      )
+    `)
+    .order("submitted_at", { ascending: false })
+    .limit(100);
+  if (statusFilter) q = q.eq("status", statusFilter);
+  const { data, error } = await q;
+  if (error) {
+    // Fallback: query without the join if FK not wired yet
+    const { data: fb, error: fbErr } = await supabase
+      .from("client_intake_forms")
+      .select("*")
+      .order("submitted_at", { ascending: false })
+      .limit(100);
+    if (fbErr) { console.error("getClientIntakes:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
+}
+
+/**
+ * Update intake status (reviewed / program_assigned / archived).
+ * Also records who reviewed and when.
+ */
+export async function updateIntakeStatus(intakeId, status, reviewedBy) {
+  const updates = {
+    status,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by: reviewedBy || null,
+  };
+  const { error } = await supabase
+    .from("client_intake_forms")
+    .update(updates)
+    .eq("id", intakeId);
+  if (error) { console.error("updateIntakeStatus:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true };
+}
+
+/** Count unreviewed (status=submitted) intakes. */
+export async function getUnreviewedIntakeCount() {
+  const { count, error } = await supabase
+    .from("client_intake_forms")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "submitted");
+  if (error) return 0;
+  return count || 0;
+}
