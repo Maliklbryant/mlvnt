@@ -3643,8 +3643,7 @@ function Progress({ session, workoutLogs, allPrograms, onBack }) {
   const logWeight = async () => {
     const val = parseFloat(weightInput);
     if (!val || isNaN(val) || val <= 0) { setWeightErr("Enter a valid weight."); return; }
-    if (savingRef.current) return;  // debounce: already saving
-    savingRef.current = true;
+    if (savingRef.current) return;  // debounce: already saving    savingRef.current = true;
     setSavingWeight(true); setWeightErr("");
 
     // Optimistic update
@@ -7641,10 +7640,23 @@ function ConsultationFlow({ onBack, onComplete }) {
   const daysInMo  = new Date(yr, now.getMonth() + 1, 0).getDate();
   const cells     = [...Array(firstDow).fill(null), ...Array.from({length:daysInMo},(_,i)=>i+1)];
 
-  const TIMES = ["9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM"];
-  // Unavailable times load from Supabase coach_availability in production.
-  // For now, all slots are shown as available — no fake blocked slots.
+  const TIMES = ["9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM"];
+  // Block times that are already past when the selected date is today
   const UNAVAIL = new Set();
+  if (selDate) {
+    const selDateObj  = new Date(yr, now.getMonth(), selDate);
+    const isTodayDate = selDateObj.toDateString() === now.toDateString();
+    if (isTodayDate) {
+      TIMES.forEach(t => {
+        const [timePart, ampm] = t.split(" ");
+        let [h, m] = timePart.split(":").map(Number);
+        if (ampm === "PM" && h !== 12) h += 12;
+        if (ampm === "AM" && h === 12) h = 0;
+        const slotDate = new Date(yr, now.getMonth(), selDate, h, m, 0);
+        if (slotDate.getTime() <= Date.now()) UNAVAIL.add(t);
+      });
+    }
+  }
 
   const GOAL_OPTS = ["Fat Loss","Muscle Growth","Athletic Performance","Strength","Mobility & Flexibility",
     "Body Recomposition","Lifestyle Transformation","General Fitness","Sport-Specific Training"];
@@ -7684,6 +7696,30 @@ function ConsultationFlow({ onBack, onComplete }) {
       isoDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
+    // Final past-time validation — protect against stale UI
+    if (selDate && selTime) {
+      const [timePart, ampm] = selTime.split(" ");
+      let [h, m] = timePart.split(":").map(Number);
+      if (ampm === "PM" && h !== 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      const slotDate = new Date(yr, now.getMonth(), selDate, h, m, 0);
+      if (slotDate.getTime() <= Date.now()) {
+        setSubmitErr("This time slot is no longer available. Please select a future time.");
+        setSaving(false);
+        return;
+      }
+    }
+
+    // Convert "4:00 PM" → "16:00:00" for Postgres time column
+    let isoTime = null;
+    if (selTime) {
+      const [timePart, ampm] = selTime.split(" ");
+      let [h, m] = timePart.split(":").map(Number);
+      if (ampm === "PM" && h !== 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      isoTime = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`;
+    }
+
     const result = await saveConsultationRequest({
       firstName, lastName, email, phone, age,
       goals: [...goals, customGoal].filter(Boolean),
@@ -7692,7 +7728,7 @@ function ConsultationFlow({ onBack, onComplete }) {
       parqAnswers, anyParqYes,
       agreedRisk, agreedMed, agreedComms,
       selDate: isoDate,   // "2026-05-28" — Postgres date column
-      selTime,
+      selTime: isoTime,   // "16:00:00"  — Postgres time column
     });
     setSaving(false);
     if (!result.ok) {
