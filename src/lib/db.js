@@ -926,32 +926,57 @@ export async function getUnreviewedIntakeCount() {
  */
 export async function sendConsultationEmails(data) {
   try {
-    console.log("sending confirmation emails");
-    const { error: fnError } = await supabase.functions.invoke(
+    console.log("calling email edge function", {
+      to:   data.email,
+      date: data.dateDisplay,
+      time: data.timeDisplay,
+    });
+
+    const { data: fnData, error: fnError } = await supabase.functions.invoke(
       "send-consultation-email",
       {
         body: {
-          intake_id:    data.intakeId    || null,
-          first_name:   data.firstName   || "",
-          last_name:    data.lastName    || "",
-          email:        data.email       || "",
-          phone:        data.phone       || "",
-          goals:        Array.isArray(data.goals) ? data.goals : [],
-          level:        data.level       || null,
-          train_freq:   data.trainFreq   || null,
-          injuries:     data.injuries    || null,
-          date_display: data.dateDisplay || "",
-          time_display: data.timeDisplay || "",
+          consultation_id: data.consultationId || data.intakeId || null,
+          first_name:      data.firstName   || "",
+          last_name:       data.lastName    || "",
+          email:           data.email       || "",
+          phone:           data.phone       || "",
+          goals:           Array.isArray(data.goals) ? data.goals : [],
+          level:           data.level       || null,
+          train_freq:      data.trainFreq   || null,
+          injuries:        data.injuries    || null,
+          date_display:    data.dateDisplay || "",
+          time_display:    data.timeDisplay || "",
         },
       }
     );
+
     if (fnError) {
-      console.error("email send failed", fnError);
+      console.error("email function error", fnError);
       return { ok: false, error: fnError.message };
     }
-    return { ok: true };
+
+    console.log("email function result", fnData);
+
+    // Update email_sent fields on the consultation row if we have an id
+    const rowId = data.consultationId || data.intakeId;
+    if (rowId) {
+      await supabase
+        .from("consultation_requests")
+        .update({
+          client_email_sent: fnData?.client_email_sent === true,
+          coach_email_sent:  fnData?.coach_email_sent  === true,
+          email_sent_at:     new Date().toISOString(),
+        })
+        .eq("id", rowId)
+        .then(({ error: upErr }) => {
+          if (upErr) console.error("email_sent update failed", upErr.message);
+        });
+    }
+
+    return { ok: true, result: fnData };
   } catch (e) {
-    console.error("email send failed", e);
-    return { ok: false, error: e.message };
+    console.error("email function error", e?.message || e);
+    return { ok: false, error: e?.message || "unknown error" };
   }
 }
