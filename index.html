@@ -1,106 +1,247 @@
-<!DOCTYPE html>
+// Supabase Edge Function: send-consultation-email
+// Triggered after a successful consultation RPC insert.
+// Sends two emails via Resend:
+//   1. Client confirmation
+//   2. Coach/admin notification to mlvnt2026@gmail.com
+//
+// Environment variables required (set in Supabase Dashboard → Edge Functions → Secrets):
+//   RESEND_API_KEY   — from resend.com (free tier: 3,000 emails/month)
+//   COACH_EMAIL      — defaults to mlvnt2026@gmail.com if not set
+//   FROM_EMAIL       — defaults to noreply@mlvnt.com (must be verified domain in Resend)
+
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+
+const RESEND_API_URL = "https://api.resend.com/emails";
+const COACH_EMAIL    = Deno.env.get("COACH_EMAIL")   || "mlvnt2026@gmail.com";
+const FROM_EMAIL     = Deno.env.get("FROM_EMAIL")    || "MLVNT <noreply@mlvnt.com>";
+const RESEND_KEY     = Deno.env.get("RESEND_API_KEY");
+
+interface BookingPayload {
+  intake_id:    string;
+  first_name:   string;
+  last_name:    string;
+  email:        string;
+  phone?:       string;
+  goals?:       string[];
+  level?:       string;
+  train_freq?:  string;
+  injuries?:    string;
+  date_display: string;  // "Wednesday, May 28, 2026"
+  time_display: string;  // "4:00 PM"
+}
+
+async function sendEmail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+  if (!RESEND_KEY) {
+    console.error("RESEND_API_KEY not set");
+    return { ok: false, error: "RESEND_API_KEY not configured" };
+  }
+  const res = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${RESEND_KEY}`,
+      "Content-Type":  "application/json",
+    },
+    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    return { ok: false, error: `Resend ${res.status}: ${body}` };
+  }
+  return { ok: true };
+}
+
+function clientEmailHtml(b: BookingPayload): string {
+  const name = [b.first_name, b.last_name].filter(Boolean).join(" ") || "there";
+  return `<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consultation Confirmed — MLVNT</title></head>
+<body style="margin:0;padding:0;background:#0A0B0D;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#ECEEF1;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0A0B0D;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
+        <!-- Logo -->
+        <tr><td style="padding-bottom:36px;text-align:center;">
+          <span style="font-family:Georgia,serif;font-size:22px;font-weight:700;letter-spacing:0.12em;color:#ECEEF1;">MLVNT</span>
+        </td></tr>
 
-    <meta
-      name="description"
-      content="MLVNT — Personal training by Malik Bryant. Strength, physique, and performance coaching in New York. Time Moves. So Should You."
-    />
+        <!-- Card -->
+        <tr><td style="background:#111318;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:40px 36px;">
 
-    <meta name="theme-color" content="#1C1E22" />
-    <meta name="color-scheme" content="dark" />
+          <p style="font-size:13px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 16px;">Consultation Confirmed</p>
+          <h1 style="font-size:26px;font-weight:700;margin:0 0 8px;color:#ECEEF1;letter-spacing:-0.02em;">You're booked, ${name}.</h1>
+          <p style="font-size:15px;color:rgba(255,255,255,0.55);margin:0 0 32px;line-height:1.6;">
+            Your free 30-minute consultation with Malik Bryant has been confirmed.
+          </p>
 
-    <!-- PWA -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <meta name="apple-mobile-web-app-title" content="MLVNT" />
-    <meta name="mobile-web-app-capable" content="yes" />
+          <!-- Session details -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;overflow:hidden;margin-bottom:32px;">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <td style="padding:14px 18px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);">Date</td>
+              <td style="padding:14px 18px;font-size:14px;color:#ECEEF1;font-weight:500;text-align:right;">${b.date_display}</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <td style="padding:14px 18px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);">Time</td>
+              <td style="padding:14px 18px;font-size:14px;color:#ECEEF1;font-weight:500;text-align:right;">${b.time_display}</td>
+            </tr>
+            <tr>
+              <td style="padding:14px 18px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);">Format</td>
+              <td style="padding:14px 18px;font-size:14px;color:#ECEEF1;font-weight:500;text-align:right;">Virtual / In-person TBC</td>
+            </tr>
+          </table>
 
-    <!-- Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+          <!-- Next steps -->
+          <p style="font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);margin:0 0 14px;">What happens next</p>
+          <p style="font-size:14px;color:rgba(255,255,255,0.6);line-height:1.75;margin:0 0 8px;">
+            — Malik will review your goals and background before your session.<br>
+            — You'll receive a calendar invite with connection details.<br>
+            — Come ready to discuss what you want to achieve.
+          </p>
 
-    <!-- Icons -->
-    <link
-      rel="apple-touch-icon"
-      sizes="180x180"
-      href="/apple-touch-icon.png"
-    />
+          <div style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.07);">
+            <p style="font-size:13px;color:rgba(255,255,255,0.3);margin:0;line-height:1.6;">
+              Questions? Reply to this email or message Malik directly through the MLVNT platform.<br><br>
+              <em style="font-size:12px;color:rgba(255,255,255,0.2);">Time Moves. So Should You.</em>
+            </p>
+          </div>
 
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="192x192"
-      href="/icon-192.png"
-    />
+        </td></tr>
 
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="512x512"
-      href="/icon-512.png"
-    />
+        <!-- Footer -->
+        <tr><td style="padding-top:28px;text-align:center;">
+          <p style="font-size:11px;color:rgba(255,255,255,0.18);margin:0;">
+            MLVNT · New York · <a href="https://mlvnt.com" style="color:rgba(255,255,255,0.25);text-decoration:none;">mlvnt.com</a>
+          </p>
+        </td></tr>
 
-    <link rel="icon" type="image/png" href="/favicon.png" />
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
 
-    <link rel="shortcut icon" href="/favicon.png" />
+function coachEmailHtml(b: BookingPayload): string {
+  const name     = [b.first_name, b.last_name].filter(Boolean).join(" ") || "Unknown";
+  const goalsTxt = Array.isArray(b.goals) && b.goals.length ? b.goals.join(", ") : "—";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>New Consultation — MLVNT</title></head>
+<body style="margin:0;padding:0;background:#0A0B0D;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#ECEEF1;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0A0B0D;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
+        <tr><td style="padding-bottom:28px;text-align:center;">
+          <span style="font-family:Georgia,serif;font-size:20px;font-weight:700;letter-spacing:0.12em;color:#ECEEF1;">MLVNT</span>
+          <span style="display:block;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.28);margin-top:4px;">Coach Dashboard</span>
+        </td></tr>
 
-    <meta
-      property="og:title"
-      content="MLVNT — Personal Training"
-    />
+        <tr><td style="background:#111318;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:36px;">
 
-    <meta
-      property="og:description"
-      content="Personalized strength and physique training. Time Moves. So Should You."
-    />
+          <p style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(220,175,100,0.7);margin:0 0 12px;">New Consultation Booked</p>
+          <h1 style="font-size:22px;font-weight:700;margin:0 0 28px;color:#ECEEF1;letter-spacing:-0.01em;">${name} · ${b.date_display}</h1>
 
-    <meta property="og:image" content="/icon-512.png" />
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;overflow:hidden;margin-bottom:24px;">
+            ${[
+              ["Name",       name],
+              ["Email",      b.email || "—"],
+              ["Phone",      b.phone || "—"],
+              ["Date",       b.date_display],
+              ["Time",       b.time_display],
+              ["Goals",      goalsTxt],
+              ["Level",      b.level      || "—"],
+              ["Frequency",  b.train_freq || "—"],
+              ["Injuries",   b.injuries   || "None reported"],
+            ].map(([k, v], i, arr) => `
+            <tr style="${i < arr.length - 1 ? "border-bottom:1px solid rgba(255,255,255,0.06);" : ""}">
+              <td style="padding:12px 16px;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.3);width:120px;">${k}</td>
+              <td style="padding:12px 16px;font-size:13px;color:#ECEEF1;">${v}</td>
+            </tr>`).join("")}
+          </table>
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <p style="font-size:13px;color:rgba(255,255,255,0.4);margin:0;">
+            Review this lead in the <strong style="color:rgba(255,255,255,0.6);">MLVNT Admin → Consultations</strong> section.
+          </p>
 
-    <link
-      rel="preconnect"
-      href="https://fonts.gstatic.com"
-      crossorigin
-    />
+        </td></tr>
 
-    <title>MLVNT — Personal Training</title>
+        <tr><td style="padding-top:24px;text-align:center;">
+          <p style="font-size:11px;color:rgba(255,255,255,0.18);margin:0;">MLVNT Coach Portal · Automated notification</p>
+        </td></tr>
 
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        background: #0a0b0d;
-        overflow-x: hidden;
-      }
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
 
-      * {
-        box-sizing: border-box;
-      }
+serve(async (req: Request) => {
+  // CORS for browser calls
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin":  "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
 
-      #root {
-        min-height: 100vh;
-      }
-    </style>
-  </head>
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+  }
 
-  <body>
-    <div id="root"></div>
+  let body: BookingPayload;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+  }
 
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+  console.log("send-consultation-email: received payload for", body.email);
+
+  const results: Record<string, boolean | string> = {};
+
+  // 1. Client confirmation email
+  if (body.email) {
+    const clientName = [body.first_name, body.last_name].filter(Boolean).join(" ") || "there";
+    const cr = await sendEmail(
+      body.email,
+      `Consultation confirmed — ${body.date_display} at ${body.time_display}`,
+      clientEmailHtml(body)
+    );
+    results.client_email_sent = cr.ok;
+    if (!cr.ok) {
+      console.error("Client email failed:", cr.error);
+      results.client_email_error = cr.error ?? "unknown";
+    } else {
+      console.log("Client confirmation sent to", body.email);
+    }
+  } else {
+    results.client_email_sent = false;
+    results.client_email_error = "no client email address";
+  }
+
+  // 2. Coach notification email
+  const coachR = await sendEmail(
+    COACH_EMAIL,
+    `New consultation: ${[body.first_name, body.last_name].filter(Boolean).join(" ")} — ${body.date_display}`,
+    coachEmailHtml(body)
+  );
+  results.coach_email_sent = coachR.ok;
+  if (!coachR.ok) {
+    console.error("Coach email failed:", coachR.error);
+    results.coach_email_error = coachR.error ?? "unknown";
+  } else {
+    console.log("Coach notification sent to", COACH_EMAIL);
+  }
+
+  return new Response(JSON.stringify(results), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
