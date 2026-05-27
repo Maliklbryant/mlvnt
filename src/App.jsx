@@ -44,6 +44,10 @@ import {
   getWeightLogs,
   getCoachAvailability,
   saveCoachAvailability,
+  saveClientIntake,
+  getClientIntakes,
+  updateIntakeStatus,
+  getUnreviewedIntakeCount,
 } from "./lib/db.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -2116,6 +2120,7 @@ function Onboarding({ onComplete, session }) {
       setStep(s => s + 1);
     } else {
       if (session?.id) {
+        // 1. Save profile fields (existing behaviour)
         await saveOnboarding(session.id, session.email, {
           firstName: obFirstName, lastName: obLastName,
           phone: obPhone, birthday: obBirthday, age: obAge,
@@ -2123,6 +2128,31 @@ function Onboarding({ onComplete, session }) {
           goals, level, hadCoach, trainDays, trainTimes,
           sleep, stress, accountability,
         });
+
+        // 2. Save full intake questionnaire to client_intake_forms
+        const coachId = await getCoachId().catch(() => null);
+        const intakeResult = await saveClientIntake(session.id, coachId, {
+          goals, level, hadCoach, trainDays, trainTimes,
+          sleep, stress, accountability,
+          height: obHeight, weight: obWeight,
+          emergencyContact: obEmergency,
+          // Health fields come from step 4 inputs — stored in client_profiles;
+          // pass through as-is (null if not entered)
+          injuries: null, surgeries: null, conditions: null,
+          medications: null, restrictions: null, lifestyleNotes: null,
+        }).catch(() => ({ ok: false }));
+
+        // 3. Notify coach of new intake
+        if (intakeResult.ok && coachId) {
+          const clientName = [obFirstName, obLastName].filter(Boolean).join(" ") || session.email || "A client";
+          createNotification({
+            recipientId: coachId,
+            type:        "check_in",
+            title:       "New Client Intake Submitted",
+            body:        `${clientName} completed their intake form and is ready to be reviewed.`,
+            relatedId:   intakeResult.intake?.id || null,
+          }).catch(() => {});
+        }
       }
       setSaving(false);
       onComplete();
@@ -5324,7 +5354,354 @@ function AdminClientWorkoutHistory({ clientId }) {
   );
 }
 
-/* ── NEW CLIENT MODAL — top-level component so inputs don't lose focus ── */
+/* ── ADMIN INTAKE QUEUE ──────────────────────────────────────────────────── */
+function AdminIntakeQueue({ session, setView, setFocusClient }) {
+  const [intakes,   setIntakes]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [filter,    setFilter]    = useState("submitted"); // submitted|reviewed|program_assigned|all
+  const [selected,  setSelected]  = useState(null); // intake id for detail panel
+  const [updating,  setUpdating]  = useState(null); // id being status-updated
+
+  const loadIntakes = () => {
+    setLoading(true);
+    getClientIntakes(filter === "all" ? null : filter).then(rows => {
+      setIntakes(rows);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadIntakes(); }, [filter]);
+
+  // Realtime: reload when a new intake is inserted
+  useEffect(() => {
+    const sub = supabase
+      .channel("client_intake_forms:coach")
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "client_intake_forms",
+      }, () => loadIntakes())
+      .subscribe();
+    return () => { sub?.unsubscribe(); };
+  }, []);
+
+  const advanceStatus = async (intake, newStatus) => {
+    setUpdating(intake.id);
+    await updateIntakeStatus(intake.id, newStatus, session?.id);
+    setUpdating(null);
+    loadIntakes();
+    if (selected === intake.id) setSelected(null);
+  };
+
+  const STATUS_LABELS = {
+    submitted:        "New",
+    reviewed:         "Reviewed",
+    program_assigned: "Program Assigned",
+    archived:         "Archived",
+  };
+  const STATUS_COLORS = {
+    submitted:        "rgba(220,175,100,0.85)",
+    reviewed:         "rgba(140,175,220,0.85)",
+    program_assigned: "rgba(140,210,155,0.85)",
+    archived:         "rgba(120,120,130,0.6)",
+  };
+  const STATUS_BG = {
+    submitted:        "rgba(107,74,26,0.18)",
+    reviewed:         "rgba(30,43,80,0.35)",
+    program_assigned: "rgba(42,80,60,0.2)",
+    archived:         "rgba(40,40,45,0.2)",
+  };
+
+  // Derive client name from joined profile or fallback
+  const clientName = (row) =>
+    row.profiles?.name || row.client_name || row.client_id?.slice(0,8) || "Client";
+
+  const det = selected ? intakes.find(r => r.id === selected) : null;
+
+  return (
+    <div className="page-fade">
+      <Topbar title="Intake Queue" />
+      <div className="page-body">
+
+        {/* Filter tabs */}
+        <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+          {[["submitted","New"],["reviewed","Reviewed"],["program_assigned","Assigned"],["all","All"]].map(([val,lbl]) => (
+            <button
+              key={val}
+              onClick={()=>{ setFilter(val); setSelected(null); }}
+              style={{
+                padding:"6px 16px",borderRadius:"var(--r2)",
+                fontSize:"0.64rem",fontFamily:"var(--fh)",fontWeight:600,
+                letterSpacing:"0.06em",textTransform:"uppercase",
+                cursor:"pointer",border:"1px solid",transition:"all 0.17s",
+                background: filter===val ? "var(--acc-0)" : "none",
+                borderColor: filter===val ? "var(--b1)" : "var(--b0)",
+                color: filter===val ? "var(--txt-0)" : "var(--txt-2)",
+              }}
+            >{lbl}</button>
+          ))}
+          <span style={{marginLeft:"auto",fontSize:"0.64rem",color:"var(--txt-2)",
+            fontFamily:"var(--fc)",alignSelf:"center"}}>
+            {intakes.length} {filter === "all" ? "total" : STATUS_LABELS[filter]?.toLowerCase() || ""}
+          </span>
+        </div>
+
+        {loading && (
+          <div style={{display:"flex",justifyContent:"center",padding:60}}><Spinner /></div>
+        )}
+
+        {!loading && intakes.length === 0 && (
+          <div className="empty-state" style={{paddingTop:80}}>
+            <span className="empty-ic" style={{fontSize:"2rem",opacity:0.12}}>◎</span>
+            <p style={{fontFamily:"var(--fh)",fontSize:"0.92rem",fontWeight:700,
+              color:"var(--txt-0)",marginBottom:8}}>No intake forms yet</p>
+            <p className="empty-txt">
+              {filter === "submitted"
+                ? "New client intake forms will appear here when clients complete onboarding."
+                : `No ${STATUS_LABELS[filter]?.toLowerCase() || ""} intakes found.`}
+            </p>
+          </div>
+        )}
+
+        {!loading && intakes.length > 0 && (
+          <div style={{display:"grid",gridTemplateColumns: det ? "1fr 360px" : "1fr",gap:16,alignItems:"start"}}>
+
+            {/* ── Card list ── */}
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {intakes.map(row => {
+                const name    = clientName(row);
+                const init    = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+                const goals   = Array.isArray(row.goals) ? row.goals.slice(0,2).join(", ") : (row.goals || "—");
+                const level   = row.fitness_level || "—";
+                const hasRisk = !!(row.injuries || row.surgeries || row.conditions);
+                const date    = row.submitted_at
+                  ? new Date(row.submitted_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+                  : "—";
+                const isSelected = selected === row.id;
+                const isUpdating = updating === row.id;
+
+                return (
+                  <div
+                    key={row.id}
+                    onClick={() => setSelected(isSelected ? null : row.id)}
+                    style={{
+                      borderRadius:"var(--r3)",
+                      padding:"18px 20px",
+                      background: isSelected ? "var(--acc-0)" : "var(--bg-1)",
+                      border:`1px solid ${isSelected ? "var(--b1)" : "var(--b0)"}`,
+                      cursor:"pointer",
+                      transition:"all 0.18s",
+                    }}
+                  >
+                    {/* Top row */}
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                      <div style={{
+                        width:36,height:36,borderRadius:"50%",
+                        background:"var(--acc-0)",border:"1px solid var(--b1)",
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontFamily:"var(--fh)",fontSize:"0.66rem",fontWeight:700,
+                        color:"var(--txt-1)",flexShrink:0,
+                      }}>{init}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",justifyContent:"space-between",
+                          alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
+                          <p style={{fontFamily:"var(--fh)",fontSize:"0.86rem",fontWeight:700,
+                            color:"var(--txt-0)"}}>{name}</p>
+                          <span style={{
+                            padding:"2px 9px",borderRadius:100,
+                            fontSize:"0.58rem",fontFamily:"var(--fc)",
+                            letterSpacing:"0.1em",textTransform:"uppercase",
+                            background: STATUS_BG[row.status] || "var(--gb)",
+                            color: STATUS_COLORS[row.status] || "var(--txt-2)",
+                            border:`1px solid ${STATUS_COLORS[row.status] || "var(--b0)"}22`,
+                            flexShrink:0,whiteSpace:"nowrap",
+                          }}>{STATUS_LABELS[row.status] || row.status}</span>
+                        </div>
+                        <p style={{fontSize:"0.66rem",color:"var(--txt-2)",marginTop:2}}>{date}</p>
+                      </div>
+                    </div>
+
+                    {/* Data chips */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                      {goals && (
+                        <span style={{padding:"3px 10px",borderRadius:100,
+                          background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",
+                          fontSize:"0.64rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>
+                          {goals}
+                        </span>
+                      )}
+                      <span style={{padding:"3px 10px",borderRadius:100,
+                        background:"rgba(255,255,255,0.04)",border:"1px solid var(--b0)",
+                        fontSize:"0.64rem",color:"var(--txt-1)",fontFamily:"var(--fc)"}}>
+                        {level}
+                      </span>
+                      {hasRisk && (
+                        <span style={{padding:"3px 10px",borderRadius:100,
+                          background:"rgba(180,60,60,0.12)",border:"1px solid rgba(180,60,60,0.25)",
+                          fontSize:"0.64rem",color:"rgba(220,120,120,0.85)",fontFamily:"var(--fc)"}}>
+                          ⚠ Health flags
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}
+                      onClick={e => e.stopPropagation()}>
+                      {row.status === "submitted" && (
+                        <button
+                          className={`btn btn-p btn-xs${isUpdating?" btn-loading":""}`}
+                          disabled={isUpdating}
+                          onClick={() => advanceStatus(row, "reviewed")}
+                        >
+                          {isUpdating ? <Spinner /> : "Mark Reviewed"}
+                        </button>
+                      )}
+                      {row.status === "reviewed" && (
+                        <button
+                          className={`btn btn-p btn-xs${isUpdating?" btn-loading":""}`}
+                          disabled={isUpdating}
+                          onClick={() => {
+                            advanceStatus(row, "program_assigned");
+                            if (setView) setView("programs");
+                          }}
+                        >
+                          Assign Program →
+                        </button>
+                      )}
+                      {row.status === "program_assigned" && (
+                        <button
+                          className={`btn btn-s btn-xs${isUpdating?" btn-loading":""}`}
+                          disabled={isUpdating}
+                          onClick={() => advanceStatus(row, "archived")}
+                        >
+                          Archive
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          if (setFocusClient) setFocusClient(row.client_id);
+                          if (setView) setView("clients");
+                        }}
+                      >Client Profile</button>
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          if (setView) setView("messages");
+                        }}
+                      >Message</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Detail panel (slides in when a card is selected) ── */}
+            {det && (
+              <div style={{
+                borderRadius:"var(--r4)",padding:"22px",
+                background:"var(--gb2)",border:"1px solid var(--b1)",
+                position:"sticky",top:24,
+                animation:"pageIn 0.22s ease both",
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",
+                  alignItems:"center",marginBottom:16}}>
+                  <p style={{fontFamily:"var(--fh)",fontSize:"0.84rem",fontWeight:700,
+                    color:"var(--txt-0)"}}>Intake Detail</p>
+                  <button
+                    onClick={() => setSelected(null)}
+                    style={{width:26,height:26,borderRadius:"50%",background:"var(--gb)",
+                      border:"1px solid var(--b0)",color:"var(--txt-2)",cursor:"pointer",
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem"}}
+                  >✕</button>
+                </div>
+
+                {[
+                  ["Client", clientName(det)],
+                  ["Status", STATUS_LABELS[det.status] || det.status],
+                  ["Submitted", det.submitted_at
+                    ? new Date(det.submitted_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})
+                    : "—"],
+                  ["Fitness Level", det.fitness_level || "—"],
+                  ["Had Coach Before", det.had_coach || "—"],
+                  ["Sleep Quality", det.sleep_quality || "—"],
+                  ["Stress Level", det.stress_level || "—"],
+                  ["Accountability", det.accountability || "—"],
+                  ["Height", det.height || "—"],
+                  ["Weight", det.weight || "—"],
+                ].map(([k,v]) => (
+                  <div key={k} style={{display:"flex",justifyContent:"space-between",
+                    padding:"7px 0",borderBottom:"1px solid var(--b0)"}}>
+                    <span style={{fontSize:"0.66rem",color:"var(--txt-2)",fontFamily:"var(--fc)",
+                      letterSpacing:"0.08em",textTransform:"uppercase"}}>{k}</span>
+                    <span style={{fontSize:"0.76rem",color:"var(--txt-0)",
+                      maxWidth:"55%",textAlign:"right"}}>{v}</span>
+                  </div>
+                ))}
+
+                {/* Goals */}
+                {Array.isArray(det.goals) && det.goals.length > 0 && (
+                  <div style={{marginTop:12}}>
+                    <p style={{fontSize:"0.58rem",letterSpacing:"0.14em",textTransform:"uppercase",
+                      color:"var(--txt-2)",marginBottom:7}}>Goals</p>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {det.goals.map(g => (
+                        <span key={g} style={{padding:"3px 10px",borderRadius:100,
+                          background:"rgba(255,255,255,0.05)",border:"1px solid var(--b0)",
+                          fontSize:"0.66rem",color:"var(--txt-1)"}}>{g}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Health flags */}
+                {(det.injuries || det.surgeries || det.conditions) && (
+                  <div style={{marginTop:12,padding:"12px",borderRadius:"var(--r2)",
+                    background:"rgba(107,26,26,0.12)",border:"1px solid rgba(180,60,60,0.2)"}}>
+                    <p style={{fontSize:"0.58rem",letterSpacing:"0.14em",textTransform:"uppercase",
+                      color:"rgba(220,120,120,0.7)",marginBottom:7}}>⚠ Health Flags</p>
+                    {det.injuries   && <p style={{fontSize:"0.74rem",color:"var(--txt-1)",marginBottom:4}}>
+                      <strong>Injuries:</strong> {det.injuries}</p>}
+                    {det.surgeries  && <p style={{fontSize:"0.74rem",color:"var(--txt-1)",marginBottom:4}}>
+                      <strong>Surgeries:</strong> {det.surgeries}</p>}
+                    {det.conditions && <p style={{fontSize:"0.74rem",color:"var(--txt-1)"}}>
+                      <strong>Conditions:</strong> {det.conditions}</p>}
+                  </div>
+                )}
+
+                {/* Preferred schedule */}
+                {(det.preferred_days?.length > 0 || det.preferred_times?.length > 0) && (
+                  <div style={{marginTop:12}}>
+                    <p style={{fontSize:"0.58rem",letterSpacing:"0.14em",textTransform:"uppercase",
+                      color:"var(--txt-2)",marginBottom:7}}>Preferred Schedule</p>
+                    {det.preferred_days?.length > 0 && (
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+                        {det.preferred_days.map(d => (
+                          <span key={d} style={{padding:"3px 8px",borderRadius:100,
+                            background:"rgba(255,255,255,0.05)",border:"1px solid var(--b0)",
+                            fontSize:"0.64rem",color:"var(--txt-1)"}}>{d}</span>
+                        ))}
+                      </div>
+                    )}
+                    {det.preferred_times?.length > 0 && (
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {det.preferred_times.map(t => (
+                          <span key={t} style={{padding:"3px 8px",borderRadius:100,
+                            background:"rgba(255,255,255,0.05)",border:"1px solid var(--b0)",
+                            fontSize:"0.64rem",color:"var(--txt-2)"}}>{t}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function NewClientModal({ show, onClose, onSuccess, session }) {
   const [ncFirst,  setNcFirst]  = useState("");
   const [ncLast,   setNcLast]   = useState("");
@@ -8368,11 +8745,12 @@ function AdminConsultations({ setView: setAdminView, session, onReviewed }) {
 
 const ADMIN_NAV = [
   {id:"dashboard",    ic:"⊞", lbl:"Dashboard"},
-  {id:"consultations",ic:"◎", lbl:"Consultations"},
-  {id:"clients",      ic:"◉", lbl:"Clients"},
+  {id:"intake",       ic:"◎", lbl:"Intake Queue"},
+  {id:"consultations",ic:"◉", lbl:"Consultations"},
+  {id:"clients",      ic:"◈", lbl:"Clients"},
   {id:"programs",     ic:"▦", lbl:"Programs"},
   {id:"schedule",     ic:"◷", lbl:"Schedule"},
-  {id:"feedback",     ic:"◈", lbl:"Feedback"},
+  {id:"feedback",     ic:"◎", lbl:"Feedback"},
   {id:"packages",     ic:"⬡", lbl:"Packages"},
   {id:"messages",     ic:"✉", lbl:"Messages"},
   {id:"analytics",    ic:"△", lbl:"Analytics"},
@@ -8445,6 +8823,11 @@ function AdminShell({ onLogout, session }) {
     // Load unread notification count
     getUnreadNotificationCount(session?.id).then(count => {
       setNotifCounts(p => ({ ...p, notifications: count }));
+    }).catch(() => {});
+
+    // Load unreviewed intake count
+    getUnreviewedIntakeCount().then(count => {
+      setNotifCounts(p => ({ ...p, intake: count }));
     }).catch(() => {});
   };
 
@@ -8519,6 +8902,7 @@ function AdminShell({ onLogout, session }) {
 
   const views = {
     dashboard:    <AdminDashboard setView={navigate} setFocusClient={setFocusClient} dbClients={dbClients} notifCounts={notifCounts} />,
+    intake:       <AdminIntakeQueue session={session} setView={navigate} setFocusClient={setFocusClient} />,
     consultations:<AdminConsultations setView={navigate} session={session} onReviewed={loadNotifCounts} />,
     clients:      <AdminClients setView={navigate} focusClient={focusClient} setFocusClient={setFocusClient} dbClients={dbClients} session={session} onReload={loadClients} />,
     programs:     <AdminPrograms  session={session} />,
