@@ -329,58 +329,45 @@ export async function hasCompletedOnboarding(userId) {
 // ─────────────────────────────────────────────────────────────
 
 export async function saveConsultationRequest(data) {
-  // Helper: ensure value is always a proper array (never a string or undefined)
-  const toArr = (v) => {
-    if (!v) return [];
-    if (Array.isArray(v)) return v.filter(Boolean);
-    if (typeof v === "string") return v.trim() ? [v.trim()] : [];
-    return [];
-  };
-
-  // Helper: ensure value is a plain object for jsonb columns
-  const toObj = (v) => {
-    if (!v) return {};
-    if (typeof v === "object" && !Array.isArray(v)) return v;
-    return {};
-  };
+  // Guarantee goals is always a proper array — never a string
+  const goalsArr = Array.isArray(data.goals)
+    ? data.goals.filter(Boolean)
+    : (data.goals && typeof data.goals === "string" && data.goals.trim())
+      ? [data.goals.trim()]
+      : [];
 
   const payload = {
-    first_name:       data.firstName                  || null,
-    last_name:        data.lastName                   || null,
-    email:            data.email                      || null,
-    phone:            data.phone                      || null,
-    age:              data.age ? parseInt(data.age) : null,
-    goals:            toArr(data.goals),                        // text[] — always array
-    custom_goal:      data.customGoal                 || null,
-    experience_level: data.level                      || null,
-    had_coach:        data.hadCoach                   || null,
-    train_frequency:  data.trainFreq                  || null,
-    gym_access:       data.gymAccess                  || null,
-    location:         data.location                   || null,
-    injuries:         data.injuries                   || null,
-    surgeries:        data.surgeries                  || null,
-    conditions:       data.conditions                 || null,
-    medications:      data.medications                || null,
-    restrictions:     data.restrictions               || null,
-    parq_answers:     toObj(data.parqAnswers),                  // jsonb — always object
-    parq_any_yes:     Boolean(data.anyParqYes),                 // boolean
-    agreed_risk:      Boolean(data.agreedRisk),                 // boolean
-    agreed_medical:   Boolean(data.agreedMed),                  // boolean
-    agreed_comms:     Boolean(data.agreedComms),                // boolean
-    requested_date:   data.selDate                    || null,  // date "YYYY-MM-DD"
-    requested_time:   data.selTime                    || null,  // text "HH:mm:ss"
-    status:           "pending",
-    created_at:       new Date().toISOString(),
+    p_first_name:     data.firstName  || null,
+    p_last_name:      data.lastName   || null,
+    p_email:          data.email      || null,
+    p_phone:          data.phone      || null,
+    p_goals:          goalsArr,                  // always text[]  e.g. ["Fat Loss"]
+    p_requested_date: data.selDate    || null,   // always "YYYY-MM-DD"
+    p_requested_time: data.selTime    || null,   // always "HH:mm:ss"
   };
-  console.log("saving consultation request", payload);
-  const { data: row, error } = await supabase
-    .from("consultation_requests").insert(payload).select().single();
-  const result = error
-    ? { ok: false, error: error.message }
-    : { ok: true, request: row };
-  console.log("consultation save result", result);
-  if (error) console.error("saveConsultationRequest:", error.message);
-  return result;
+
+  console.log("BOOKING SAVE METHOD: RPC submit_consultation_request");
+  console.log("RPC payload", payload);
+
+  const { data: result, error } = await supabase.rpc(
+    "submit_consultation_request",
+    payload
+  );
+
+  if (error) {
+    console.error("RPC error:", error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const id = result?.id ?? result;
+  console.log("RPC result:", result, "id:", id);
+
+  if (!id) {
+    console.error("RPC returned no id — insert may have failed silently");
+    return { ok: false, error: "Booking could not be confirmed. Please try again." };
+  }
+
+  return { ok: true, request: { id } };
 }
 
 export async function getConsultationRequests() {
