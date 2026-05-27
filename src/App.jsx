@@ -8125,9 +8125,9 @@ function ConsultationFlow({ onBack, onComplete }) {
       : "";
     const timeDisplay = selTime || "";   // still the 12h display value from UI state
 
-    // Fire confirmation emails — never blocks or rolls back the booking
+    // Fire confirmation emails — booking is already saved, email never blocks it
     sendConsultationEmails({
-      intakeId:    result.request?.id || null,
+      consultationId: result.request?.id || null,
       firstName,
       lastName,
       email,
@@ -8138,7 +8138,15 @@ function ConsultationFlow({ onBack, onComplete }) {
       injuries,
       dateDisplay,
       timeDisplay,
-    }).catch(() => {});   // silently swallow network errors
+    }).then(r => {
+      if (r.ok) {
+        console.log("email function result", r.result);
+      } else {
+        console.error("email function error", r.error);
+      }
+    }).catch(e => {
+      console.error("email function error", e?.message || e);
+    });
 
     // Notify coach in-app
     getCoachId().then(coachId => {
