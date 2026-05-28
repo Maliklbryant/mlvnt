@@ -8105,61 +8105,57 @@ function ConsultationFlow({ onBack, onComplete }) {
       injuries, surgeries, conditions, medications, restrictions,
       parqAnswers, anyParqYes,
       agreedRisk, agreedMed, agreedComms,
-      selDate: isoDate,   // "2026-05-28" — Postgres date column
-      selTime: isoTime,   // "16:00:00"  — Postgres time column
+      selDate: isoDate,
+      selTime: isoTime,
     });
+
     setSaving(false);
     if (!result.ok) {
       setSubmitErr(result.error || "Failed to submit. Please try again.");
       return;
     }
 
-    // Advance to success screen immediately — email is fire-and-forget
-    setStep(6);
-    console.log("consultation saved", result.request);
+    const consultationId = result.request?.id || null;
+    console.log("consultation saved", { consultationId, isoDate, isoTime });
 
-    // Build human-readable display strings for the email
+    // Advance to success screen immediately
+    setStep(6);
+
+    // Human-readable display values for emails
     const dateDisplay = selDate
       ? new Date(yr, now.getMonth(), selDate)
           .toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" })
       : "";
-    const timeDisplay = selTime || "";   // still the 12h display value from UI state
+    const timeDisplay = selTime || "";
+    const goalsList   = [...goals, customGoal].filter(Boolean);
 
-    // Fire confirmation emails — booking is already saved, email never blocks it
-    sendConsultationEmails({
-      consultationId: result.request?.id || null,
-      firstName,
-      lastName,
-      email,
-      phone,
-      goals:       [...goals, customGoal].filter(Boolean),
-      level,
-      trainFreq,
-      injuries,
-      dateDisplay,
-      timeDisplay,
-    }).then(r => {
-      if (r.ok) {
-        console.log("email function result", r.result);
-      } else {
-        console.error("email function error", r.error);
-      }
-    }).catch(e => {
-      console.error("email function error", e?.message || e);
-    });
-
-    // Notify coach in-app
+    // ── In-app notification for coach/admin
     getCoachId().then(coachId => {
       if (!coachId) return;
       createNotification({
         recipientId: coachId,
         type:        "consultation_request",
-        title:       "New consultation request",
-        body:        `${firstName || "Someone"} requested a free consultation.`,
-        relatedId:   result.request?.id || null,
+        title:       "New Consultation Booked",
+        body:        `${[firstName,lastName].filter(Boolean).join(" ")||"Someone"} booked for ${dateDisplay} at ${timeDisplay}.`,
+        relatedId:   consultationId,
       }).catch(() => {});
     }).catch(() => {});
-  };
+
+    // ── Send confirmation emails (fire-and-forget — booking already saved)
+    sendConsultationEmails({
+      consultationId,
+      firstName,  lastName,
+      email,      phone,     age,
+      goals:      goalsList,
+      level,      hadCoach,
+      trainFreq,  gymAccess, location,
+      injuries,   surgeries, conditions, medications,
+      dateDisplay, timeDisplay,
+    }).then(r => {
+      if (r.ok) console.log("email function result", r.result);
+      else      console.error("email function error", r.error);
+    }).catch(e => console.error("email function error", e?.message || e));
+  };;
 
   const next = () => {
     if (step === 5) { submit(); return; }
