@@ -936,15 +936,22 @@ export async function sendConsultationEmails(data) {
       "send-consultation-email",
       {
         body: {
-          consultation_id: data.consultationId || data.intakeId || null,
+          consultation_id: data.consultationId || null,
           first_name:      data.firstName   || "",
           last_name:       data.lastName    || "",
           email:           data.email       || "",
           phone:           data.phone       || "",
+          age:             data.age         || null,
           goals:           Array.isArray(data.goals) ? data.goals : [],
           level:           data.level       || null,
+          had_coach:       data.hadCoach    || null,
           train_freq:      data.trainFreq   || null,
+          gym_access:      data.gymAccess   || null,
+          location:        data.location    || null,
           injuries:        data.injuries    || null,
+          surgeries:       data.surgeries   || null,
+          conditions:      data.conditions  || null,
+          medications:     data.medications || null,
           date_display:    data.dateDisplay || "",
           time_display:    data.timeDisplay || "",
         },
@@ -958,17 +965,16 @@ export async function sendConsultationEmails(data) {
 
     console.log("email function result", fnData);
 
-    // Update email_sent fields on the consultation row if we have an id
-    const rowId = data.consultationId || data.intakeId;
-    if (rowId) {
-      await supabase
+    // Update email_sent fields on the consultation row
+    if (data.consultationId) {
+      supabase
         .from("consultation_requests")
         .update({
           client_email_sent: fnData?.client_email_sent === true,
           coach_email_sent:  fnData?.coach_email_sent  === true,
           email_sent_at:     new Date().toISOString(),
         })
-        .eq("id", rowId)
+        .eq("id", data.consultationId)
         .then(({ error: upErr }) => {
           if (upErr) console.error("email_sent update failed", upErr.message);
         });
