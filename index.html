@@ -1,6 +1,6 @@
-cd ~/your-project-folder
+cd /path/to/your/mlvnt/project   # wherever package.json lives
 
-cat > index.html << 'EOF'
+cat > index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -27,10 +27,4 @@ cat > index.html << 'EOF'
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-EOF
-
-grep -c "sendEmail" index.html
-
-git add index.html
-git commit -m "fix: clean index.html"
-git push origin main
+HTMLEOF
