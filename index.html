@@ -1,15 +1,15 @@
+cd ~/your-project-folder
+
+cat > index.html << 'EOF'
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="MLVNT — Personal training by Malik Bryant." />
     <meta name="theme-color" content="#1C1E22" />
-    <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MLVNT" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -27,3 +27,10 @@
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+EOF
+
+grep -c "sendEmail" index.html
+
+git add index.html
+git commit -m "fix: clean index.html"
+git push origin main
