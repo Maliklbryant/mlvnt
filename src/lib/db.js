@@ -926,10 +926,11 @@ export async function getUnreviewedIntakeCount() {
  */
 export async function sendConsultationEmails(data) {
   try {
-    console.log("calling email edge function", {
-      to:   data.email,
-      date: data.dateDisplay,
-      time: data.timeDisplay,
+    console.log("calling send-consultation-email", {
+      to:    data.email,
+      date:  data.dateDisplay,
+      time:  data.timeDisplay,
+      hasId: !!data.consultationId,
     });
 
     const { data: fnData, error: fnError } = await supabase.functions.invoke(
@@ -959,13 +960,13 @@ export async function sendConsultationEmails(data) {
     );
 
     if (fnError) {
-      console.error("email function error", fnError);
+      console.error("send-consultation-email error", fnError);
       return { ok: false, error: fnError.message };
     }
 
-    console.log("email function result", fnData);
+    console.log("send-consultation-email result", fnData);
 
-    // Update email_sent fields on the consultation row
+    // Update email_sent tracking on the consultation row
     if (data.consultationId) {
       supabase
         .from("consultation_requests")
@@ -982,7 +983,7 @@ export async function sendConsultationEmails(data) {
 
     return { ok: true, result: fnData };
   } catch (e) {
-    console.error("email function error", e?.message || e);
+    console.error("send-consultation-email error", e?.message || e);
     return { ok: false, error: e?.message || "unknown error" };
   }
 }
