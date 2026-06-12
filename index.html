@@ -19,10 +19,10 @@ const RESEND_KEY  = Deno.env.get("RESEND_API_KEY")  ?? "";
 const COACH_EMAIL = Deno.env.get("COACH_EMAIL")     ?? "mlvnt2026@gmail.com";
 const FROM_EMAIL  = Deno.env.get("FROM_EMAIL")      ?? "onboarding@resend.dev";
 
-const CORS = {
+const corsHeaders = {
   "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
 interface Payload {
@@ -205,11 +205,13 @@ function coachHtml(p: Payload): string {
 
 // ── Main handler ──────────────────────────────────────────────────────────
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405, headers: { ...CORS, "Content-Type": "application/json" },
+      status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -224,7 +226,7 @@ serve(async (req: Request) => {
   } catch {
     console.error("Failed to parse request body");
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400, headers: { ...CORS, "Content-Type": "application/json" },
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -272,6 +274,6 @@ serve(async (req: Request) => {
 
   return new Response(JSON.stringify(results), {
     status: 200,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
