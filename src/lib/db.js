@@ -900,3 +900,41 @@ export async function getSessionLedger(clientId) {
   if (error) { console.error("getSessionLedger:", error.message); return []; }
   return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN ANALYTICS — real data only, no fabricated figures
+// ─────────────────────────────────────────────────────────────
+
+/** All Stripe-backed purchases, most recent first — real revenue source. */
+export async function getAllSessionPurchases() {
+  const { data, error } = await supabase
+    .from("session_purchases")
+    .select("*, profiles!session_purchases_client_id_fkey (name, email)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) {
+    console.warn("getAllSessionPurchases join failed, falling back:", error.message);
+    const { data: fb, error: fbErr } = await supabase
+      .from("session_purchases").select("*").order("created_at", { ascending: false }).limit(500);
+    if (fbErr) { console.error("getAllSessionPurchases:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
+}
+
+/** All coach-adjustment ledger entries, for a real audit-trail view. */
+export async function getAllLedgerEntries() {
+  const { data, error } = await supabase
+    .from("session_ledger")
+    .select("*, profiles!session_ledger_client_id_fkey (name, email)")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    console.warn("getAllLedgerEntries join failed, falling back:", error.message);
+    const { data: fb, error: fbErr } = await supabase
+      .from("session_ledger").select("*").order("created_at", { ascending: false }).limit(200);
+    if (fbErr) { console.error("getAllLedgerEntries:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
+}

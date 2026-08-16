@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   SESSIONS_BY_PACKAGE, sessionsForPackage,
   formatIsoDate, parseTimeLabel, parseSlotDateTime, isSlotInPast,
+  isPastCalendarDay, nextCalendarMonth, prevCalendarMonth, isMonthInPast,
   computeWeekBounds, evaluateBookingEligibility,
   computeLedgerBalance, isDuplicateLedgerEvent,
   evaluateLowBalanceNotification,
@@ -60,6 +61,70 @@ test("parseSlotDateTime + isSlotInPast: correctly flags a past slot", () => {
 
 test("isSlotInPast: correctly allows a future slot", () => {
   assert.equal(isSlotInPast("2099-01-01", "9:00 AM", new Date("2026-01-01")), false);
+});
+
+// ── Calendar month navigation (December ↔ January, year boundaries) ──────
+test("nextCalendarMonth: normal mid-year increment", () => {
+  assert.deepEqual(nextCalendarMonth(2026, 5), { year: 2026, month: 6 }); // June -> July
+});
+
+test("nextCalendarMonth: December rolls over to January of the NEXT year", () => {
+  assert.deepEqual(nextCalendarMonth(2026, 11), { year: 2027, month: 0 });
+});
+
+test("prevCalendarMonth: normal mid-year decrement", () => {
+  assert.deepEqual(prevCalendarMonth(2026, 5), { year: 2026, month: 4 }); // June -> May
+});
+
+test("prevCalendarMonth: January rolls back to December of the PREVIOUS year", () => {
+  assert.deepEqual(prevCalendarMonth(2026, 0), { year: 2025, month: 11 });
+});
+
+test("nextCalendarMonth then prevCalendarMonth is the identity (round-trip)", () => {
+  const start = { year: 2026, month: 11 }; // December 2026
+  const forward = nextCalendarMonth(start.year, start.month);
+  const back = prevCalendarMonth(forward.year, forward.month);
+  assert.deepEqual(back, start);
+});
+
+test("isPastCalendarDay: a day earlier this month is past", () => {
+  const now = new Date(2026, 7, 15); // Aug 15, 2026
+  assert.equal(isPastCalendarDay(2026, 7, 10, now), true);
+});
+
+test("isPastCalendarDay: today itself is NOT past (still bookable)", () => {
+  const now = new Date(2026, 7, 15);
+  assert.equal(isPastCalendarDay(2026, 7, 15, now), false);
+});
+
+test("isPastCalendarDay: a day in a future month is never past, even with a smaller day number", () => {
+  const now = new Date(2026, 7, 28); // Aug 28
+  assert.equal(isPastCalendarDay(2026, 8, 1, now), false); // Sep 1 is still in the future
+});
+
+test("isPastCalendarDay: December 31 vs January 1 the following year — Jan 1 is NOT past relative to Dec 31", () => {
+  const now = new Date(2026, 11, 31); // Dec 31, 2026
+  assert.equal(isPastCalendarDay(2027, 0, 1, now), false);
+});
+
+test("isMonthInPast: the exact current month is not 'in the past' (still navigable/current)", () => {
+  const now = new Date(2026, 7, 1);
+  assert.equal(isMonthInPast(2026, 7, now), false);
+});
+
+test("isMonthInPast: last month IS in the past", () => {
+  const now = new Date(2026, 7, 1); // Aug 2026
+  assert.equal(isMonthInPast(2026, 6, now), true); // July 2026
+});
+
+test("isMonthInPast: December of last year is in the past when viewed from January", () => {
+  const now = new Date(2027, 0, 15); // Jan 2027
+  assert.equal(isMonthInPast(2026, 11, now), true); // Dec 2026
+});
+
+test("isMonthInPast: a future month/year is never in the past", () => {
+  const now = new Date(2026, 7, 1);
+  assert.equal(isMonthInPast(2027, 0, now), false);
 });
 
 // ── Weekly booking limit ─────────────────────────────────────────────────

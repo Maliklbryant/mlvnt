@@ -64,6 +64,34 @@ export function isSlotInPast(isoDate, timeLabel, now = new Date()) {
   return parseSlotDateTime(isoDate, timeLabel).getTime() <= now.getTime();
 }
 
+/** Is this whole calendar day (no time component) already in the past? */
+export function isPastCalendarDay(year, monthIndex0, day, now = new Date()) {
+  const target = new Date(year, monthIndex0, day);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return target.getTime() < today.getTime();
+}
+
+/**
+ * Pure month-navigation math, including year rollover. This is what a
+ * calendar's prev/next buttons should call — extracted specifically so
+ * December→January / January→December transitions are unit-testable
+ * without a browser.
+ */
+export function nextCalendarMonth(year, monthIndex0) {
+  return monthIndex0 === 11 ? { year: year + 1, month: 0 } : { year, month: monthIndex0 + 1 };
+}
+
+export function prevCalendarMonth(year, monthIndex0) {
+  return monthIndex0 === 0 ? { year: year - 1, month: 11 } : { year, month: monthIndex0 - 1 };
+}
+
+/** Is this viewed month/year navigable-back-to, i.e. not before the real current month? */
+export function isMonthInPast(year, monthIndex0, now = new Date()) {
+  if (year < now.getFullYear()) return true;
+  if (year > now.getFullYear()) return false;
+  return monthIndex0 < now.getMonth();
+}
+
 // ── Weekly booking limit ────────────────────────────────────────────────
 /** Monday–Sunday week bounds (as ISO date strings) containing refDate. */
 export function computeWeekBounds(refDate) {
