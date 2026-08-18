@@ -3,6 +3,13 @@
  * ------------------------
  * All Supabase database operations live here.
  * App.jsx imports from this file — no supabase calls scattered elsewhere.
+ *
+ * PHASE 1 + PHASE B CHANGES IN THIS FILE (search these markers):
+ *   [PHASE1] getWeeklySessionCount, isSlotTaken — real DB-backed booking checks
+ *   [PHASE1] createCheckoutSession, getSessionPurchases — Stripe dynamic checkout
+ *   [PHASE1] saveConsultationRequest — friendly duplicate-slot error (23505)
+ *   [PHASE1] sendConsultationEmails — admin alert on email-send failure
+ *   [PHASEB] adjustSessionBalance, getSessionLedger — all balance writes go through the ledger RPC
  */
 
 import { supabase } from "./supabase.js";
@@ -44,7 +51,7 @@ export async function listClients() {
         phone, height, weight,
         location_building, location_address, location_area, location_notes,
         emergency_contact, birthday, goals, fitness_level, injuries,
-        package_plan, sessions_balance, sessions_weekly_max
+        package_plan, sessions_balance, sessions_weekly_max, lifecycle_status
       )`)
     .eq("role", "client")
     .order("created_at", { ascending: false });
@@ -63,7 +70,6 @@ export async function getClientById(clientId) {
 // PROGRAMS
 // ─────────────────────────────────────────────────────────────
 
-/** Programs for a specific client. */
 export async function getPrograms(clientId) {
   const { data, error } = await supabase
     .from("programs").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
@@ -71,7 +77,6 @@ export async function getPrograms(clientId) {
   return data || [];
 }
 
-/** Single active program for a client. */
 export async function getActiveProgram(clientId) {
   const { data, error } = await supabase
     .from("programs").select("*").eq("client_id", clientId).eq("status", "active").maybeSingle();
@@ -79,17 +84,12 @@ export async function getActiveProgram(clientId) {
   return data;
 }
 
-/**
- * All programs across all clients AND unassigned templates (client_id IS NULL).
- * Uses a left join so templates with client_id=null are never dropped.
- */
 export async function getAllPrograms() {
   const { data, error } = await supabase
     .from("programs")
     .select(`*, profiles!programs_client_id_fkey (name, email)`)
     .order("updated_at", { ascending: false });
   if (error) {
-    // If the FK join errors (e.g. no foreign key on null rows), fall back to plain select
     console.warn("getAllPrograms join failed, falling back:", error.message);
     const { data: fallback, error: fbErr } = await supabase
       .from("programs")
@@ -101,10 +101,6 @@ export async function getAllPrograms() {
   return data || [];
 }
 
-/**
- * Create a new program draft.
- * clientId = null creates an unassigned template (no client required).
- */
 export async function createProgram(clientId, coachId, overrides = {}) {
   const isTemplate = !clientId;
   const program = {
@@ -129,11 +125,9 @@ export async function createProgram(clientId, coachId, overrides = {}) {
   return { ok: true, program: data };
 }
 
-/** Save full program (camelCase UI → snake_case DB). Preserves identity fields. */
 export async function saveProgram(program) {
   const { id, ...fields } = program;
 
-  // Guard: id must be a non-empty string (real UUID from Supabase)
   if (!id || typeof id !== "string") {
     console.error("saveProgram: program.id is missing or invalid:", id);
     return { ok: false, error: "Program ID is missing. Cannot save." };
@@ -152,63 +146,41 @@ export async function saveProgram(program) {
     days:         fields.days        ?? [],
     weekly_focus: fields.weeklyFocus ?? "",
     updated_at:   new Date().toISOString(),
-    // Preserve identity fields — never clear them on a routine save
     client_id:    fields.clientId    ?? null,
     coach_id:     fields.coachId     ?? null,
     is_template:  fields.clientId == null,
-    // template_id / assigned_by / assigned_at: set once at assignment, never touched here
   };
 
-  console.log("[saveProgram] id:", id);
-  console.log("[saveProgram] payload:", JSON.stringify(payload, null, 2));
-
-  // 1. Attempt UPDATE
   const { data: updated, error: updateErr } = await supabase
-    .from("programs")
-    .update(payload)
-    .eq("id", id)
-    .select()
-    .single();
+    .from("programs").update(payload).eq("id", id).select().single();
 
   if (updateErr) {
-    // PGRST116 = "no rows returned" — row wasn't matched (wrong id, or RLS blocked)
     if (updateErr.code === "PGRST116") {
-      console.warn("[saveProgram] UPDATE matched 0 rows (id not found or RLS blocked). Trying upsert fallback.");
-      // 2. Fallback: upsert with id included in the payload
+      console.warn("[saveProgram] UPDATE matched 0 rows. Trying upsert fallback.");
       const upsertPayload = { id, ...payload };
       const { data: upserted, error: upsertErr } = await supabase
-        .from("programs")
-        .upsert(upsertPayload, { onConflict: "id" })
-        .select()
-        .single();
+        .from("programs").upsert(upsertPayload, { onConflict: "id" }).select().single();
       if (upsertErr) {
         console.error("[saveProgram] upsert fallback failed:", upsertErr.message, "code:", upsertErr.code);
         return { ok: false, error: `Save failed: ${upsertErr.message} (code ${upsertErr.code})` };
       }
-      console.log("[saveProgram] upsert succeeded:", upserted?.id);
       return { ok: true, program: upserted };
     }
     console.error("[saveProgram] update error:", updateErr.message, "code:", updateErr.code);
     return { ok: false, error: `Save failed: ${updateErr.message} (code ${updateErr.code})` };
   }
 
-  // 3. Re-select to confirm the row exists in DB
   const { data: confirmed, error: confirmErr } = await supabase
-    .from("programs")
-    .select("id, name, updated_at")
-    .eq("id", id)
-    .single();
+    .from("programs").select("id, name, updated_at").eq("id", id).single();
 
   if (confirmErr || !confirmed) {
     console.error("[saveProgram] post-save confirm failed:", confirmErr?.message);
     return { ok: false, error: "Save appeared to succeed but could not confirm. Check Supabase." };
   }
 
-  console.log("[saveProgram] confirmed in DB:", confirmed.id, "updated_at:", confirmed.updated_at);
   return { ok: true, program: updated };
 }
 
-/** Duplicate a program as a draft copy. */
 export async function duplicateProgram(programId, coachId) {
   const { data: src, error: fetchErr } = await supabase.from("programs").select("*").eq("id", programId).single();
   if (fetchErr || !src) return { ok: false, error: fetchErr?.message || "Program not found" };
@@ -231,12 +203,6 @@ export async function archiveProgram(programId) {
   return { ok: true };
 }
 
-/**
- * Assign and publish a program to a client.
- * Works for both already-assigned drafts and unassigned templates.
- * Sets client_id, archives any existing active program, sets status=active.
- * clientId is required.
- */
 export async function publishProgram(programId, clientId) {
   if (!clientId) return { ok: false, error: "A client must be selected before publishing." };
   await supabase.from("programs")
@@ -304,10 +270,10 @@ export async function saveOnboarding(userId, email, data) {
     phone: phone || null, birthday: birthday || null,
     age: age ? parseInt(age) : null, height: height || null, weight: weight || null,
     emergency_contact: emergencyContact || null,
-    goals:       toArr(goals),       // text[]
+    goals:       toArr(goals),
     fitness_level: level || null, had_coach: hadCoach || null,
-    train_days:  toArr(trainDays),   // text[]
-    train_times: toArr(trainTimes),  // text[]
+    train_days:  toArr(trainDays),
+    train_times: toArr(trainTimes),
     sleep_hours: sleep || null, stress_level: stress || null,
     accountability: accountability || null, onboarding_done: true,
     updated_at: new Date().toISOString(),
@@ -328,8 +294,12 @@ export async function hasCompletedOnboarding(userId) {
 // CONSULTATION REQUESTS
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * [PHASE1] Turns a DB-level duplicate-slot violation (23505, from
+ * uq_consultation_email_slot in 0003_consultation_dedupe.sql) into a
+ * clear, actionable message instead of a generic "booking failed".
+ */
 export async function saveConsultationRequest(data) {
-  // Guarantee goals is always a proper array — never a string
   const goalsArr = Array.isArray(data.goals)
     ? data.goals.filter(Boolean)
     : (data.goals && typeof data.goals === "string" && data.goals.trim())
@@ -341,29 +311,28 @@ export async function saveConsultationRequest(data) {
     p_last_name:      data.lastName   || null,
     p_email:          data.email      || null,
     p_phone:          data.phone      || null,
-    p_goals:          goalsArr,                  // always text[]  e.g. ["Fat Loss"]
-    p_requested_date: data.selDate    || null,   // always "YYYY-MM-DD"
-    p_requested_time: data.selTime    || null,   // always "HH:mm:ss"
+    p_goals:          goalsArr,
+    p_requested_date: data.selDate    || null,
+    p_requested_time: data.selTime    || null,
   };
 
-  console.log("BOOKING SAVE METHOD: RPC submit_consultation_request");
-  console.log("RPC payload", payload);
-
-  const { data: result, error } = await supabase.rpc(
-    "submit_consultation_request",
-    payload
-  );
+  const { data: result, error } = await supabase.rpc("submit_consultation_request", payload);
 
   if (error) {
-    console.error("RPC error:", error.message);
+    console.error("submit_consultation_request RPC error:", error.message, error.code);
+    if (error.code === "23505") {
+      return {
+        ok: false,
+        error: "You already have a consultation request for that date and time. Check your email for the confirmation, or pick a different slot.",
+        duplicate: true,
+      };
+    }
     return { ok: false, error: error.message };
   }
 
   const id = result?.id ?? result;
-  console.log("RPC result:", result, "id:", id);
-
   if (!id) {
-    console.error("RPC returned no id — insert may have failed silently");
+    console.error("submit_consultation_request returned no id — treating as failure");
     return { ok: false, error: "Booking could not be confirmed. Please try again." };
   }
 
@@ -374,7 +343,6 @@ export async function getConsultationRequests() {
   const { data, error } = await supabase
     .from("consultation_requests").select("*").order("created_at", { ascending: false });
   if (error) { console.error("getConsultationRequests:", error.message); return []; }
-  console.log("loaded consultation requests", data?.length ?? 0, "rows");
   return data || [];
 }
 
@@ -413,7 +381,6 @@ export async function getCoachAvailability(coachId) {
 // MESSAGING
 // ─────────────────────────────────────────────────────────────
 
-/** Load conversation between two users, ordered oldest-first. */
 export async function getMessages(userId, otherId) {
   const { data, error } = await supabase
     .from("messages")
@@ -424,7 +391,6 @@ export async function getMessages(userId, otherId) {
   return data || [];
 }
 
-/** Send a message from sender to receiver. */
 export async function sendMessage(senderId, receiverId, content) {
   const { data, error } = await supabase
     .from("messages")
@@ -434,7 +400,6 @@ export async function sendMessage(senderId, receiverId, content) {
   return { ok: true, message: data };
 }
 
-/** Count unread messages for a user (messages sent TO them that are unread). */
 export async function getUnreadMessageCount(userId) {
   if (!userId) return 0;
   const { count, error } = await supabase
@@ -446,7 +411,6 @@ export async function getUnreadMessageCount(userId) {
   return count || 0;
 }
 
-/** Mark all messages in a conversation as read. */
 export async function markMessagesRead(userId, senderId) {
   const { error } = await supabase
     .from("messages")
@@ -458,7 +422,6 @@ export async function markMessagesRead(userId, senderId) {
   return { ok: true };
 }
 
-/** Get the coach/owner's user ID (for clients to send messages to). */
 export async function getCoachId() {
   const { data, error } = await supabase
     .from("profiles")
@@ -470,24 +433,20 @@ export async function getCoachId() {
   return data?.id || null;
 }
 
-/** Subscribe to new messages in real time. Returns the subscription object. */
 export function subscribeToMessages(userId, callback) {
   return supabase
     .channel(`messages:${userId}`)
     .on("postgres_changes", {
-      event: "INSERT",
-      schema: "public",
-      table: "messages",
+      event: "INSERT", schema: "public", table: "messages",
       filter: `receiver_id=eq.${userId}`,
     }, payload => callback(payload.new))
     .subscribe();
 }
 
 // ─────────────────────────────────────────────────────────────
-// PROGRAM LIBRARY — Template-first flow
+// PROGRAM LIBRARY
 // ─────────────────────────────────────────────────────────────
 
-/** All unassigned templates (client_id IS NULL, or is_template=true for older rows). */
 export async function getProgramLibrary() {
   const { data, error } = await supabase
     .from("programs")
@@ -498,7 +457,6 @@ export async function getProgramLibrary() {
   return data || [];
 }
 
-/** All programs assigned to clients (client_id NOT NULL). */
 export async function getAssignedPrograms() {
   const { data, error } = await supabase
     .from("programs")
@@ -509,10 +467,6 @@ export async function getAssignedPrograms() {
   return data || [];
 }
 
-/**
- * Assign a template to a client by creating a client-specific copy.
- * The original template (client_id=null) is preserved unchanged.
- */
 export async function assignProgramTemplate(templateId, clientId, coachId) {
   if (!templateId || !clientId) {
     return { ok: false, error: "templateId and clientId are required." };
@@ -549,8 +503,7 @@ export async function assignProgramTemplate(templateId, clientId, coachId) {
     is_template: false,
   };
 
-  const { data, error } = await supabase
-    .from("programs").insert(copy).select().single();
+  const { data, error } = await supabase.from("programs").insert(copy).select().single();
   if (error) {
     console.error("assignProgramTemplate insert:", error.message);
     return { ok: false, error: error.message };
@@ -562,12 +515,6 @@ export async function assignProgramTemplate(templateId, clientId, coachId) {
 // CLIENT INVITES
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Create a client invite record.
- * Used when the coach wants to add a new client from the admin dashboard.
- * The invite is stored in client_invites table.
- * When the invitee signs up with the matching email, they become a client.
- */
 export async function createClientInvite({ firstName, lastName, email, phone, packagePlan, notes, coachId }) {
   if (!email || !email.trim()) {
     return { ok: false, error: "Email is required." };
@@ -583,15 +530,8 @@ export async function createClientInvite({ firstName, lastName, email, phone, pa
     status:       "pending",
     created_at:   new Date().toISOString(),
   };
-  const { data, error } = await supabase
-    .from("client_invites")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) {
-    console.error("createClientInvite:", error.message);
-    return { ok: false, error: error.message };
-  }
+  const { data, error } = await supabase.from("client_invites").insert(payload).select().single();
+  if (error) { console.error("createClientInvite:", error.message); return { ok: false, error: error.message }; }
   return { ok: true, invite: data };
 }
 
@@ -599,83 +539,55 @@ export async function createClientInvite({ firstName, lastName, email, phone, pa
 // NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Create a notification for a user.
- * type: 'new_message' | 'program_assigned' | 'workout_completed' |
- *       'consultation_request' | 'session_booked' | 'check_in' | 'package_updated'
- */
 export async function createNotification({ recipientId, type, title, body, relatedId }) {
   if (!recipientId) return { ok: false, error: "recipientId required" };
   const { data, error } = await supabase
     .from("notifications")
     .insert({
-      recipient_id: recipientId,
-      type,
-      title:      title || "",
-      body:       body  || "",
-      related_id: relatedId || null,
-      read:       false,
-      created_at: new Date().toISOString(),
+      recipient_id: recipientId, type, title: title || "", body: body || "",
+      related_id: relatedId || null, read: false, created_at: new Date().toISOString(),
     })
     .select().single();
   if (error) { console.error("createNotification:", error.message); return { ok: false, error: error.message }; }
   return { ok: true, notification: data };
 }
 
-/** Fetch unread + recent notifications for a user (max 50). */
 export async function getNotifications(userId) {
   if (!userId) return [];
   const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("recipient_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .from("notifications").select("*").eq("recipient_id", userId)
+    .order("created_at", { ascending: false }).limit(50);
   if (error) { console.error("getNotifications:", error.message); return []; }
   return data || [];
 }
 
-/** Count unread notifications for a user. */
 export async function getUnreadNotificationCount(userId) {
   if (!userId) return 0;
   const { count, error } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("recipient_id", userId)
-    .eq("read", false);
+    .from("notifications").select("id", { count: "exact", head: true })
+    .eq("recipient_id", userId).eq("read", false);
   if (error) { console.error("getUnreadNotificationCount:", error.message); return 0; }
   return count || 0;
 }
 
-/** Mark a single notification as read. */
 export async function markNotificationRead(notificationId) {
-  const { error } = await supabase
-    .from("notifications")
-    .update({ read: true })
-    .eq("id", notificationId);
+  const { error } = await supabase.from("notifications").update({ read: true }).eq("id", notificationId);
   if (error) { console.error("markNotificationRead:", error.message); return { ok: false }; }
   return { ok: true };
 }
 
-/** Mark ALL notifications for a user as read. */
 export async function markAllNotificationsRead(userId) {
-  const { error } = await supabase
-    .from("notifications")
-    .update({ read: true })
-    .eq("recipient_id", userId)
-    .eq("read", false);
+  const { error } = await supabase.from("notifications")
+    .update({ read: true }).eq("recipient_id", userId).eq("read", false);
   if (error) { console.error("markAllNotificationsRead:", error.message); return { ok: false }; }
   return { ok: true };
 }
 
-/** Subscribe to new notifications for a user in realtime. */
 export function subscribeToNotifications(userId, callback) {
   return supabase
     .channel(`notifications:${userId}`)
     .on("postgres_changes", {
-      event: "INSERT",
-      schema: "public",
-      table: "notifications",
+      event: "INSERT", schema: "public", table: "notifications",
       filter: `recipient_id=eq.${userId}`,
     }, payload => callback(payload.new))
     .subscribe();
@@ -685,47 +597,34 @@ export function subscribeToNotifications(userId, callback) {
 // SESSIONS / BOOKINGS
 // ─────────────────────────────────────────────────────────────
 
-/** Create a session booking record. */
 export async function createSession({ clientId, coachId, date, time, notes }) {
   const { data, error } = await supabase
     .from("sessions")
     .insert({
-      client_id:  clientId,
-      coach_id:   coachId  || null,
-      date,
-      time,
-      notes:      notes || null,
-      status:     "booked",
-      created_at: new Date().toISOString(),
+      client_id: clientId, coach_id: coachId || null, date, time,
+      notes: notes || null, status: "booked", created_at: new Date().toISOString(),
     })
     .select().single();
   if (error) { console.error("createSession:", error.message); return { ok: false, error: error.message }; }
   return { ok: true, session: data };
 }
 
-/** Get upcoming sessions for a client. */
 export async function getClientSessions(clientId) {
   const { data, error } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("date", { ascending: true })
-    .limit(20);
+    .from("sessions").select("*").eq("client_id", clientId)
+    .order("date", { ascending: true }).limit(20);
   if (error) { console.error("getClientSessions:", error.message); return []; }
   return data || [];
 }
 
-/** Get all sessions for the coach (optionally filtered by date). */
 export async function getCoachSessions(fromDate) {
   let q = supabase
     .from("sessions")
     .select(`*, profiles!sessions_client_id_fkey (name, email)`)
-    .order("date", { ascending: true })
-    .limit(100);
+    .order("date", { ascending: true }).limit(100);
   if (fromDate) q = q.gte("date", fromDate);
   const { data, error } = await q;
   if (error) {
-    // FK join fallback if foreign key not set
     const { data: fb, error: fbErr } = await supabase
       .from("sessions").select("*").order("date", { ascending: true }).limit(100);
     if (fbErr) { console.error("getCoachSessions:", fbErr.message); return []; }
@@ -734,7 +633,13 @@ export async function getCoachSessions(fromDate) {
   return data || [];
 }
 
-/** Update session status (booked → confirmed | cancelled | completed). */
+/**
+ * Update session status. NOTE (Phase B): setting status to 'completed',
+ * 'late_cancel', or 'no_show' fires the trg_debit_session_on_status_change
+ * trigger (0004_client_lifecycle.sql), which deducts exactly one session
+ * from the client's ledger/balance automatically. Do not also manually
+ * adjust the balance when calling this — that would double-deduct.
+ */
 export async function updateSessionStatus(sessionId, status, coachNotes) {
   const { error } = await supabase
     .from("sessions")
@@ -744,52 +649,65 @@ export async function updateSessionStatus(sessionId, status, coachNotes) {
   return { ok: true };
 }
 
+// [PHASE1] Real DB-backed weekly booking limit — replaces the old hardcoded weeklyUsed=0 stub.
+export async function getWeeklySessionCount(clientId, refDateISO) {
+  if (!clientId) return 0;
+  const ref = refDateISO ? new Date(refDateISO) : new Date();
+  const day = ref.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(ref);
+  monday.setDate(ref.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const toISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const { count, error } = await supabase
+    .from("sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .neq("status", "cancelled")
+    .gte("date", toISO(monday))
+    .lte("date", toISO(sunday));
+
+  if (error) { console.error("getWeeklySessionCount:", error.message); return null; }
+  return count ?? 0;
+}
+
+// [PHASE1] Last-instant slot-collision check, run immediately before insert.
+export async function isSlotTaken(coachId, date, time) {
+  if (!coachId || !date || !time) return null;
+  const { count, error } = await supabase
+    .from("sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("coach_id", coachId).eq("date", date).eq("time", time).neq("status", "cancelled");
+  if (error) { console.error("isSlotTaken:", error.message); return null; }
+  return (count ?? 0) > 0;
+}
+
 // ─────────────────────────────────────────────────────────────
 // CLIENT WEIGHT LOGS
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Save a bodyweight / lift entry for a client.
- * metricType: 'bodyweight' | 'lift' | 'measurement'
- */
 export async function saveWeightLog(clientId, { metricType, value, unit, exerciseName, programId, dayId, weekNumber, notes }) {
   if (!clientId) return { ok: false, error: "clientId required" };
   const payload = {
-    client_id:     clientId,
-    metric_type:   metricType   || "bodyweight",
-    value:         parseFloat(value) || null,
-    unit:          unit          || "lbs",
-    exercise_name: exerciseName  || null,
-    program_id:    programId     || null,
-    day_id:        dayId         || null,
-    week_number:   weekNumber    || null,
-    notes:         notes         || null,
-    created_at:    new Date().toISOString(),
-    updated_at:    new Date().toISOString(),
+    client_id: clientId, metric_type: metricType || "bodyweight",
+    value: parseFloat(value) || null, unit: unit || "lbs",
+    exercise_name: exerciseName || null, program_id: programId || null,
+    day_id: dayId || null, week_number: weekNumber || null, notes: notes || null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   };
-  console.log("saving weight log", payload);
-  const { data, error } = await supabase
-    .from("client_weight_logs")
-    .insert(payload)
-    .select()
-    .single();
-  const result = error
-    ? { ok: false, error: error.message }
-    : { ok: true, log: data };
-  console.log("weight log saved", result);
-  if (error) console.error("saveWeightLog:", error.message);
-  return result;
+  const { data, error } = await supabase.from("client_weight_logs").insert(payload).select().single();
+  if (error) { console.error("saveWeightLog:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, log: data };
 }
 
-/** Get weight/progress log entries for a client (most recent first, max 100). */
 export async function getWeightLogs(clientId, metricType) {
   if (!clientId) return [];
   let q = supabase
-    .from("client_weight_logs")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .from("client_weight_logs").select("*").eq("client_id", clientId)
+    .order("created_at", { ascending: false }).limit(100);
   if (metricType) q = q.eq("metric_type", metricType);
   const { data, error } = await q;
   if (error) { console.error("getWeightLogs:", error.message); return []; }
@@ -800,10 +718,6 @@ export async function getWeightLogs(clientId, metricType) {
 // CLIENT INTAKE FORMS
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Save a client intake form record.
- * Called after onboarding completes — captures full questionnaire answers.
- */
 export async function saveClientIntake(clientId, coachId, data) {
   if (!clientId) return { ok: false, error: "clientId required" };
   const toArr = (v) => {
@@ -813,177 +727,214 @@ export async function saveClientIntake(clientId, coachId, data) {
     return [];
   };
   const payload = {
-    client_id:          clientId,
-    coach_id:           coachId || null,
-    goals:              toArr(data.goals),          // text[]
-    fitness_level:      data.level              || null,
-    had_coach:          data.hadCoach           || null,
-    preferred_days:     toArr(data.trainDays),      // text[]
-    preferred_times:    toArr(data.trainTimes),     // text[]
-    injuries:           data.injuries           || null,
-    surgeries:          data.surgeries          || null,
-    conditions:         data.conditions         || null,
-    medications:        data.medications        || null,
-    movement_limits:    data.restrictions       || null,
-    sleep_quality:      data.sleep              || null,
-    stress_level:       data.stress             || null,
-    accountability:     data.accountability     || null,
-    lifestyle_notes:    data.lifestyleNotes     || null,
-    height:             data.height             || null,
-    weight:             data.weight             || null,
-    emergency_contact:  data.emergencyContact   || null,
-    status:             "submitted",
-    submitted_at:       new Date().toISOString(),
-    created_at:         new Date().toISOString(),
+    client_id: clientId, coach_id: coachId || null,
+    goals: toArr(data.goals), fitness_level: data.level || null, had_coach: data.hadCoach || null,
+    preferred_days: toArr(data.trainDays), preferred_times: toArr(data.trainTimes),
+    injuries: data.injuries || null, surgeries: data.surgeries || null,
+    conditions: data.conditions || null, medications: data.medications || null,
+    movement_limits: data.restrictions || null, sleep_quality: data.sleep || null,
+    stress_level: data.stress || null, accountability: data.accountability || null,
+    lifestyle_notes: data.lifestyleNotes || null, height: data.height || null,
+    weight: data.weight || null, emergency_contact: data.emergencyContact || null,
+    status: "submitted", submitted_at: new Date().toISOString(), created_at: new Date().toISOString(),
   };
-  const { data: row, error } = await supabase
-    .from("client_intake_forms")
-    .insert(payload)
-    .select()
-    .single();
+  const { data: row, error } = await supabase.from("client_intake_forms").insert(payload).select().single();
   if (error) { console.error("saveClientIntake:", error.message); return { ok: false, error: error.message }; }
   return { ok: true, intake: row };
 }
 
-/**
- * Get all intake forms for the coach (ordered newest first).
- * Optional status filter: "submitted" | "reviewed" | "program_assigned" | "archived"
- */
 export async function getClientIntakes(statusFilter) {
   let q = supabase
     .from("client_intake_forms")
-    .select(`
-      *,
-      profiles!client_intake_forms_client_id_fkey (
-        name, email
-      )
-    `)
-    .order("submitted_at", { ascending: false })
-    .limit(100);
+    .select(`*, profiles!client_intake_forms_client_id_fkey (name, email)`)
+    .order("submitted_at", { ascending: false }).limit(100);
   if (statusFilter) q = q.eq("status", statusFilter);
   const { data, error } = await q;
   if (error) {
-    // Fallback: query without the join if FK not wired yet
     const { data: fb, error: fbErr } = await supabase
-      .from("client_intake_forms")
-      .select("*")
-      .order("submitted_at", { ascending: false })
-      .limit(100);
+      .from("client_intake_forms").select("*").order("submitted_at", { ascending: false }).limit(100);
     if (fbErr) { console.error("getClientIntakes:", fbErr.message); return []; }
     return fb || [];
   }
   return data || [];
 }
 
-/**
- * Update intake status (reviewed / program_assigned / archived).
- * Also records who reviewed and when.
- */
 export async function updateIntakeStatus(intakeId, status, reviewedBy) {
-  const updates = {
-    status,
-    reviewed_at: new Date().toISOString(),
-    reviewed_by: reviewedBy || null,
-  };
-  const { error } = await supabase
-    .from("client_intake_forms")
-    .update(updates)
-    .eq("id", intakeId);
+  const updates = { status, reviewed_at: new Date().toISOString(), reviewed_by: reviewedBy || null };
+  const { error } = await supabase.from("client_intake_forms").update(updates).eq("id", intakeId);
   if (error) { console.error("updateIntakeStatus:", error.message); return { ok: false, error: error.message }; }
   return { ok: true };
 }
 
-/** Count unreviewed (status=submitted) intakes. */
 export async function getUnreviewedIntakeCount() {
   const { count, error } = await supabase
-    .from("client_intake_forms")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "submitted");
+    .from("client_intake_forms").select("id", { count: "exact", head: true }).eq("status", "submitted");
   if (error) return 0;
   return count || 0;
 }
 
 // ─────────────────────────────────────────────────────────────
-// CONSULTATION CONFIRMATION EMAILS
+// [PHASE1] CONSULTATION CONFIRMATION EMAILS
 // ─────────────────────────────────────────────────────────────
 
+function buildEmailPayload(data) {
+  return {
+    consultation_id: data.consultationId || null,
+    first_name: data.firstName || "", last_name: data.lastName || "",
+    email: data.email || "", phone: data.phone || "", age: data.age || null,
+    goals: Array.isArray(data.goals) ? data.goals : [],
+    level: data.level || null, had_coach: data.hadCoach || null,
+    train_freq: data.trainFreq || null, gym_access: data.gymAccess || null,
+    location: data.location || null, injuries: data.injuries || null,
+    surgeries: data.surgeries || null, conditions: data.conditions || null,
+    medications: data.medications || null,
+    date_display: data.dateDisplay || "", time_display: data.timeDisplay || "",
+  };
+}
+
+async function alertAdminEmailFailed(data, reason) {
+  try {
+    const coachId = await getCoachId();
+    if (!coachId) return;
+    await createNotification({
+      recipientId: coachId,
+      type: "consultation_request",
+      title: "⚠ Consultation confirmation email failed",
+      body: `Booking for ${data.firstName || ""} ${data.lastName || ""} (${data.email}) was saved, but the confirmation email failed to send: ${reason}`,
+      relatedId: data.consultationId || null,
+    });
+  } catch (e) {
+    console.error("alertAdminEmailFailed itself failed:", e);
+  }
+}
+
 /**
- * Call the send-consultation-email Edge Function after a successful booking.
- * Email failure never blocks the booking — always resolves.
- *
- * @param {object} data - booking data to include in emails
- * @param {string} data.intakeId       - UUID returned by the RPC
- * @param {string} data.firstName
- * @param {string} data.lastName
- * @param {string} data.email
- * @param {string} data.phone
- * @param {string[]} data.goals
- * @param {string} data.level
- * @param {string} data.trainFreq
- * @param {string} data.injuries
- * @param {string} data.dateDisplay   - "Wednesday, May 28, 2026"
- * @param {string} data.timeDisplay   - "4:00 PM"
+ * [PHASE1] On failure, alerts an admin (in-app notification) instead of
+ * only console.error — the booking is already saved by this point, so a
+ * silent email failure would otherwise be invisible to both client and
+ * coach.
  */
 export async function sendConsultationEmails(data) {
   try {
-    console.log("calling send-consultation-email", {
-      to:    data.email,
-      date:  data.dateDisplay,
-      time:  data.timeDisplay,
-      hasId: !!data.consultationId,
-    });
-
     const { data: fnData, error: fnError } = await supabase.functions.invoke(
       "send-consultation-email",
-      {
-        body: {
-          consultation_id: data.consultationId || null,
-          first_name:      data.firstName   || "",
-          last_name:       data.lastName    || "",
-          email:           data.email       || "",
-          phone:           data.phone       || "",
-          age:             data.age         || null,
-          goals:           Array.isArray(data.goals) ? data.goals : [],
-          level:           data.level       || null,
-          had_coach:       data.hadCoach    || null,
-          train_freq:      data.trainFreq   || null,
-          gym_access:      data.gymAccess   || null,
-          location:        data.location    || null,
-          injuries:        data.injuries    || null,
-          surgeries:       data.surgeries   || null,
-          conditions:      data.conditions  || null,
-          medications:     data.medications || null,
-          date_display:    data.dateDisplay || "",
-          time_display:    data.timeDisplay || "",
-        },
-      }
+      { body: buildEmailPayload(data) }
     );
 
     if (fnError) {
       console.error("send-consultation-email error", fnError);
+      await alertAdminEmailFailed(data, fnError.message);
       return { ok: false, error: fnError.message };
     }
 
-    console.log("send-consultation-email result", fnData);
+    if (fnData?.client_email_sent === false || fnData?.coach_email_sent === false) {
+      console.error("send-consultation-email partial failure", fnData);
+      await alertAdminEmailFailed(data, JSON.stringify(fnData));
+    }
 
-    // Update email_sent tracking on the consultation row
     if (data.consultationId) {
-      supabase
-        .from("consultation_requests")
-        .update({
-          client_email_sent: fnData?.client_email_sent === true,
-          coach_email_sent:  fnData?.coach_email_sent  === true,
-          email_sent_at:     new Date().toISOString(),
-        })
-        .eq("id", data.consultationId)
-        .then(({ error: upErr }) => {
-          if (upErr) console.error("email_sent update failed", upErr.message);
-        });
+      supabase.from("consultation_requests").update({
+        client_email_sent: fnData?.client_email_sent === true,
+        coach_email_sent:  fnData?.coach_email_sent  === true,
+        email_sent_at:     new Date().toISOString(),
+      }).eq("id", data.consultationId)
+        .then(({ error: upErr }) => { if (upErr) console.error("email_sent update failed", upErr.message); });
     }
 
     return { ok: true, result: fnData };
   } catch (e) {
     console.error("send-consultation-email error", e?.message || e);
+    await alertAdminEmailFailed(data, e?.message || String(e));
     return { ok: false, error: e?.message || "unknown error" };
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// [PHASE1] STRIPE CHECKOUT — dynamic session (replaces static Payment Links)
+// ─────────────────────────────────────────────────────────────
+
+export async function createCheckoutSession(packageId) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) return { ok: false, error: "You must be signed in to purchase sessions." };
+
+  const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+    body: { package_id: packageId },
+  });
+  if (error) { console.error("createCheckoutSession:", error.message); return { ok: false, error: error.message }; }
+  if (!data?.url) return { ok: false, error: "No checkout URL returned." };
+  return { ok: true, url: data.url };
+}
+
+export async function getSessionPurchases(clientId) {
+  if (!clientId) return [];
+  const { data, error } = await supabase
+    .from("session_purchases").select("*").eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("getSessionPurchases:", error.message); return []; }
+  return data || [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// [PHASEB] SESSION LEDGER — all balance mutations route through here
+// ─────────────────────────────────────────────────────────────
+
+export async function adjustSessionBalance(clientId, amount, reason) {
+  if (!clientId || !amount) return { ok: false, error: "clientId and non-zero amount are required." };
+  const idempotencyKey = `${clientId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const { data, error } = await supabase.rpc("admin_adjust_session_balance", {
+    p_client_id: clientId,
+    p_amount: amount,
+    p_reason: reason || (amount > 0 ? "Coach adjustment (add)" : "Coach adjustment (remove)"),
+    p_idempotency_key: idempotencyKey,
+  });
+  if (error) { console.error("adjustSessionBalance:", error.message); return { ok: false, error: error.message }; }
+  return { ok: true, newBalance: data?.new_balance, clamped: data?.clamped === true };
+}
+
+export async function getSessionLedger(clientId) {
+  if (!clientId) return [];
+  const { data, error } = await supabase
+    .from("session_ledger").select("*").eq("client_id", clientId)
+    .order("created_at", { ascending: false }).limit(100);
+  if (error) { console.error("getSessionLedger:", error.message); return []; }
+  return data || [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN ANALYTICS — real data only, no fabricated figures
+// ─────────────────────────────────────────────────────────────
+
+/** All Stripe-backed purchases, most recent first — real revenue source. */
+export async function getAllSessionPurchases() {
+  const { data, error } = await supabase
+    .from("session_purchases")
+    .select("*, profiles!session_purchases_client_id_fkey (name, email)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) {
+    console.warn("getAllSessionPurchases join failed, falling back:", error.message);
+    const { data: fb, error: fbErr } = await supabase
+      .from("session_purchases").select("*").order("created_at", { ascending: false }).limit(500);
+    if (fbErr) { console.error("getAllSessionPurchases:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
+}
+
+/** All coach-adjustment ledger entries, for a real audit-trail view. */
+export async function getAllLedgerEntries() {
+  const { data, error } = await supabase
+    .from("session_ledger")
+    .select("*, profiles!session_ledger_client_id_fkey (name, email)")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    console.warn("getAllLedgerEntries join failed, falling back:", error.message);
+    const { data: fb, error: fbErr } = await supabase
+      .from("session_ledger").select("*").order("created_at", { ascending: false }).limit(200);
+    if (fbErr) { console.error("getAllLedgerEntries:", fbErr.message); return []; }
+    return fb || [];
+  }
+  return data || [];
 }
