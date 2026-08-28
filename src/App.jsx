@@ -7972,7 +7972,17 @@ function PackagePricing({ onBack, onConsult }) {
 }
 
 /* ── CONSULTATION BOOKING (CLIENT SIDE) ─────────────────────────────────── */
-function ConsultationFlow({ onBack, onComplete }) {
+function ConsultationFlow({ onBack, onComplete }) 
+{const AGREEMENT_VERSION = "MLVNT-2026.1";
+
+const RISK_AGREEMENT_TEXT =
+  "Physical exercise carries inherent risks including, but not limited to, injury, cardiovascular events, and musculoskeletal damage. By proceeding, you acknowledge that you are voluntarily participating in physical training and assume all associated risks. MLVNT and its coaches are not liable for any injury, illness, or adverse health outcome resulting from consultation or training.";
+
+const MEDICAL_AGREEMENT_TEXT =
+  "I confirm that the health and medical information I have provided is accurate to the best of my knowledge. I understand that it is my responsibility to disclose any changes to my health status. I agree to consult a physician before beginning exercise if I have any concerns about my health readiness.";
+
+const COMMUNICATIONS_AGREEMENT_TEXT =
+  "I consent to receive communication from MLVNT regarding my consultation booking, follow-up, and coaching services. My information will not be shared with third parties.";
   // Steps: 0=schedule, 1=basics, 2=goals+background, 3=health+injuries, 4=liability, 5=confirm, 6=success
   const [step,      setStep]   = useState(0);
   const [selDate,   setDate]   = useState(null);
@@ -8098,13 +8108,18 @@ function ConsultationFlow({ onBack, onComplete }) {
       isoTime = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`;
     }
 
-    const result = await saveConsultationRequest({
+   const result = await saveConsultationRequest({
       firstName, lastName, email, phone, age,
       goals: [...goals, customGoal].filter(Boolean),
+      customGoal,
       level, hadCoach, trainFreq, gymAccess, location,
       injuries, surgeries, conditions, medications, restrictions,
       parqAnswers, anyParqYes,
       agreedRisk, agreedMed, agreedComms,
+      agreementVersion: AGREEMENT_VERSION,
+      riskAgreementText: RISK_AGREEMENT_TEXT,
+      medicalAgreementText: MEDICAL_AGREEMENT_TEXT,
+      communicationsAgreementText: COMMUNICATIONS_AGREEMENT_TEXT,
       selDate: isoDate,
       selTime: isoTime,
     });

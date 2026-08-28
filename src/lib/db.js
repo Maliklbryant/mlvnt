@@ -133,23 +133,32 @@ export async function saveProgram(program) {
     return { ok: false, error: "Program ID is missing. Cannot save." };
   }
 
-  const payload = {
-    name:         fields.name,
-    block:        fields.block,
-    phase:        fields.phase       ?? "",
-    status:       fields.status,
-    start_date:   fields.startDate   || null,
-    end_date:     fields.endDate     || null,
-    week:         fields.week        ?? 1,
-    total_weeks:  fields.totalWeeks  ?? 8,
-    coach_note:   fields.coachNote   ?? "",
-    days:         fields.days        ?? [],
-    weekly_focus: fields.weeklyFocus ?? "",
-    updated_at:   new Date().toISOString(),
-    client_id:    fields.clientId    ?? null,
-    coach_id:     fields.coachId     ?? null,
-    is_template:  fields.clientId == null,
-  };
+const payload = {
+  p_first_name:       data.firstName || null,
+  p_last_name:        data.lastName || null,
+  p_email:            data.email || null,
+  p_phone:            data.phone || null,
+  p_age:              data.age ? Number(data.age) : null,
+  p_goals:            goalsArr,
+  p_custom_goal:      data.customGoal || null,
+  p_experience_level: data.level || null,
+  p_had_coach:        data.hadCoach || null,
+  p_train_frequency:  data.trainFreq || null,
+  p_gym_access:       data.gymAccess || null,
+  p_location:         data.location || null,
+  p_injuries:         data.injuries || null,
+  p_surgeries:        data.surgeries || null,
+  p_conditions:       data.conditions || null,
+  p_medications:      data.medications || null,
+  p_restrictions:     data.restrictions || null,
+  p_parq_answers:     data.parqAnswers || {},
+  p_parq_any_yes:     Boolean(data.anyParqYes),
+  p_agreed_risk:      Boolean(data.agreedRisk),
+  p_agreed_medical:   Boolean(data.agreedMed),
+  p_agreed_comms:     Boolean(data.agreedComms),
+  p_requested_date:   data.selDate || null,
+  p_requested_time:   data.selTime || null,
+};
 
   const { data: updated, error: updateErr } = await supabase
     .from("programs").update(payload).eq("id", id).select().single();
@@ -306,17 +315,41 @@ export async function saveConsultationRequest(data) {
       ? [data.goals.trim()]
       : [];
 
-  const payload = {
-    p_first_name:     data.firstName  || null,
-    p_last_name:      data.lastName   || null,
-    p_email:          data.email      || null,
-    p_phone:          data.phone      || null,
-    p_goals:          goalsArr,
-    p_requested_date: data.selDate    || null,
-    p_requested_time: data.selTime    || null,
-  };
+ const payload = {
+  p_first_name:       data.firstName || null,
+  p_last_name:        data.lastName || null,
+  p_email:            data.email || null,
+  p_phone:            data.phone || null,
+  p_age:              data.age ? Number(data.age) : null,
+  p_goals:            goalsArr,
+  p_custom_goal:      data.customGoal || null,
+  p_experience_level: data.level || null,
+  p_had_coach:        data.hadCoach || null,
+  p_train_frequency:  data.trainFreq || null,
+  p_gym_access:       data.gymAccess || null,
+  p_location:         data.location || null,
+  p_injuries:         data.injuries || null,
+  p_surgeries:        data.surgeries || null,
+  p_conditions:       data.conditions || null,
+  p_medications:      data.medications || null,
+  p_restrictions:     data.restrictions || null,
+  p_parq_answers:     data.parqAnswers || {},
+  p_parq_any_yes:     Boolean(data.anyParqYes),
+  p_agreed_risk:      Boolean(data.agreedRisk),
+  p_agreed_medical:   Boolean(data.agreedMed),
+  p_agreed_comms:     Boolean(data.agreedComms),
+  p_agreement_version:              data.agreementVersion || null,
+  p_risk_agreement_text:            data.riskAgreementText || null,
+  p_medical_agreement_text:         data.medicalAgreementText || null,
+  p_communications_agreement_text:  data.communicationsAgreementText || null,
+  p_requested_date:   data.selDate || null,
+  p_requested_time:   data.selTime || null,
+};
 
-  const { data: result, error } = await supabase.rpc("submit_consultation_request", payload);
+  const { data: result, error } = await supabase.rpc(
+  "submit_consultation_request_v2",
+  payload
+);
 
   if (error) {
     console.error("submit_consultation_request RPC error:", error.message, error.code);

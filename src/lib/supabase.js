@@ -9,9 +9,9 @@ if (!SUPABASE_URL || !SUPABASE_ANON) {
 }
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
-    persistSession:    true,
-    autoRefreshToken:  true,
-    detectSessionInUrl:true,
+    persistSession:    true,   // sessions survive page reload
+    autoRefreshToken:  true,   // silently refreshes JWTs
+    detectSessionInUrl:true,   // handles email-confirm + password-reset links
     storageKey:        "mlvnt-auth",
   },
 });
